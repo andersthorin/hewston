@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hewston.local/schemas/dataset-manifest.schema.json",
+  "title": "DatasetManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "dataset_id": { "type": "string" },
+    "symbol": { "type": "string" },
+    "interval": { "type": "string", "const": "1m" },
+    "from_date": { "type": "string", "format": "date" },
+    "to_date": { "type": "string", "format": "date" },
+    "rebar_params": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "clock": { "type": "string", "const": "NASDAQ" },
+        "session_handling": { "type": "string", "const": "explicit-DST" },
+        "aggregation": { "type": "string", "const": "TRADES→OHLCV" },
+        "tbbo_agg": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["bid_mean", "ask_mean", "spread_mean"] },
+          "minItems": 3,
+          "maxItems": 3
+        }
+      },
+      "required": ["clock", "session_handling", "aggregation", "tbbo_agg"]
+    },
+    "input_hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "trades_dbn_sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+        "tbbo_dbn_sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" }
+      },
+      "required": ["trades_dbn_sha256", "tbbo_dbn_sha256"]
+    },
+    "output_hashes": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bars_parquet_sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" }
+      },
+      "required": ["bars_parquet_sha256"]
+    },
+    "calendar_version": { "type": "string" },
+    "tz": { "type": "string", "const": "America/New_York" },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "required": [
+    "dataset_id", "symbol", "interval", "from_date", "to_date",
+    "rebar_params", "input_hashes", "output_hashes", "calendar_version", "tz", "created_at"
+  ]
+}
+

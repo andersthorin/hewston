@@ -56,7 +56,7 @@ This document is being created collaboratively in interactive mode. No prior res
 - Playback service (API):
   - POST `/backtests` {symbol, from, to, interval='1m', strategy_id='sma_crossover', params, speed=60, seed} → create run (async)
   - GET `/backtests` → list; GET `/backtests/{id}` → metadata + artifacts
-  - GET `/backtests/{id}/stream?speed=60` → SSE time‑compressed frames with decimation
+  - Playback streaming: WebSocket primary `GET /backtests/{id}/ws` (in-band play/pause/seek/speed), SSE fallback `GET /backtests/{id}/stream?speed=60` with server-side decimation
   - Target speed: ≈1 year → ≈60 seconds, adjustable; frame skipping when needed.
 - Frontend (Vite/React/TS + Tailwind):
   - Views: Runs list; Run detail (chart + equity + orders/fills overlays); controls for play/pause/seek/speed; rerun button (pre‑filled from manifest).
@@ -71,7 +71,7 @@ This document is being created collaboratively in interactive mode. No prior res
   - Calendars/TZ: Pin NASDAQ calendar version; handle DST explicitly; manifest records calendar + corporate‑action data versions.
   - Slippage/fees: fill ≈ mid ± k·spread_mean + fixed bps; document limits of 1m bars vs sub‑minute tactics.
   - Manifests: include git hash and environment lock; reject runs lacking complete metadata.
-  - Streaming: server decimation to ~30 FPS; SSE with chunking; client Web Worker parsing and backpressure (drop oldest) when needed.
+  - Streaming: WebSocket primary with server-side decimation to ~30 FPS; SSE fallback with chunking; client hook/Worker handles parsing and backpressure (drop oldest).
   - Storage: Parquet partitioned by symbol/year; lightweight run catalog (JSON/SQLite) and retention policy.
 
 - Alignment refinements:
@@ -109,7 +109,7 @@ This document is being created collaboratively in interactive mode. No prior res
 ### Core Features (Must Have)
 - Data ingestion: `make data SYMBOL=AAPL YEAR=2023` pulls Databento DBN (TRADES+TBBO), derives 1m OHLCV + minute TBBO aggregates under NASDAQ calendar (TZ=America/New_York), writes Parquet + manifest.
 - Backtest execution: Nautilus adapter consumes 1m bars; baseline strategy `sma_crossover {fast:int, slow:int}` with `seed`; simple slippage/fees (mid ± k·spread_mean + bps). Artifacts: metrics.json, equity.parquet, orders.parquet, fills.parquet, run-manifest.json (params, seed, code hash, dataset ids, calendar/TZ).
-- API: POST /backtests (async create), GET /backtests (list/filter), GET /backtests/{id}, GET /backtests/{id}/stream?speed=60 (SSE frames with server-side decimation).
+- API: POST /backtests (async create), GET /backtests (list/filter), GET /backtests/{id}, GET /backtests/{id}/ws (WebSocket playback; in-band control) with SSE fallback at /backtests/{id}/stream?speed=60 (server-side decimation).
 - Playback UI: Vite/TS + TradingView Lightweight Charts; play/pause/seek/speed; overlays for orders/fills; equity curve + key metrics.
 - Persistence/catalog: runs under data/backtests/{run_id}/...; lightweight runs catalog (JSON/SQLite) for list/filter/search.
 - Dev workflow: `make setup` (env), `make start` (backend+frontend), `make data`, `make backtest`; README quickstart covers baseline run.
@@ -173,9 +173,9 @@ This document is being created collaboratively in interactive mode. No prior res
 - Market Data: Databento Python SDK (DBN TRADES+TBBO) → deterministic 1m bars + TBBO aggregates
 - Backtesting: Nautilus Trader with a custom adapter for 1m bar feed + slippage hooks
 - Storage: Local filesystem; Parquet for bars/series; JSON for manifests/metrics; SQLite/JSON catalog
-- Frontend: Vite + React + TypeScript + Tailwind CSS v4; TradingView Lightweight Charts; SSE client + Web Worker for stream parsing
+- Frontend: Vite + React + TypeScript + Tailwind CSS v4; TradingView Lightweight Charts; WebSocket handled via hook/Worker; SSE fallback parsing
   - Component philosophy: dumb/presentational components only; no data computation/creation/mutation in UI; containers/hooks/services provide ready‑to‑render data
-  - Data layer: TanStack Query for fetch/cache; Zod validation at boundaries; SSE decoded in Web Worker; formatting-only in components (no business logic)
+  - Data layer: TanStack Query for fetch/cache; Zod validation at boundaries; WebSocket decoding in hook/Worker; SSE fallback supported; formatting-only in components (no business logic)
 - Tooling: Makefile; uv/poetry for env; Ruff/Black; pre‑commit; mypy optional; Vitest/ESLint/Prettier on FE
 
 ### Architecture Considerations
@@ -193,7 +193,7 @@ This document is being created collaboratively in interactive mode. No prior res
 
   - scripts/ (helper CLIs), Makefile, .env.example
 - Integration requirements: DATABENTO_API_KEY from env; config via .env + pydantic‑settings; never commit secrets
-- Streaming: SSE one‑way frames with server‑side decimation; adaptive frame skip; client backpressure handling
+- Streaming: WebSocket primary with server‑side decimation; SSE fallback; adaptive frame skip; client backpressure handling
 - Manifest schema (minimum):
   - run_id, created_at, symbol(s), from, to, interval, calendar_version, tz
   - strategy_id, params, seed, slippage/fees, code_hash, env_lock
@@ -208,7 +208,7 @@ This document is being created collaboratively in interactive mode. No prior res
 - Equities only; NASDAQ calendar pinned; TZ=America/New_York; explicit DST handling
 - Data: Databento TRADES + TBBO (DBN) locally cached; derived 1m bars + minute TBBO aggregates (Parquet)
 - Backtests: single symbol per run (MVP); interval fixed to 1m; simple slippage/fees model
-- Streaming: SSE only (one‑way); server‑side decimation to ~30 FPS
+- Streaming: WebSocket primary (bidirectional control) with SSE fallback; server‑side decimation to ~30 FPS
 - Storage: local filesystem; Parquet/JSON artifacts; lightweight JSON/SQLite catalogs
 - Frontend: Vite + React + TS + Tailwind 4; “dumb/presentational” UI components only
 - Developer workflow: Makefile targets (`make setup|start|data|backtest`); Python 3.11+, Node 20+
@@ -241,7 +241,7 @@ This document is being created collaboratively in interactive mode. No prior res
 - Nautilus adapter: schema/time alignment mismatches; performance bottlenecks
 - Reproducibility: missing metadata (seed/code hash/dataset ids); environment drift
 - Storage/scale: multi‑year × many symbols footprint; catalog/list latency; retention
-- Streaming/Playback: SSE throughput, client jank; frame drops at high compression
+- Streaming/Playback: WebSocket throughput and SSE fallback behavior; client jank; frame drops at high compression
 - Frontend perf: Lightweight Charts limits with large updates/overlays
 - Security/ops: secrets handling, error budgets, failure modes for long runs
 
@@ -252,7 +252,7 @@ This document is being created collaboratively in interactive mode. No prior res
 - Metrics set: which are mandatory in MVP vs later? definitions/tolerances?
 - API details: pagination, filters, run_id scheme, idempotency for POST /backtests
 - Catalog: JSON vs SQLite (or both); indexing strategy; retention policy
-- Streaming transport: any reason to prefer WebSocket in MVP?
+- Streaming transport: Decision — WebSocket primary with SSE fallback; revisit only if constraints arise
 - Baseline strategy params: sma fast/slow defaults; seed policy
 - Corporate actions: unadjusted vs adjusted usage in analytics; data source
 
@@ -283,7 +283,7 @@ This document is being created collaboratively in interactive mode. No prior res
 1. Lock baseline: symbol(s) for MVP (e.g., AAPL) and years (e.g., 2023)
 2. Finalize bar schema columns and manifest JSON schema
 3. Define slippage/fees defaults (k, bps) and baseline strategy params (fast/slow)
-4. Draft API contracts (POST/GET /backtests, SSE stream payloads) and run_id scheme
+4. Draft API contracts (POST/GET /backtests), WebSocket protocol (ctrl/frame/heartbeat) and SSE fallback payloads, and run_id scheme
 5. Choose catalog format (JSON vs SQLite) and indexing
 6. Write Makefile target specs (`setup`, `start`, `data`, `backtest`) and README quickstart outline
 

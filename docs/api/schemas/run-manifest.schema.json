@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hewston.local/schemas/run-manifest.schema.json",
+  "title": "RunManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "run_id": { "type": "string" },
+    "dataset_id": { "type": "string" },
+    "strategy_id": { "type": "string", "const": "sma_crossover" },
+    "params": { "type": "object", "additionalProperties": true },
+    "seed": { "type": "integer" },
+    "slippage_fees": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "k_spread": { "type": "number" },
+        "fees_bps": { "type": "number" }
+      },
+      "required": ["k_spread", "fees_bps"]
+    },
+    "speed": { "type": "integer", "default": 60 },
+    "data_snapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bars_manifest_path": { "type": "string" },
+        "bars_manifest_sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" }
+      }
+    },
+    "calendar_version": { "type": "string" },
+    "tz": { "type": "string", "const": "America/New_York" },
+    "env_lock": { "type": "object", "additionalProperties": true },
+    "code_hash": { "type": "string" },
+    "created_at": { "type": "string", "format": "date-time" }
+  },
+  "required": [
+    "run_id", "dataset_id", "strategy_id", "params", "seed", "slippage_fees",
+    "calendar_version", "tz", "env_lock", "code_hash", "created_at"
+  ]
+}
+

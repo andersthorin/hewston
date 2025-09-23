@@ -1,0 +1,310 @@
+openapi: 3.1.0
+info:
+  title: Hewston API
+  version: 0.1.0
+  description: |
+    REST API for creating/listing/backtesting runs, plus playback streaming.
+    Playback uses WebSocket as the primary channel and SSE as a fallback.
+servers:
+  - url: http://localhost:8000
+    description: Local development
+
+paths:
+  /healthz:
+    get:
+      summary: Liveness check
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
+  
+  /backtests:
+    post:
+      summary: Create a backtest run (async)
+      description: |
+        Creates a backtest. Heavy work runs outside the request (Typer subprocess).
+        Idempotency: send Idempotency-Key (or X-Idempotency-Key). The server may also compute a deterministic input hash.
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema:
+            type: string
+        - in: header
+          name: X-Idempotency-Key
+          required: false
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BacktestCreateRequest'
+            examples:
+              byDatasetId:
+                summary: Using an existing dataset_id
+                value:
+                  dataset_id: AAPL-2023-1m
+                  strategy_id: sma_crossover
+                  params: { fast: 20, slow: 50 }
+                  seed: 42
+                  slippage_fees: { k_spread: 0.5, fees_bps: 1 }
+                  speed: 60
+              bySymbolRange:
+                summary: Let server resolve dataset from symbol/date range
+                value:
+                  symbol: AAPL
+                  from: 2023-01-01
+                  to: 2023-12-31
+                  strategy_id: sma_crossover
+                  params: { fast: 20, slow: 50 }
+                  seed: 42
+                  slippage_fees: { k_spread: 0.5, fees_bps: 1 }
+      responses:
+        '202':
+          description: Accepted (queued)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BacktestCreateResponse'
+              examples:
+                queued:
+                  value: { run_id: "abc123", status: "QUEUED" }
+        '200':
+          description: Idempotent repeat
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BacktestCreateResponse'
+              examples:
+                exists:
+                  value: { run_id: "abc123", status: "EXISTS" }
+        '4XX':
+          description: Validation or conflict error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    get:
+      summary: List runs
+      parameters:
+        - in: query
+          name: symbol
+          schema: { type: string }
+        - in: query
+          name: from
+          schema: { type: string, format: date }
+        - in: query
+          name: to
+          schema: { type: string, format: date }
+        - in: query
+          name: strategy_id
+          schema: { type: string }
+        - in: query
+          name: limit
+          schema: { type: integer, default: 50, minimum: 1, maximum: 500 }
+        - in: query
+          name: offset
+          schema: { type: integer, default: 0, minimum: 0 }
+        - in: query
+          name: order
+          schema: { type: string, default: -created_at }
+      responses:
+        '200':
+          description: List of runs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RunSummary'
+                  total: { type: integer }
+                  limit: { type: integer }
+                  offset: { type: integer }
+  
+  /backtests/{id}:
+    get:
+      summary: Get run metadata and artifact references
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Run'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /backtests/{id}/stream:
+    get:
+      summary: SSE fallback stream
+      description: |
+        Server-Sent Events fallback for playback frames. Primary playback is WebSocket at /backtests/{id}/ws.
+        Event name: "frame". Payload equals StreamFrame.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: speed
+          required: false
+          schema: { type: integer, default: 60 }
+      responses:
+        '200':
+          description: text/event-stream
+          content:
+            text/event-stream:
+              schema:
+                type: string
+              examples:
+                frameEvent:
+                  summary: Example frame event
+                  value: |
+                    event: frame\n
+                    data: {"t":"frame","ts":"2023-03-01T14:30:00Z","ohlc":{...},"orders":[],"equity":123.4}
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /backtests/{id}/ws:
+    get:
+      summary: WebSocket playback (primary)
+      description: |
+        Upgrades to WebSocket for bidirectional playback control and frames.
+        Messages:
+          - Client->Server control: { "t":"ctrl", "cmd":"play|pause|seek|speed", "pos":"ISO-UTC", "val":60 }
+          - Server->Client frame: { "t":"frame", "ts":"ISO-UTC", "ohlc":{...}, "orders":[...], "equity":123.4, "dropped":0 }
+          - Server->Client hb/end/err
+      responses:
+        '101':
+          description: Switching Protocols (WebSocket)
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+components:
+  schemas:
+    Health:
+      type: object
+      properties:
+        status: { type: string, example: ok }
+      required: [status]
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            details: { type: object, nullable: true }
+          required: [code, message]
+      required: [error]
+
+    BacktestCreateRequest:
+      type: object
+      description: Either dataset_id OR (symbol, from, to) must be provided.
+      properties:
+        dataset_id: { type: string }
+        symbol: { type: string }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        strategy_id: { type: string }
+        params: { type: object, additionalProperties: true }
+        seed: { type: integer }
+        slippage_fees:
+          type: object
+          properties:
+            k_spread: { type: number }
+            fees_bps: { type: number }
+          required: [k_spread, fees_bps]
+        speed: { type: integer, default: 60 }
+      required: [strategy_id, params, seed, slippage_fees]
+      oneOf:
+        - required: [dataset_id]
+        - required: [symbol, from, to]
+
+    BacktestCreateResponse:
+      type: object
+      properties:
+        run_id: { type: string }
+        status: { type: string, enum: [QUEUED, EXISTS] }
+      required: [run_id, status]
+
+    RunSummary:
+      type: object
+      properties:
+        run_id: { type: string }
+        created_at: { type: string, format: date-time }
+        strategy_id: { type: string }
+        status: { type: string }
+        symbol: { type: string }
+        from: { type: string, format: date }
+        to: { type: string, format: date }
+        duration_ms: { type: integer, nullable: true }
+
+    Run:
+      type: object
+      properties:
+        run_id: { type: string }
+        dataset_id: { type: string }
+        strategy_id: { type: string }
+        params: { type: object }
+        seed: { type: integer }
+        slippage_fees:
+          $ref: '#/components/schemas/BacktestCreateRequest/properties/slippage_fees'
+        speed: { type: integer }
+        code_hash: { type: string }
+        created_at: { type: string, format: date-time }
+        status: { type: string }
+        duration_ms: { type: integer, nullable: true }
+        artifacts:
+          type: object
+          properties:
+            metrics_path: { type: string }
+            equity_path: { type: string }
+            orders_path: { type: string }
+            fills_path: { type: string }
+            run_manifest_path: { type: string }
+        manifest:
+          type: object
+          description: Optional embedded manifest or link
+          properties:
+            path: { type: string }
+      required: [run_id, dataset_id, strategy_id, params, seed, slippage_fees, code_hash, created_at, status]
+
+    StreamFrame:
+      type: object
+      properties:
+        t: { type: string, enum: [frame] }
+        ts: { type: string, format: date-time }
+        ohlc: { type: object }
+        orders: { type: array, items: { type: object } }
+        equity: { type: number }
+        dropped: { type: integer }
+      required: [t, ts]
+

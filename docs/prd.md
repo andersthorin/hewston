@@ -30,7 +30,7 @@ The accompanying Project Brief defines scope, constraints, performance targets, 
 - FR3: The API shall allow creating a backtest run: POST /backtests {symbol, from, to, interval='1m', strategy_id='sma_crossover', params, speed, seed}.
 - FR4: The API shall list runs and filter by symbol/date/strategy: GET /backtests.
 - FR5: The API shall retrieve run metadata and artifacts: GET /backtests/{id}.
-- FR6: The API shall stream time-compressed playback via SSE: GET /backtests/{id}/stream?speed=60.
+- FR6: The API shall stream time-compressed playback via WebSocket (primary): GET /backtests/{id}/ws with in-band control (play/pause/seek/speed); SSE fallback available: GET /backtests/{id}/stream?speed=60.
 - FR7: The system shall persist run artifacts under data/backtests/{run_id}/ including run-manifest.json, metrics.json, equity.parquet, orders.parquet, fills.parquet.
 - FR8: The UI shall provide a Runs List view to browse and filter runs and a Run Detail view to play back a run with chart, equity, and orders/fills overlays.
 - FR9: The UI shall provide playback controls: play/pause, seek, speed control; and a rerun action using the run manifest.
@@ -41,7 +41,7 @@ The accompanying Project Brief defines scope, constraints, performance targets, 
 - NFR2: Performance — Baseline E2E (AAPL 2023, sma fast=20/slow=50) completes ≤ 30s (cached data); playback avg ≈ 30 FPS; p95 dropped‑frame ≤ 5%; p99 frame latency ≤ 200 ms.
 - NFR3: Storage — Derived 1m bars + aggregates per symbol‑year ≤ 250 MB; per‑run artifacts ≤ 50 MB.
 - NFR4: Determinism — Bars generated with pinned NASDAQ calendar version and explicit DST handling; manifests capture calendar_version, tz, data snapshot IDs, code hash, env lock.
-- NFR5: UI architecture — Presentational components contain no data fetching or mutation; all data comes from backend or a middle layer; SSE parsing in a Web Worker.
+- NFR5: UI architecture — Presentational components contain no data fetching or mutation; all data comes from backend or a middle layer; WebSocket handled via hook/worker; SSE fallback parsing supported.
 - NFR6: Security/ops — Secrets via env; no secrets in repo; ingestion success ≥ 99%; retryable error rate ≤ 1%.
 
 
@@ -84,10 +84,10 @@ Authoritative source for architecture choices is docs/brief.md (Technical Consid
 - Market Data: Databento SDK (DBN TRADES+TBBO)
 - Backtesting: Nautilus Trader with 1m bar adapter + slippage hooks
 - Storage: Local FS; Parquet/JSON artifacts; JSON/SQLite catalog
-- Frontend: Vite + React + TypeScript + Tailwind 4; TradingView Lightweight Charts; TanStack Query; Zod; SSE parsed in Web Worker
+- Frontend: Vite + React + TypeScript + Tailwind 4; TradingView Lightweight Charts; TanStack Query; Zod; WebSocket handled in hook/worker; SSE fallback parsing
 
 ### 4.3 Architecture and Interfaces
-- SSE for playback streaming; server decimation; client backpressure
+- WebSocket for playback streaming (primary) with SSE fallback; server decimation; client backpressure
 - Manifest schema includes: run_id, created_at, symbol(s), from, to, interval, calendar_version, tz, strategy_id, params, seed, slippage/fees, code_hash, env_lock, dataset_ids
 - Single-symbol runs in MVP; multi-symbol future-ready
 
@@ -101,17 +101,17 @@ Authoritative source for architecture choices is docs/brief.md (Technical Consid
 - Epic 2: Data Ingestion & Bar Derivation — Fetch Databento DBN, derive deterministic 1m bars + TBBO aggregates with manifests.
 - Epic 3: Backtest Runner & Artifacts — Execute baseline sma_crossover on 1m bars; persist run artifacts and manifest.
 - Epic 4: API & Catalog — Expose POST/GET /backtests and catalog list/filter/search; run_id scheme and idempotency.
-- Epic 5: Playback UI — Vite+React+TS+Tailwind UI; Runs List and Run Detail with time-compressed playback over SSE; rerun from manifest.
+- Epic 5: Playback UI — Vite+React+TS+Tailwind UI; Runs List and Run Detail with time-compressed playback over WebSocket (SSE fallback); rerun from manifest.
 - Epic 6: Reproducibility & Performance Hardening — Hash checks, determinism validation, performance budgets and logging.
 
-Note: Stories and acceptance criteria are maintained under docs/prd/06-epics/.
+Note: Stories live under docs/stories/, and epic documents live under docs/prd/ (files epic-1-*.md through epic-7-*.md).
 
 ## 6. Next Steps
 ### Immediate Actions
 1. Lock baseline symbols/years (e.g., AAPL, 2023)
 2. Finalize bar schema columns and manifest JSON schema
 3. Define slippage/fees defaults (k, bps) and baseline strategy params (fast/slow)
-4. Draft API contracts (POST/GET /backtests, SSE stream payload) and run_id scheme
+4. Draft API contracts (POST/GET /backtests), WebSocket protocol (ctrl/frame/heartbeat) and SSE fallback payload, and run_id scheme
 5. Choose catalog format (JSON vs SQLite) and indexing strategy
 6. Document Makefile target specs and README quickstart outline
 
