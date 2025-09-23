@@ -24,8 +24,10 @@ Status: v0.1 (aligns with PRD §2, §4 and Architecture §Non‑Functional, §AP
   - Commands: data (ingest/derive), backtest. Share ports/adapters with services.
   - Emit structured progress logs; write manifests/artifacts atomically.
 - Logging
-  - structlog JSON; include request_id, run_id, idempotency_key where relevant.
-  - INFO for control flow; WARN/ERROR include codes and key fields.
+  - JSON logs (structlog preferred; stdlib JSON formatter acceptable for MVP). Always include: ts, level, msg.
+  - Context fields: request_id (HTTP), run_id (jobs/streams), idempotency_key (POST /backtests), code (for errors).
+  - Event names (msg): http.access, ws.connect, ws.disconnect, sse.end, stream.summary, run.error.
+  - INFO for control flow; WARN/ERROR include codes and key fields; avoid leaking stack traces in msg (keep in exc_info).
 - Time & Timezones
   - Persist UTC timestamps; UI renders America/New_York.
   - Pin NASDAQ calendar version; explicit DST handling.
