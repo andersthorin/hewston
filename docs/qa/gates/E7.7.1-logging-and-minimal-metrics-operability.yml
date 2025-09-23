@@ -1,0 +1,11 @@
+story: S7.1
+epic: E7
+title: Logging and minimal metrics (operability)
+decision: PASS
+rationale: JSON logs (http.access), minimal counters for WS/SSE, and structlog integration verified; no regressions in tests.
+evidence:
+  - tests: backend tests passed (19)
+  - code: backend/app/main.py middleware; backend/api/routes/backtests.py logs
+  - ops: logs include request_id/run_id where applicable
+date: 2025-09-23
+

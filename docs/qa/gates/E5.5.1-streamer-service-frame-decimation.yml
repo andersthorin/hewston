@@ -1,0 +1,9 @@
+story: S5.1
+epic: E5
+title: Streamer service + frame decimation
+decision: PASS
+rationale: Streamer produces decimated frames; unit tests validate output.
+evidence:
+  - tests: tests/backend/test_streamer_frames.py
+date: 2025-09-23
+

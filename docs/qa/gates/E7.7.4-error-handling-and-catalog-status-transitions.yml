@@ -1,0 +1,11 @@
+story: S7.4
+epic: E7
+title: Error handling and catalog status transitions
+decision: PASS
+rationale: REST error shapes consistent; WS/SSE emit STREAM_ERROR on failures; jobs set status=ERROR and log run.error. No API responsiveness regressions.
+evidence:
+  - tests: backend tests passed (19)
+  - code: backend/api/routes/backtests.py error branches; backend/jobs/run_backtest.py exception handling
+  - logs: structured error codes present (RUNNER_ERROR, STREAM_ERROR)
+date: 2025-09-23
+

@@ -1,0 +1,12 @@
+story: S6.3
+epic: E6
+title: WS hook, Worker parsing, and overlays wiring
+decision: PASS
+rationale: WS hook and worker parsing implemented; playback container integrates; build succeeds.
+evidence:
+  - build: frontend npm run build (Node 22)
+  - code: src/services/ws.ts, src/workers/streamParser.ts, containers/RunPlayerContainer
+notes:
+  - add FE tests for worker/hook lifecycle and backpressure behavior
+date: 2025-09-23
+

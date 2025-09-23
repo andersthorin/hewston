@@ -1,0 +1,10 @@
+story: S4.1
+epic: E4
+title: Nautilus adapter integration (BacktestRunnerPort)
+decision: PASS
+rationale: Adapter integrated and used by run job; covered by tests.
+evidence:
+  - code: backend/adapters/nautilus.py
+  - tests: run job persistence tests
+date: 2025-09-23
+

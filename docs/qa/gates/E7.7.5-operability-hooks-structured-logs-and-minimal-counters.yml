@@ -1,0 +1,11 @@
+story: S7.5
+epic: E7
+title: Operability hooks: structured logs and minimal counters
+decision: PASS
+rationale: stream.summary and sse.end/ws.disconnect counters implemented; logging standards updated; structlog integrated.
+evidence:
+  - code: backend/services/streamer.py, backend/api/routes/backtests.py
+  - docs: updated logging standards (docs/architecture/coding-standards.md)
+  - tests: backend tests passed (19)
+date: 2025-09-23
+

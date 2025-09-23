@@ -1,0 +1,9 @@
+story: S3.4
+epic: E3
+title: Ingest rate limits and retry policy (Databento)
+decision: WAIVED
+rationale: Story is Draft and not implemented in current MVP.
+evidence:
+  - code: no rate-limit/retry logic beyond stubs
+date: 2025-09-23
+

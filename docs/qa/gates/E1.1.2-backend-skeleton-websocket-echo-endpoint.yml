@@ -1,0 +1,9 @@
+story: S1.2
+epic: E1
+title: Backend skeleton - WebSocket echo endpoint
+decision: PASS
+rationale: Echo and validation behavior verified by tests.
+evidence:
+  - tests: tests/backend/test_ws_echo.py, tests/backend/test_ws_behavior.py
+date: 2025-09-23
+

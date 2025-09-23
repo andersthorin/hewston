@@ -1,0 +1,9 @@
+story: S5.3
+epic: E5
+title: SSE fallback endpoint (frames)
+decision: PASS
+rationale: SSE streams frames with proper end/error events; covered by test.
+evidence:
+  - tests: tests/backend/test_sse_stream_frames.py
+date: 2025-09-23
+

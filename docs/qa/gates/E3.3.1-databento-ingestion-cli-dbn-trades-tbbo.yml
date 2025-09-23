@@ -1,0 +1,10 @@
+story: S3.1
+epic: E3
+title: Databento ingestion CLI (DBN TRADES+TBBO)
+decision: PASS
+rationale: Stub CLI demonstrates idempotency and force behavior; covered by unit tests.
+evidence:
+  - tests: tests/backend/test_ingest_idempotent.py
+  - env: requires DATABENTO_API_KEY in environment
+date: 2025-09-23
+

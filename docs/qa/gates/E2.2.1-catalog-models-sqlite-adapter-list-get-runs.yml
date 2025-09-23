@@ -1,0 +1,10 @@
+story: S2.1
+epic: E2
+title: Catalog models + SQLite adapter (list/get runs)
+decision: PASS
+rationale: Adapter supports required queries; covered by unit tests.
+evidence:
+  - tests: test_get_run_detail, list filters in later story
+  - build: make test backend green
+date: 2025-09-23
+

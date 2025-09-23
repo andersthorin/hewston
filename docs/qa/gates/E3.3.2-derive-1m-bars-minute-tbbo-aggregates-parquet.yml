@@ -1,0 +1,9 @@
+story: S3.2
+epic: E3
+title: Derive 1m bars + minute TBBO aggregates (Parquet)
+decision: PASS
+rationale: Derivation logic and outputs validated by unit tests.
+evidence:
+  - tests: tests/backend/test_derive_bars.py
+date: 2025-09-23
+

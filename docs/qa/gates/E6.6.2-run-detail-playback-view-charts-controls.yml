@@ -1,0 +1,12 @@
+story: S6.2
+epic: E6
+title: Run Detail playback view (charts + controls)
+decision: PASS
+rationale: Playback UI implemented with charts; builds succeed; data wiring from frames verified.
+evidence:
+  - build: frontend npm run build (Node 22)
+  - code: components ChartOHLC/EquityChart; container wiring
+notes:
+  - add FE unit tests for mapping/controls
+date: 2025-09-23
+

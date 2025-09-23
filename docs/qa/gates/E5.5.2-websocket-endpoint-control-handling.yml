@@ -1,0 +1,9 @@
+story: S5.2
+epic: E5
+title: WebSocket endpoint + control handling
+decision: PASS
+rationale: Control messages and streaming behavior validated by tests; error handling emits validation errors.
+evidence:
+  - tests: tests/backend/test_ws_behavior.py, tests/backend/test_ws_stream_frames.py
+date: 2025-09-23
+

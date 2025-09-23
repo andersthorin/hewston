@@ -1,0 +1,10 @@
+story: S1.1
+epic: E1
+title: Backend skeleton - health endpoint and app wiring
+decision: PASS
+rationale: Health endpoint and app wiring implemented with tests passing.
+evidence:
+  - tests: tests/backend/test_health.py
+  - build: make test backend green
+date: 2025-09-23
+

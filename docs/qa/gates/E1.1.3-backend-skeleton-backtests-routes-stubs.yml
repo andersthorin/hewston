@@ -1,0 +1,10 @@
+story: S1.3
+epic: E1
+title: Backend skeleton - Backtests routes stubs
+decision: PASS
+rationale: Routes scaffold present and evolved in E2; routing verified by tests in later stories.
+evidence:
+  - code: backend/api/routes/backtests.py included in app
+  - tests: see S2.x REST tests
+date: 2025-09-23
+

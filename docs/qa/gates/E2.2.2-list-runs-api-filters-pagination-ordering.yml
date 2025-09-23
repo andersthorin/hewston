@@ -1,0 +1,9 @@
+story: S2.2
+epic: E2
+title: List runs API (filters, pagination, ordering)
+decision: PASS
+rationale: Filter/order behavior validated by tests.
+evidence:
+  - tests: tests/backend/test_list_runs_filters.py
+date: 2025-09-23
+

@@ -1,0 +1,9 @@
+story: S2.3
+epic: E2
+title: Get run API (detail by id)
+decision: PASS
+rationale: Correct 200/404 behavior and payload shape verified by tests.
+evidence:
+  - tests: tests/backend/test_get_run_detail.py
+date: 2025-09-23
+

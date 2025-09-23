@@ -1,0 +1,9 @@
+story: S4.2
+epic: E4
+title: Run job + write artifacts
+decision: PASS
+rationale: Job persists artifacts and updates catalog; behavior verified by tests.
+evidence:
+  - tests: tests/backend/test_run_backtest_persist.py
+date: 2025-09-23
+

@@ -1,0 +1,10 @@
+story: S7.3
+epic: E7
+title: Performance budgets validation (latency, jitter, storage)
+decision: CONCERNS
+rationale: Measurement scripts and doc added, but no recorded results yet. Gate pending empirical validation on target machine.
+evidence:
+  - scripts: scripts/bench_rest.sh, scripts/bench_ws.js, scripts/measure_sizes.sh
+  - docs: docs/qa/nfr-validation.md (template with steps)
+date: 2025-09-23
+

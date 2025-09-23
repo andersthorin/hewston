@@ -1,0 +1,11 @@
+story: S7.2
+epic: E7
+title: Retention and pruning of runs/artifacts
+decision: PASS
+rationale: Retention tool supports dry-run/apply with safe defaults; candidate selection and DB cleanup validated by tests.
+evidence:
+  - tests: tests/backend/test_retention.py; backend tests passed (19)
+  - scripts: N/A (CLI via backend/jobs/cli.py retention)
+  - code: backend/jobs/retention.py
+date: 2025-09-23
+

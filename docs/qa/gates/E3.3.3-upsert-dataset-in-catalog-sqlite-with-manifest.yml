@@ -1,0 +1,9 @@
+story: S3.3
+epic: E3
+title: Upsert Dataset in Catalog (SQLite) with Manifest
+decision: PASS
+rationale: Upsert behavior validated; dataset manifests tracked.
+evidence:
+  - tests: tests/backend/test_catalog_upsert_dataset.py
+date: 2025-09-23
+
