@@ -63,7 +63,6 @@ export async function listBacktests(query: ListRunsQuery = {}): Promise<ListRuns
   return ListRunsResponseSchema.parse(json)
 }
 
-
 export type StreamFrame = {
   t: 'frame'
   ts: string
@@ -78,4 +77,32 @@ export async function getRunDetail(run_id: string): Promise<RunDetail> {
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json = await res.json()
   return RunDetailSchema.parse(json)
+}
+
+// --- Create Backtest ---
+export type CreateRunRequest = {
+  strategy_id: string
+  params?: Record<string, any>
+  dataset_id?: string
+  symbol?: string
+  year?: number
+  speed?: number
+  seed?: number
+}
+export type CreateRunResponse = { run_id: string; status: string }
+
+export async function createBacktest(
+  req: CreateRunRequest,
+  idempotencyKey?: string,
+): Promise<CreateRunResponse> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey
+  const res = await fetch('/backtests', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(req),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json = await res.json()
+  return json as CreateRunResponse
 }

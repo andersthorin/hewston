@@ -11,7 +11,7 @@ export default function RunDetailView() {
     enabled: !!run_id,
   })
 
-  if (isLoading) return <div style={{ padding: 16 }}>Loading	run	metadata		...	</div>
+  if (isLoading) return <div style={{ padding: 16 }}>Loading run metadata...</div>
   if (isError) return <div style={{ padding: 16 }}>Error: {error?.message}</div>
   if (!data) return null
 

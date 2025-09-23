@@ -10,9 +10,9 @@ from backend.ports.catalog import CatalogPort
 import os
 
 def get_catalog() -> CatalogPort:
-    # Configurable via env; default to in-memory for read-only endpoints in tests
-    path = os.getenv("HEWSTON_CATALOG_PATH", ":memory:")
-    return SqliteCatalog(path)
+    # Use persistent catalog by default; override with HEWSTON_CATALOG_PATH if set
+    # Passing None lets SqliteCatalog default to data/catalog.sqlite
+    return SqliteCatalog(os.getenv("HEWSTON_CATALOG_PATH"))
 
 
 def list_runs_service(

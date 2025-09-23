@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"],
+      "transport": "stdio"
+    },
+    "context7": {
+      "command": "npx",
+      "args": ["@upstash/context7-mcp@latest"],
+      "transport": "stdio"
+    },
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem@latest",
+        "/Users/andersthorin/Projects/hewston-app/version-02"
+      ],
+      "transport": "stdio"
+    }
+  }
+}

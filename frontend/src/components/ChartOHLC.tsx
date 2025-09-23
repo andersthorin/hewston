@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import type { StreamFrame } from '../services/api'
-import { createChart, type CandlestickData } from 'lightweight-charts'
+import { createOptionsChart, createChart as createChartLWC, CandlestickSeries, ColorType } from 'lightweight-charts'
+import type { CandlestickData } from 'lightweight-charts'
 
 export type ChartOHLCProps = { frames: StreamFrame[] }
 
@@ -18,13 +19,31 @@ export function ChartOHLC({ frames }: ChartOHLCProps) {
   useEffect(() => {
     if (!containerRef.current) return
     if (!chartRef.current) {
-      const chart = createChart(containerRef.current, { height: 240, layout: { textColor: '#94a3b8', background: { color: '#fff' } } })
-      const series = (chart as any).addCandlestickSeries()
-      chartRef.current = chart
-      seriesRef.current = series
+      try {
+        const chart = createOptionsChart
+          ? createOptionsChart(containerRef.current, { height: 240, layout: { textColor: '#94a3b8', background: { type: ColorType.Solid, color: '#fff' } } })
+          : createChartLWC(containerRef.current, { height: 240, layout: { textColor: '#94a3b8', background: { type: ColorType.Solid, color: '#fff' } } })
+        try { console.log('ChartOHLC createChart result keys:', Object.keys(chart as any)); } catch {}
+        try { console.log('ChartOHLC addSeries typeof:', typeof (chart as any).addSeries) } catch {}
+        const series = (chart as any).addSeries
+          ? (chart as any).addSeries(CandlestickSeries as any)
+          : (chart as any).addCandlestickSeries
+          ? (chart as any).addCandlestickSeries()
+          : undefined
+        if (!series) throw new Error('lightweight-charts add series API not available')
+        chartRef.current = chart
+        seriesRef.current = series
+      } catch (err) {
+        console.warn('ChartOHLC init failed:', err)
+        return
+      }
     }
-    seriesRef.current?.setData(data)
-    chartRef.current?.timeScale().fitContent()
+    try {
+      seriesRef.current?.setData(data)
+      chartRef.current?.timeScale().fitContent()
+    } catch (err) {
+      console.warn('ChartOHLC update failed:', err)
+    }
   }, [data])
 
   useEffect(() => () => { chartRef.current?.remove(); chartRef.current = null; seriesRef.current = null }, [])

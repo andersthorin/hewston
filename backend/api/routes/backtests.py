@@ -24,9 +24,20 @@ async def create_backtest(
     request: Request,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
+    raw = b""
     try:
-        body = await request.json()
-    except Exception:
+        raw = await request.body()
+        body = json.loads(raw.decode("utf-8") or "{}")
+    except Exception as e:
+        logger.exception("create_backtest.json_error", extra={
+            "content_type": request.headers.get("content-type"),
+            "raw_sample": (raw[:200].decode("utf-8", "ignore") if isinstance(raw, (bytes, bytearray)) else str(raw)),
+            "error": str(e),
+        })
+        try:
+            logger.error(f"create_backtest.body raw={raw[:200]!r} content_type={request.headers.get('content-type')}")
+        except Exception:
+            pass
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"error": {"code": "BAD_REQUEST", "message": "invalid JSON"}},

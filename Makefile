@@ -8,6 +8,10 @@ NPM := npm
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
 CATALOG_DB := data/catalog.sqlite
+# default envs for local dev (override as needed)
+DATABENTO_API_KEY ?= test-key
+HEWSTON_CATALOG_PATH ?= data/catalog.sqlite
+HEWSTON_DATA_DIR ?= data
 
 # Defaults (override on CLI: make data SYMBOL=AAPL YEAR=2023)
 SYMBOL ?= AAPL
@@ -28,6 +32,10 @@ help:
 	@echo "  start           Start backend API and frontend dev server (if present)"
 	@echo "  start-backend   Start FastAPI dev server (uvicorn)"
 	@echo "  start-frontend  Start Vite dev server"
+		@echo "  stop            Stop backend and frontend dev servers"
+		@echo "  restart        Restart backend and frontend (stop→start)"
+
+
 	@echo "  data            Ingest Databento DBN and derive 1m bars (SYMBOL, YEAR)"
 	@echo "  backtest        Run baseline backtest and write artifacts"
 	@echo "  db-init         Initialize SQLite catalog (see docs/architecture.md)"
@@ -49,6 +57,26 @@ setup:
 
 # -------- Start / Dev --------
 .PHONY: start
+
+.PHONY: stop
+stop:
+	@echo "[stop] stopping servers on ports 8000, 5173-5174" && \
+	pids=`lsof -nP -iTCP:8000,5173-5174 -sTCP:LISTEN -t 2>/dev/null || true`; \
+	if [ -n "$$pids" ]; then \
+	  echo "[stop] killing $$pids"; \
+	  kill $$pids 2>/dev/null || true; \
+	  sleep 0.5; \
+	  pids2=`lsof -nP -iTCP:8000,5173-5174 -sTCP:LISTEN -t 2>/dev/null || true`; \
+	  if [ -n "$$pids2" ]; then echo "[stop] force killing $$pids2"; kill -9 $$pids2 2>/dev/null || true; fi; \
+	else \
+	  echo "[stop] no listeners found"; \
+	fi
+
+.PHONY: restart
+restart:
+	@$(MAKE) stop
+	@$(MAKE) -j2 start-backend start-frontend
+
 start:
 	@$(MAKE) -j2 start-backend start-frontend
 
@@ -56,6 +84,7 @@ start:
 start-backend:
 	@test -d $(BACKEND_DIR) && \
 	  (echo "[backend] starting uvicorn" && \
+	   DATABENTO_API_KEY=$(DATABENTO_API_KEY) HEWSTON_CATALOG_PATH=$(HEWSTON_CATALOG_PATH) HEWSTON_DATA_DIR=$(HEWSTON_DATA_DIR) \
 	   $(PYTHON) uvicorn $(BACKEND_DIR).app.main:app --reload --host 127.0.0.1 --port 8000) \
 	|| (echo "[backend] missing $(BACKEND_DIR)/ — scaffold later" && true)
 
@@ -63,7 +92,8 @@ start-backend:
 start-frontend:
 	@test -d $(FRONTEND_DIR) && \
 	  (echo "[frontend] starting vite" && \
-	   cd $(FRONTEND_DIR) && $(NPM) run dev) \
+	   cd $(FRONTEND_DIR) && { export NVM_DIR="$$HOME/.nvm"; [ -s "$$NVM_DIR/nvm.sh" ] && . "$$NVM_DIR/nvm.sh" && nvm use 22 >/dev/null 2>&1 || true; } && \
+	   $(NPM) run dev) \
 	|| (echo "[frontend] missing $(FRONTEND_DIR)/ — scaffold later" && true)
 
 # -------- Jobs (Typer) --------

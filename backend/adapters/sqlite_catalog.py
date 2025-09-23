@@ -51,9 +51,12 @@ class SqliteCatalog(CatalogPort):
             if dirn:
                 os.makedirs(dirn, exist_ok=True)
             self._bootstrap_if_missing()
+            # Ensure newer columns/tables exist if DB was created with older minimal DDL
+            self._migrate_schema()
         else:
             # Initialize minimal schema in-memory for list/get operations in tests
             self._ensure_schema()
+            self._migrate_schema()
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
@@ -77,6 +80,72 @@ class SqliteCatalog(CatalogPort):
             else:
                 conn.executescript(DDL)
 
+
+
+    def _migrate_schema(self) -> None:
+        """Best-effort lightweight migration to ensure required columns/tables exist.
+        Safe for dev/local testing. Adds missing columns with relaxed nullability.
+        """
+        with self._connect() as conn:
+            # Helper to check column existence
+            def col_exists(table: str, col: str) -> bool:
+                rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+                return any(r[1] == col for r in rows)
+
+            # datasets: ensure extended columns used by upsert_dataset
+            if conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='datasets'").fetchone():
+                for col, decl in [
+                    ("products_json", "TEXT"),
+                    ("calendar_version", "TEXT"),
+                    ("tz", "TEXT"),
+                    ("raw_dbn_json", "TEXT"),
+                    ("bars_parquet_json", "TEXT"),
+                    ("bars_manifest_path", "TEXT"),
+                    ("generated_at", "TEXT"),
+                    ("size_bytes", "INTEGER"),
+                    ("status", "TEXT"),
+                ]:
+                    if not col_exists("datasets", col):
+                        conn.execute(f"ALTER TABLE datasets ADD COLUMN {col} {decl}")
+
+            # runs: ensure columns used by create_run and set_run_status
+            if conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='runs'").fetchone():
+                for col, decl in [
+                    ("params_json", "TEXT"),
+                    ("seed", "INTEGER"),
+                    ("slippage_fees_json", "TEXT"),
+                    ("speed", "INTEGER"),
+                    ("code_hash", "TEXT"),
+                    ("metrics_path", "TEXT"),
+                    ("equity_path", "TEXT"),
+                    ("orders_path", "TEXT"),
+                    ("fills_path", "TEXT"),
+                    ("run_manifest_path", "TEXT"),
+                    ("input_hash", "TEXT"),
+                    ("idempotency_key", "TEXT"),
+                ]:
+                    if not col_exists("runs", col):
+                        conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {decl}")
+
+            # run_metrics: minimal table for metrics upsert
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS run_metrics (\n"
+                "  run_id TEXT PRIMARY KEY REFERENCES runs(run_id) ON UPDATE CASCADE ON DELETE CASCADE,\n"
+                "  total_return REAL,\n"
+                "  max_drawdown REAL,\n"
+                "  computed_at TEXT NOT NULL\n"
+                ")"
+            )
+
+            # View runs_list to include symbol/period
+            conn.execute("DROP VIEW IF EXISTS runs_list")
+            conn.execute(
+                "CREATE VIEW runs_list AS\n"
+                "SELECT r.run_id, r.created_at, r.strategy_id, r.status,\n"
+                "       d.symbol AS symbol, d.from_date AS from_date, d.to_date AS to_date,\n"
+                "       r.duration_ms AS duration_ms\n"
+                "FROM runs r LEFT JOIN datasets d ON d.dataset_id = r.dataset_id"
+            )
 
     def _ensure_schema(self) -> None:
         with self._connect() as conn:
