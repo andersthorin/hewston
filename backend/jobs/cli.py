@@ -83,6 +83,56 @@ if typer is not None:
         )
         print(f"[backtest] run_id={out['run_id']} duration_ms={out['duration_ms']}")
         raise typer.Exit(0)
+    @app.command(name="derive-bars")
+    def derive_bars_cmd(
+        symbol: str = typer.Option(..., "--symbol"),
+        year: int = typer.Option(..., "--year"),
+        force: bool = typer.Option(False, "--force/--no-force", help="Rebuild even if outputs exist"),
+        from_date: str | None = typer.Option(None, "--from"),
+        to_date: str | None = typer.Option(None, "--to"),
+        tf: str = typer.Option("1Min", "--tf", help="One of {1Min,5Min,15Min,1Hour,1Day}"),
+        out_format: str = typer.Option("parquet", "--out-format", help="parquet|csv|jsonl"),
+        fill_gaps: bool = typer.Option(False, "--fill-gaps/--no-fill-gaps"),
+        rth_only: bool = typer.Option(False, "--rth-only/--all-hours"),
+    ) -> None:
+        """Derive Alpaca-compatible bars from local DBN and upsert dataset (no network).
+        Prints per-file progress and a final summary.
+        """
+        manifest = derive_bars(symbol=symbol, year=year, force=force, from_date=from_date, to_date=to_date, tf=tf, out_format=out_format, fill_gaps=fill_gaps, rth_only=rth_only)
+        print(f"[derive] completed: outputs={list(manifest.get('output_hashes',{}).keys())}")
+        # Upsert dataset pointing to derived bars
+        from pathlib import Path
+        from backend.adapters.sqlite_catalog import SqliteCatalog
+        base = Path(os.environ.get("HEWSTON_DATA_DIR", "data"))
+        derived_dir = base / "derived" / "bars" / symbol / str(year)
+        out_ext = out_format if out_format != "parquet" else "parquet"
+        bars_files = [str(derived_dir / f"bars_{tf}.{out_ext}")]
+        size_bytes = 0
+        for p in bars_files:
+            try:
+                size_bytes += Path(p).stat().st_size
+            except FileNotFoundError:
+                pass
+        tf_norm = tf.replace("Min","m").replace("Hour","h").replace("Day","d").lower()
+        dsid = f"{symbol}-{year}-{tf_norm}"
+        SqliteCatalog().upsert_dataset({
+            "dataset_id": dsid,
+            "symbol": symbol,
+            "from_date": manifest.get("from_date"),
+            "to_date": manifest.get("to_date"),
+            "products": ["TRADES","TBBO"],
+            "calendar_version": manifest.get("calendar_version","v1"),
+            "tz": manifest.get("tz","America/New_York"),
+            "raw_dbn": [],
+            "bars_parquet": bars_files,
+            "bars_manifest_path": str(derived_dir / "bars_manifest.json"),
+            "generated_at": manifest.get("created_at"),
+            "size_bytes": size_bytes,
+            "status": "READY",
+        })
+        print(f"[catalog] dataset_id={dsid}")
+        raise typer.Exit(0)
+
 
     @app.command(name="retention")
     def retention_cmd(
@@ -120,9 +170,63 @@ def main_argv(argv: Optional[list[str]] = None) -> int:
     p_data.add_argument("--year", type=int, required=True)
     p_data.add_argument("--force", action="store_true")
 
+    p_derive = sub.add_parser("derive", help="Derive bars from local DBN files and upsert dataset")
+    p_derive.add_argument("--symbol", required=True)
+    p_derive.add_argument("--year", type=int, required=True)
+    p_derive.add_argument("--force", action="store_true")
+    p_derive.add_argument("--from", dest="from_date")
+    p_derive.add_argument("--to", dest="to_date")
+    p_derive.add_argument("--tf", default="1Min")
+    p_derive.add_argument("--out-format", dest="out_format", default="parquet")
+    p_derive.add_argument("--fill-gaps", dest="fill_gaps", action="store_true")
+    p_derive.add_argument("--rth-only", dest="rth_only", action="store_true")
+
     ns = parser.parse_args(argv)
     if ns.cmd == "data":
         return _run_data(ns.symbol, ns.year, ns.force)
+    if ns.cmd == "derive":
+        manifest = derive_bars(
+            symbol=ns.symbol,
+            year=ns.year,
+            force=ns.force,
+            from_date=getattr(ns,'from_date',None),
+            to_date=getattr(ns,'to_date',None),
+            tf=getattr(ns,'tf','1Min'),
+            out_format=getattr(ns,'out_format','parquet'),
+            fill_gaps=getattr(ns,'fill_gaps',False),
+            rth_only=getattr(ns,'rth_only',False),
+        )
+        from pathlib import Path
+        from backend.adapters.sqlite_catalog import SqliteCatalog
+        base = Path(os.environ.get("HEWSTON_DATA_DIR", "data"))
+        derived_dir = base / "derived" / "bars" / ns.symbol / str(ns.year)
+        out_ext = ns.out_format if ns.out_format != "parquet" else "parquet"
+        bars_files = [str(derived_dir / f"bars_{ns.tf}.{out_ext}")]
+        size_bytes = 0
+        for p in bars_files:
+            try:
+                size_bytes += Path(p).stat().st_size
+            except FileNotFoundError:
+                pass
+        tf_norm = ns.tf.replace("Min","m").replace("Hour","h").replace("Day","d").lower()
+        dsid = f"{ns.symbol}-{ns.year}-{tf_norm}"
+        SqliteCatalog().upsert_dataset({
+            "dataset_id": dsid,
+            "symbol": ns.symbol,
+            "from_date": manifest.get("from_date"),
+            "to_date": manifest.get("to_date"),
+            "products": ["TRADES","TBBO"],
+            "calendar_version": manifest.get("calendar_version","v1"),
+            "tz": manifest.get("tz","America/New_York"),
+            "raw_dbn": [],
+            "bars_parquet": bars_files,
+            "bars_manifest_path": str(derived_dir / "bars_manifest.json"),
+            "generated_at": manifest.get("created_at"),
+            "size_bytes": size_bytes,
+            "status": "READY",
+        })
+        print(f"[catalog] dataset_id={dsid}")
+        return 0
     return 1
 
 

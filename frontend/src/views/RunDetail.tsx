@@ -11,15 +11,15 @@ export default function RunDetailView() {
     enabled: !!run_id,
   })
 
-  if (isLoading) return <div style={{ padding: 16 }}>Loading run metadata...</div>
-  if (isError) return <div style={{ padding: 16 }}>Error: {error?.message}</div>
+  if (isLoading) return <div className="p-4">Loading run metadata...</div>
+  if (isError) return <div className="p-4">Error: {error?.message}</div>
   if (!data) return null
 
   return (
-    <div style={{ padding: 16, display: 'grid', gap: 12 }}>
+    <div className="p-4 grid gap-3">
       <div>
-        <h2 style={{ margin: 0 }}>Run {data.run_id}</h2>
-        <div style={{ color: '#64748B' }}>Strategy {data.strategy_id} — Status {data.status}</div>
+        <h2 className="m-0">Run {data.run_id}</h2>
+        <div className="text-slate-500">Strategy {data.strategy_id} — Status {data.status}</div>
       </div>
       <RunPlayerContainer run_id={run_id} />
     </div>

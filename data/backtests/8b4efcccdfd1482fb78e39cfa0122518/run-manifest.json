@@ -1,0 +1,19 @@
+{
+  "run_id": "8b4efcccdfd1482fb78e39cfa0122518",
+  "dataset_id": "MSFT-2024-1m",
+  "strategy_id": "sma_crossover",
+  "params": {
+    "fast": 20,
+    "slow": 50
+  },
+  "seed": 42,
+  "slippage_fees": {},
+  "speed": 60,
+  "from": "2024-10-01",
+  "to": "2024-10-31",
+  "code_hash": "f0a0692774a9a500df54df14219ff5d8a63ac9b1",
+  "env_lock": null,
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-09-24T10:29:21.310100+00:00"
+}

@@ -92,6 +92,8 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
     seed = int(body.get("seed", 42))
     speed = int(body.get("speed", 60))
     slippage_fees = body.get("slippage_fees", {})
+    from_date = body.get("from")
+    to_date = body.get("to")
 
     if not isinstance(params, dict) or not strategy_id:
         return {"error": {"code": "BAD_REQUEST", "message": "missing strategy_id/params"}}, 400
@@ -123,6 +125,8 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
         "seed": seed,
         "slippage_fees": slippage_fees,
         "speed": speed,
+        "from": from_date,
+        "to": to_date,
     }
     input_hash = _canonical_inputs_hash(inputs_for_hash)
 
@@ -178,6 +182,8 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
             "speed": speed,
             "slippage_fees": slippage_fees,
             "run_id": run_id,
+            "from_date": from_date,
+            "to_date": to_date,
         },
         daemon=True,
     ).start()

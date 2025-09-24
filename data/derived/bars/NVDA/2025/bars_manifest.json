@@ -1,0 +1,20 @@
+{
+  "dataset_id": "NVDA-2025-1m",
+  "symbol": "NVDA",
+  "interval": "1m",
+  "from_date": "2025-01-02",
+  "to_date": "2025-09-19",
+  "rebar_params": {
+    "interval": "1Min"
+  },
+  "input_hashes": {
+    "trades_files": 179,
+    "tbbo_files": 179
+  },
+  "output_hashes": {
+    "bars_1Min.parquet": "1e5ea2c9f37e5ad84f2b398ea0f1c392857a60dabf2908a805c230a535cbc24e"
+  },
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-09-24T13:46:42.491704+00:00"
+}

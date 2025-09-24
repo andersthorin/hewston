@@ -1,0 +1,20 @@
+{
+  "dataset_id": "AAPL-2025-1m",
+  "symbol": "AAPL",
+  "interval": "1m",
+  "from_date": "2025-01-02",
+  "to_date": "2025-09-19",
+  "rebar_params": {
+    "interval": "1Min"
+  },
+  "input_hashes": {
+    "trades_files": 179,
+    "tbbo_files": 179
+  },
+  "output_hashes": {
+    "bars_1Min.parquet": "911101a9624ac26cbf93348e4e996a72fd0578d3e6a1eb1e2e230571d0a1b4e3"
+  },
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-09-24T14:41:32.208117+00:00"
+}

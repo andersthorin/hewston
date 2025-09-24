@@ -86,6 +86,8 @@ export type CreateRunRequest = {
   dataset_id?: string
   symbol?: string
   year?: number
+  from?: string
+  to?: string
   speed?: number
   seed?: number
 }

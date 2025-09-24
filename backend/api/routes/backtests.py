@@ -4,6 +4,8 @@ import asyncio
 import contextlib
 import json
 import logging
+from datetime import datetime as _dt
+import pandas as pd
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
@@ -13,6 +15,21 @@ from uuid import uuid4
 from fastapi import Body, Header, HTTPException, Request, status, Query
 from fastapi.responses import JSONResponse, StreamingResponse
 
+
+def _json_default(o):
+    try:
+        if isinstance(o, (_dt, pd.Timestamp)):
+            return pd.to_datetime(o, utc=True).strftime("%Y-%m-%dT%H:%M:%SZ")
+    except Exception:
+        pass
+    # Fallback to string
+    try:
+        return str(o)
+    except Exception:
+        return ""
+
+def _json_dumps(obj: dict) -> str:
+    return json.dumps(obj, default=_json_default)
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -143,12 +160,12 @@ async def backtests_ws_echo(websocket: WebSocket, run_id: str) -> None:
                         "equity": fr.equity,
                         "dropped": fr.dropped,
                     }
-                    await websocket.send_text(json.dumps(d))
+                    await websocket.send_text(_json_dumps(d))
                     frames_sent += 1
                     last_dropped = fr.dropped or 0
             except Exception as e:
                 try:
-                    await websocket.send_text(json.dumps({"t": "err", "code": "STREAM_ERROR", "msg": str(e)[:200]}))
+                    await websocket.send_text(_json_dumps({"t": "err", "code": "STREAM_ERROR", "msg": str(e)[:200]}))
                 except Exception:
                     pass
                 return
@@ -218,14 +235,14 @@ async def stream_backtest(run_id: str, speed: float = 1.0):
                     "equity": fr.equity,
                     "dropped": fr.dropped,
                 }
-                yield f"event: frame\ndata: {json.dumps(payload)}\n\n"
+                yield f"event: frame\ndata: {_json_dumps(payload)}\n\n"
                 frames_sent += 1
                 last_dropped = fr.dropped or 0
             yield "event: end\ndata: {}\n\n"
         except Exception as e:
             # Emit error event and finish
             err = {"code": "STREAM_ERROR", "msg": str(e)[:200]}
-            yield f"event: error\ndata: {json.dumps(err)}\n\n"
+            yield f"event: error\ndata: {_json_dumps(err)}\n\n"
         finally:
             try:
                 logger.info("sse.end", extra={"run_id": run_id, "frames_sent": frames_sent, "frames_dropped": last_dropped})
