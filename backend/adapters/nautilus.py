@@ -45,7 +45,7 @@ class RunnerConfig:
 class NautilusBacktestRunner:
     """Stub Nautilus adapter that computes a basic SMA crossover on Parquet bars."""
 
-    def run(self, *, dataset_id: str, strategy_id: str, params: Dict[str, Any], seed: int) -> Dict[str, Any]:
+    def run(self, *, dataset_id: str, strategy_id: str, params: Dict[str, Any], seed: int, from_date: str | None = None, to_date: str | None = None) -> Dict[str, Any]:
         row = _get_dataset_row(dataset_id)
         if not row:
             raise SystemExit(f"dataset not found: {dataset_id}")
@@ -65,10 +65,31 @@ class NautilusBacktestRunner:
 
         # Load bars
         df = pl.read_parquet(str(bars_path))
+        # Accept both new schema ('t') and legacy ('ts')
+        if "ts" not in df.columns and "t" in df.columns:
+            df = df.rename({"t": "ts"})
+        if "ts" not in df.columns:
+            raise SystemExit("bars parquet missing required timestamp column ('t' or 'ts')")
         df = df.sort("ts")
-        # Ensure columns exist from our derive stub: ts, o,h,l,c,v
-        if not set(["ts", "c"]).issubset(df.columns):
-            raise SystemExit("bars parquet missing required columns")
+        # Ensure price column exists
+        if "c" not in df.columns:
+            raise SystemExit("bars parquet missing close column 'c'")
+        # Optional date range filter (inclusive)
+        if from_date or to_date:
+            from datetime import datetime, timezone, timedelta
+            def _parse(d: str, end: bool = False):
+                if not d:
+                    return None
+                if end:
+                    # include the whole day
+                    return datetime.fromisoformat(d + "T23:59:59+00:00")
+                return datetime.fromisoformat(d + "T00:00:00+00:00")
+            start_dt = _parse(from_date or "")
+            end_dt = _parse(to_date or "", end=True)
+            if start_dt:
+                df = df.filter(pl.col("ts") >= pl.lit(start_dt))
+            if end_dt:
+                df = df.filter(pl.col("ts") <= pl.lit(end_dt))
 
         # SMA crossover on close prices
         df = df.with_columns(

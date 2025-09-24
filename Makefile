@@ -16,12 +16,19 @@ HEWSTON_DATA_DIR ?= data
 # Defaults (override on CLI: make data SYMBOL=AAPL YEAR=2023)
 SYMBOL ?= AAPL
 YEAR ?= 2023
-FROM ?= 2023-01-01
-TO ?= 2023-12-31
+FROM ?=
+TO ?=
 STRATEGY ?= sma_crossover
 FAST ?= 20
 SLOW ?= 50
 SPEED ?= 60
+SYMBOLS ?= ALL
+
+TF ?= 1Min
+FORMAT ?= parquet
+FILL_GAPS ?=
+RTH_ONLY ?=
+
 SEED ?= 42
 
 # -------- Meta --------
@@ -34,6 +41,8 @@ help:
 	@echo "  start-frontend  Start Vite dev server"
 		@echo "  stop            Stop backend and frontend dev servers"
 		@echo "  restart        Restart backend and frontend (stop→start)"
+		@echo "  derive-bars     Derive 1m bars from local DBN (SYMBOLS=... FROM=YYYY-MM-DD TO=YYYY-MM-DD FORCE=1)"
+
 
 
 	@echo "  data            Ingest Databento DBN and derive 1m bars (SYMBOL, YEAR)"
@@ -110,9 +119,59 @@ backtest:
 	test -d $(BACKEND_DIR) && \
 	  $(PYTHON) -m $(BACKEND_DIR).jobs.cli backtest \
 	    --symbol $(SYMBOL) --from $(FROM) --to $(TO) \
-	    --strategy-id $(STRATEGY) --param fast=$(FAST) --param slow=$(SLOW) \
-	    --speed $(SPEED) --seed $(SEED) || \
-	  (echo "[backtest] missing backend jobs; implement backend/jobs/cli.py" && false)
+			--strategy-id $(STRATEGY) --param fast=$(FAST) --param slow=$(SLOW) \
+			--speed $(SPEED) --seed $(SEED) || \
+		  (echo "[backtest] missing backend jobs; implement backend/jobs/cli.py" && false)
+
+.PHONY: derive-bars
+derive-bars:
+	@echo "[derive-bars] SYMBOLS=$(SYMBOLS) FROM=$(FROM) TO=$(TO) FORCE=$(FORCE)" && \
+	HEWSTON_DATA_DIR="$(HEWSTON_DATA_DIR)" SYMBOLS="$(SYMBOLS)" FROM="$(FROM)" TO="$(TO)" FORCE="$(FORCE)" TF="$(TF)" FORMAT="$(FORMAT)" FILL_GAPS="$(FILL_GAPS)" RTH_ONLY="$(RTH_ONLY)" PYTHONWARNINGS=ignore \
+	  python3 -W ignore:::urllib3.exceptions.NotOpenSSLWarning scripts/derive_bars_runner.py
+
+.PHONY: derive-bars-legacy
+derive-bars-legacy:
+	@echo "[derive-bars] SYMBOLS=$(SYMBOLS) FROM=$(FROM) TO=$(TO) FORCE=$(FORCE)" && \
+	SYMS_LIST=$$(python3 - <<'PY'
+	import os,json
+	sy=os.environ.get('SYMBOLS','ALL')
+	if sy and sy.strip().upper()!='ALL':
+	  syms=[s.strip() for s in sy.replace(',', ' ').split() if s.strip()]
+	else:
+	  import pathlib
+	  base=pathlib.Path(os.environ.get('HEWSTON_DATA_DIR','data'))/'raw'/'databento'
+	  p=base/'trades'/'symbology.json'
+	  if not p.exists():
+	    p=base/'tbbo'/'symbology.json'
+	  syms=[]
+	  try:
+	    d=json.loads(p.read_text())
+	    syms=list(d.get('result',{}).keys())
+	  except Exception:
+	    pass
+	print(' '.join(syms))
+	PY
+	) && \
+	YEARS_LIST=$$(python3 - <<'PY'
+	import os,re,glob,pathlib
+	fr=os.environ.get('FROM',''); to=os.environ.get('TO','')
+	ys=set()
+	if fr and to:
+	  y1=int(fr[:4]); y2=int(to[:4]); ys.update(range(y1,y2+1))
+	else:
+	  base=pathlib.Path(os.environ.get('HEWSTON_DATA_DIR','data'))/'raw'/'databento'/'trades'
+	  for p in glob.glob(str(base/'*.trades.dbn.zst')):
+	    m=re.search(r'-(\d{8})\.trades\.dbn', p)
+	    if m: ys.add(int(m.group(1)[:4]))
+	print(' '.join(str(y) for y in sorted(ys)))
+	PY
+	) && \
+	for s in $$SYMS_LIST; do \
+	  for y in $$YEARS_LIST; do \
+	    echo "[derive] $$s $$y FROM=$(FROM) TO=$(TO)"; \
+	    $(PYTHON) -m backend.jobs.cli derive-bars --symbol $$s --year $$y $(if $(FROM),--from $(FROM),) $(if $(TO),--to $(TO),) $(if $(FORCE),--force,); \
+	  done; \
+	done
 
 # -------- Catalog --------
 .PHONY: db-init

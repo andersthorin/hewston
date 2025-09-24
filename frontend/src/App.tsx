@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import RunsListContainer from './containers/RunsListContainer'
 import RunDetailView from './views/RunDetail'
-import './App.css'
 
 function App() {
   return (

@@ -15,7 +15,6 @@ export function useRunPlayback(runId: string) {
   const subsRef = useRef<Set<Subscription>>(new Set())
   const workerRef = useRef<Worker | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
-  const esRef = useRef<EventSource | null>(null)
 
   const notify = useCallback((f: StreamFrameT) => {
     subsRef.current.forEach((cb) => cb(f))
@@ -34,35 +33,52 @@ export function useRunPlayback(runId: string) {
     }
     workerRef.current = worker
 
-    // connect WS
-    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/backtests/${runId}/ws`
-    const ws = new WebSocket(wsUrl)
-    ws.onopen = () => { setState((s) => ({ ...s, status: 'ws', playing: true })); ws.send(JSON.stringify({ t: 'ctrl', cmd: 'play' })) }
-    ws.onmessage = (ev) => {
-      try {
-        const msg = JSON.parse(ev.data)
-        if (msg.t === 'frame') worker.postMessage({ type: 'frame', payload: msg })
-      } catch { /* ignore */ }
+    let reconnectAttempts = 0
+    let closed = false
+    let reconnectTimer: any
+
+    const connect = () => {
+      if (closed) return
+      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+      const wsUrl = `${proto}://${location.host}/backtests/${runId}/ws`
+      const ws = new WebSocket(wsUrl)
+      wsRef.current = ws
+
+      ws.onopen = () => {
+        reconnectAttempts = 0
+        setState((s) => ({ ...s, status: 'ws', playing: true }))
+        ws.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
+      }
+      ws.onmessage = (ev) => {
+        try {
+          const msg = JSON.parse(ev.data)
+          if (msg.t === 'frame') worker.postMessage({ type: 'frame', payload: msg })
+        } catch { /* ignore */ }
+      }
+
+      const scheduleReconnect = () => {
+        if (closed) return
+        const delay = Math.min(500 * Math.pow(2, reconnectAttempts++), 5000)
+        reconnectTimer = setTimeout(connect, delay)
+      }
+      ws.onerror = () => scheduleReconnect()
+      ws.onclose = () => scheduleReconnect()
     }
-    ws.onerror = () => {
-      // fallback to SSE
-      setState((s) => ({ ...s, status: 'sse', playing: false }))
-      const url = `/backtests/${runId}/stream?speed=${state.speed}`
-      const es = new EventSource(url)
-      es.onmessage = () => { /* default channel unused */ }
-      es.addEventListener('frame', (ev) => {
-        try { const msg = JSON.parse((ev as MessageEvent).data); worker.postMessage({ type: 'frame', payload: msg }) } catch {}
-      })
-      es.addEventListener('end', () => setState((s) => ({ ...s, status: 'ended', playing: false })))
-      es.onerror = () => setState((s) => ({ ...s, status: 'error', playing: false }))
-      esRef.current = es
-    }
-    wsRef.current = ws
+
+    connect()
 
     return () => {
+      closed = true
+      if (reconnectTimer) clearTimeout(reconnectTimer)
+      const ws = wsRef.current
+      if (ws) {
+        const rs = ws.readyState
+        if (rs === WebSocket.OPEN || rs === WebSocket.CLOSING) {
+          try { ws.close() } catch {}
+        }
+      }
+      wsRef.current = null
       worker.terminate(); workerRef.current = null
-      ws.close(); wsRef.current = null
-      esRef.current?.close(); esRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId])

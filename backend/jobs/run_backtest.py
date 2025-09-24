@@ -49,6 +49,8 @@ def run_backtest_and_persist(
     speed: int = 60,
     slippage_fees: Dict[str, Any] | None = None,
     run_id: str | None = None,
+    from_date: str | None = None,
+    to_date: str | None = None,
 ) -> dict:
     params = params or {}
     slippage_fees = slippage_fees or {}
@@ -93,7 +95,8 @@ def run_backtest_and_persist(
     try:
         runner = NautilusBacktestRunner()
         result = runner.run(
-            dataset_id=dataset_id, strategy_id=strategy_id, params=params, seed=seed
+            dataset_id=dataset_id, strategy_id=strategy_id, params=params, seed=seed,
+            from_date=from_date, to_date=to_date,
         )
         duration_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -114,6 +117,8 @@ def run_backtest_and_persist(
             "seed": seed,
             "slippage_fees": slippage_fees,
             "speed": speed,
+            "from": from_date,
+            "to": to_date,
             "code_hash": code_hash,
             "env_lock": None,
             "calendar_version": "NAZDAQ-v1",

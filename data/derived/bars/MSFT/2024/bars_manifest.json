@@ -1,0 +1,20 @@
+{
+  "dataset_id": "MSFT-2024-1m",
+  "symbol": "MSFT",
+  "interval": "1m",
+  "from_date": "2024-09-20",
+  "to_date": "2024-12-31",
+  "rebar_params": {
+    "interval": "1Min"
+  },
+  "input_hashes": {
+    "trades_files": 71,
+    "tbbo_files": 71
+  },
+  "output_hashes": {
+    "bars_1Min.parquet": "38fd765c5adf61748f2401559ad1d5bf850f1bcb9ca64f8b1cd7b805064f59d6"
+  },
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-09-24T08:57:54.115334+00:00"
+}

@@ -7,18 +7,20 @@ export function FiltersBar({ initial, onApply }: FiltersBarProps) {
   const [symbol, setSymbol] = useState(initial?.symbol ?? '')
   const [strategyId, setStrategyId] = useState(initial?.strategy_id ?? '')
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
+    <div className="mb-3 flex items-center gap-2">
       <input
+        className="px-2 py-1 border border-slate-300 rounded"
         placeholder="Symbol"
         value={symbol}
         onChange={(e) => setSymbol(e.target.value)}
       />
       <input
+        className="px-2 py-1 border border-slate-300 rounded"
         placeholder="Strategy"
         value={strategyId}
         onChange={(e) => setStrategyId(e.target.value)}
       />
-      <button onClick={() => onApply({ symbol, strategy_id: strategyId })}>Apply</button>
+      <button className="px-3 py-1 rounded bg-slate-800 text-white hover:bg-slate-700" onClick={() => onApply({ symbol, strategy_id: strategyId })}>Filter</button>
     </div>
   )
 }
