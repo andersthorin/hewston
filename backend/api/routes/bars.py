@@ -178,3 +178,70 @@ async def get_minute_decimated(
     meta = {"stride_minutes": stride, "points": len(items)}
     return JSONResponse(content={"symbol": symbol, "bars": items, "meta": meta})
 
+
+
+@router.get("/bars/hour")
+async def get_hour(
+    symbol: str,
+    from_date: str = Query(..., alias="from"),
+    to_date: str = Query(..., alias="to"),
+    rth_only: bool = True,
+):
+    """
+    Runtime aggregation of 1-hour OHLCV from 1-minute parquet aligned to RTH buckets.
+    Buckets: start 13:30Z, then +1h steps (13:30→14:30, ... 19:30→20:00).
+    Bucket time (t) is the bucket START in UTC.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+
+    years = _years_in_range(symbol, from_date, to_date)
+    if not years:
+        raise HTTPException(status_code=404, detail="No data for symbol/year range")
+    paths = _paths_for(symbol, years, tf="1Min")
+    if not paths:
+        raise HTTPException(status_code=404, detail="No minute parquet files found")
+
+    # Inclusive window [from 00:00:00 .. to 23:59:59]
+    try:
+        ts_from = datetime.fromisoformat(from_date + "T00:00:00+00:00")
+        ts_to = datetime.fromisoformat(to_date + "T23:59:59+00:00")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid from/to format; expected YYYY-MM-DD")
+
+    q = pl.scan_parquet(paths).filter((pl.col("t") >= pl.lit(ts_from)) & (pl.col("t") <= pl.lit(ts_to)))
+    if rth_only:
+        q = q.filter(pl.col("rth") == True)
+
+    # Shift timestamps by -30m, truncate to hour, shift back +30m to align buckets to :30
+    bucket = ((pl.col("t") - pl.duration(minutes=30)).dt.truncate("1h") + pl.duration(minutes=30)).alias("bucket")
+
+    qq = (
+        q.select(["t", "o", "h", "l", "c", "v"])  # select required cols early
+         .with_columns(bucket)
+         .group_by("bucket")
+         .agg(
+            o=pl.col("o").first(),
+            h=pl.col("h").max(),
+            l=pl.col("l").min(),
+            c=pl.col("c").last(),
+            v=pl.col("v").sum(),
+         )
+         .sort("bucket")
+    )
+
+    df = qq.collect()
+    if df.height == 0:
+        raise HTTPException(status_code=404, detail="No data rows in requested window")
+
+    items = [
+        {"t": _isoz(t), "o": float(o), "h": float(h), "l": float(l), "c": float(c), "v": int(v)}
+        for t, o, h, l, c, v in zip(df["bucket"], df["o"], df["h"], df["l"], df["c"], df["v"])
+    ]
+
+    try:
+        logger.info("bars.hour", extra={"symbol": symbol, "from": from_date, "to": to_date, "rows": len(items)})
+    except Exception:
+        pass
+
+    return JSONResponse(content={"symbol": symbol, "bars": items})

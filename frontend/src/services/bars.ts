@@ -62,3 +62,28 @@ export async function fetchMinuteDecimated(symbol: string, from: string, to: str
   return MinuteResponseSchema.parse(json)
 }
 
+export const HourBarSchema = z.object({
+  t: z.string(),
+  o: z.number(),
+  h: z.number(),
+  l: z.number(),
+  c: z.number(),
+  v: z.number(),
+})
+export type HourBar = z.infer<typeof HourBarSchema>
+
+export const HourResponseSchema = z.object({
+  symbol: z.string(),
+  bars: z.array(HourBarSchema),
+})
+export type HourResponse = z.infer<typeof HourResponseSchema>
+
+export async function fetchHour(symbol: string, from: string, to: string, rth_only: boolean = true): Promise<HourResponse> {
+  const params = new URLSearchParams({ symbol, from, to })
+  if (rth_only) params.set('rth_only', '1')
+  const res = await fetch(`/bars/hour?${params.toString()}`)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json = await res.json()
+  return HourResponseSchema.parse(json)
+}
+
