@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { fetchDaily } from '../services/bars'
+
 import { useRunPlayback } from '../services/ws'
 import PlaybackControls from '../components/PlaybackControls'
 import ChartOHLC, { type CandlestickChartAPI } from '../components/ChartOHLC'
@@ -8,9 +11,20 @@ import type { CandlestickData, LineData } from 'lightweight-charts'
 
 import { nyBusinessDayKey } from '../lib/nyDay'
 
-export type RunPlayerContainerProps = { run_id: string }
+export type RunPlayerContainerProps = { run_id: string; dataset_id?: string }
 
-export function RunPlayerContainer({ run_id }: RunPlayerContainerProps) {
+export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerProps) {
+  // Derive symbol from dataset_id if available (format: SYMBOL-YEAR-1m)
+  const symbol = (dataset_id?.split('-')[0] || '').toUpperCase() || undefined
+
+  // Fetch daily series once (complete)
+  const { data: dailyResp } = useQuery({
+    queryKey: ['daily', symbol],
+    queryFn: () => fetchDaily(symbol!),
+    enabled: !!symbol,
+    staleTime: 5 * 60 * 1000,
+  })
+
   type DisplayMode = 'minute' | 'daily'
   const [mode, setMode] = useState<DisplayMode>('minute')
 
@@ -32,9 +46,26 @@ export function RunPlayerContainer({ run_id }: RunPlayerContainerProps) {
 
   const dailyArray = (): CandlestickData[] => {
     const out: CandlestickData[] = []
-    dailyMapRef.current.forEach((v, k) => out.push({ time: k as any, open: v.open, high: v.high, low: v.low, close: v.close }))
+    dailyMapRef.current.forEach((v, k) => {
+      const ts = Math.floor(new Date(k + 'T00:00:00Z').getTime() / 1000)
+      out.push({ time: ts as any, open: v.open, high: v.high, low: v.low, close: v.close })
+    })
     return out
   }
+
+  // Minute aggregation (UTC minute -> candle), and playback tickers
+  type MinuteAgg = { open: number, high: number, low: number, close: number }
+  const minuteAggRef = useRef<Map<number, MinuteAgg>>(new Map())
+  const minuteMinRef = useRef<number | null>(null)
+  const minuteMaxRef = useRef<number | null>(null)
+  const nextMinutePtrRef = useRef<number | null>(null)
+
+  // Tickers and playback cursors
+  const dailyTickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const minuteTickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const dailyStartedRef = useRef<boolean>(false)
+  const dailyIndexRef = useRef<number>(0)
+
 
   useEffect(() => {
     // Reset charts and counters on run change
@@ -63,30 +94,30 @@ export function RunPlayerContainer({ run_id }: RunPlayerContainerProps) {
         }
       }
 
-      // Render path: minute or daily
+      // Render path: minute or daily (candles driven by client-side ticker)
       if (mode === 'minute') {
+        // Buffer per-minute aggregation; ticker will append at 1 Hz
         if (f.ohlc) {
-          const last = lastOhlcTsRef.current
-          if (!(last != null && tsSec < last)) {
-            const dp: CandlestickData = {
-              time: tsSec as any,
-              open: f.ohlc.o ?? 0, high: f.ohlc.h ?? 0, low: f.ohlc.l ?? 0, close: f.ohlc.c ?? 0,
-            }
-            lastOhlcTsRef.current = tsSec
-            ohlcRef.current?.update(dp)
+          const minuteStart = Math.floor(tsSec / 60) * 60
+          const agg = minuteAggRef.current.get(minuteStart)
+          if (!agg) {
+            minuteAggRef.current.set(minuteStart, {
+              open: f.ohlc.o ?? 0,
+              high: f.ohlc.h ?? 0,
+              low: f.ohlc.l ?? 0,
+              close: f.ohlc.c ?? 0,
+            })
+          } else {
+            agg.high = Math.max(agg.high, f.ohlc.h ?? agg.high)
+            agg.low = Math.min(agg.low, f.ohlc.l ?? agg.low)
+            agg.close = f.ohlc.c ?? agg.close
           }
+          // Track seen minute range
+          minuteMinRef.current = minuteMinRef.current == null ? minuteStart : Math.min(minuteMinRef.current, minuteStart)
+          minuteMaxRef.current = minuteMaxRef.current == null ? minuteStart : Math.max(minuteMaxRef.current, minuteStart)
         }
       } else {
-        if (f.ohlc) {
-          const dayKey = nyBusinessDayKey(f.ts)
-          const lastKey = lastDailyKeyRef.current
-          if (!(lastKey && dayKey < lastKey)) {
-            const agg = dailyMapRef.current.get(dayKey)!
-            const dp: CandlestickData = { time: dayKey as any, open: agg.open, high: agg.high, low: agg.low, close: agg.close }
-            lastDailyKeyRef.current = dayKey
-            ohlcRef.current?.update(dp)
-          }
-        }
+        // Daily mode uses REST preloaded bars; ticker will drive appends
       }
 
       // Equity stream → line (minute)
@@ -102,16 +133,87 @@ export function RunPlayerContainer({ run_id }: RunPlayerContainerProps) {
 
     return () => unsubscribe()
   }, [subscribe, run_id, mode])
-  // Mode switch: reset OHLC with appropriate history
+  // Mode/run change: reset internal candle playback cursors and clear tickers
   useEffect(() => {
-    if (mode === 'daily') {
-      ohlcRef.current?.reset(dailyArray())
-      lastDailyKeyRef.current = null
+    // Reset daily playback state (do not render series immediately)
+    dailyStartedRef.current = false
+    dailyIndexRef.current = 0
+    if (dailyTickerRef.current) { clearInterval(dailyTickerRef.current); dailyTickerRef.current = null }
+
+    // Reset minute playback pointer and ticker; keep aggregation buffer
+    nextMinutePtrRef.current = null
+    if (minuteTickerRef.current) { clearInterval(minuteTickerRef.current); minuteTickerRef.current = null }
+  }, [mode, run_id])
+
+  // Daily ticker: on first Play in daily mode, reset to empty and append 1 bar/sec
+  useEffect(() => {
+    if (mode !== 'daily') return
+    if (!dailyResp?.bars) return
+
+    if (state.playing) {
+      if (!dailyStartedRef.current) {
+        dailyStartedRef.current = true
+        dailyIndexRef.current = 0
+        ohlcRef.current?.reset([])
+      }
+      if (!dailyTickerRef.current) {
+        dailyTickerRef.current = setInterval(() => {
+          const idx = dailyIndexRef.current
+          const bars = dailyResp.bars
+          if (!bars || idx >= bars.length) {
+            if (dailyTickerRef.current) { clearInterval(dailyTickerRef.current); dailyTickerRef.current = null }
+            return
+          }
+          const b = bars[idx]
+          const dp: CandlestickData = { time: Math.floor(new Date(b.t).getTime() / 1000) as any, open: b.o, high: b.h, low: b.l, close: b.c }
+          ohlcRef.current?.update(dp)
+          dailyIndexRef.current = idx + 1
+          if (dailyIndexRef.current >= bars.length) {
+            if (dailyTickerRef.current) { clearInterval(dailyTickerRef.current); dailyTickerRef.current = null }
+          }
+        }, 1000)
+      }
     } else {
-      ohlcRef.current?.reset([])
-      lastOhlcTsRef.current = null
+      if (dailyTickerRef.current) { clearInterval(dailyTickerRef.current); dailyTickerRef.current = null }
     }
-  }, [mode])
+
+    return () => {
+      if (dailyTickerRef.current) { clearInterval(dailyTickerRef.current); dailyTickerRef.current = null }
+    }
+  }, [mode, state.playing, dailyResp])
+
+  // Minute ticker: append one completed minute per second if available
+  useEffect(() => {
+    if (mode !== 'minute') return
+
+    if (state.playing) {
+      if (!minuteTickerRef.current) {
+        minuteTickerRef.current = setInterval(() => {
+          const minSeen = minuteMinRef.current
+          const maxSeen = minuteMaxRef.current
+          if (minSeen == null || maxSeen == null) return
+
+          let ptr = nextMinutePtrRef.current
+          if (ptr == null) ptr = minSeen
+
+          // Only append if we have aggregation for ptr and it is complete (ptr < latest seen minute)
+          if (ptr < maxSeen && minuteAggRef.current.has(ptr)) {
+            const agg = minuteAggRef.current.get(ptr)!
+            const dp: CandlestickData = { time: ptr as any, open: agg.open, high: agg.high, low: agg.low, close: agg.close }
+            ohlcRef.current?.update(dp)
+            nextMinutePtrRef.current = ptr + 60
+          }
+          // else: wait for more data
+        }, 1000)
+      }
+    } else {
+      if (minuteTickerRef.current) { clearInterval(minuteTickerRef.current); minuteTickerRef.current = null }
+    }
+
+    return () => {
+      if (minuteTickerRef.current) { clearInterval(minuteTickerRef.current); minuteTickerRef.current = null }
+    }
+  }, [mode, state.playing])
 
 
   const formatTime = (t: any, locale?: string) => {
@@ -137,7 +239,7 @@ export function RunPlayerContainer({ run_id }: RunPlayerContainerProps) {
             <button className={`px-2 py-1 text-sm ${mode==='minute' ? 'bg-slate-200' : ''}`} onClick={() => setMode('minute')}>Minute</button>
             <button className={`px-2 py-1 text-sm ${mode==='daily' ? 'bg-slate-200' : ''}`} onClick={() => setMode('daily')}>Daily</button>
           </div>
-          <div className="text-slate-500">Transport: {state.status} · Frames: {framesCount} · Dropped: {state.dropped}{state.status==='ws' && state.playing && framesCount===0 ? ' · No frames yet…' : ''}</div>
+          <div className="text-slate-500">Transport: {state.status} · Frames: {framesCount} · Dropped: {state.dropped}{state.status==='ws' && state.playing && framesCount===0 ? ' · No frames yet…' : ''} · Candles: {mode==='daily' ? 'daily/api-sim' : 'minute/ws'}</div>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-4">
