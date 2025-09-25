@@ -1,20 +1,14 @@
 {
-  "dataset_id": "MSFT-2025-1m",
+  "dataset_id": "MSFT-2025-1d",
   "symbol": "MSFT",
-  "interval": "1m",
+  "interval": "1d",
   "from_date": "2025-01-02",
   "to_date": "2025-09-19",
-  "rebar_params": {
-    "interval": "1Min"
-  },
-  "input_hashes": {
-    "trades_files": 179,
-    "tbbo_files": 179
-  },
-  "output_hashes": {
-    "bars_1Min.parquet": "430914939a0b6ee02ad85e27e24e7c8ea8b4d0e9c615d945f058a81a5ed6d117"
-  },
-  "calendar_version": "NAZDAQ-v1",
+  "products": [
+    "TRADES",
+    "TBBO"
+  ],
+  "calendar_version": "v1",
   "tz": "America/New_York",
-  "created_at": "2025-09-24T10:02:03.363335+00:00"
+  "created_at": "2025-09-25T16:50:21.936895+00:00"
 }

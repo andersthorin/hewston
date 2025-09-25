@@ -1,20 +1,14 @@
 {
-  "dataset_id": "TSLA-2025-1m",
+  "dataset_id": "TSLA-2025-1d",
   "symbol": "TSLA",
-  "interval": "1m",
+  "interval": "1d",
   "from_date": "2025-01-02",
   "to_date": "2025-09-19",
-  "rebar_params": {
-    "interval": "1Min"
-  },
-  "input_hashes": {
-    "trades_files": 179,
-    "tbbo_files": 179
-  },
-  "output_hashes": {
-    "bars_1Min.parquet": "19fdebe0a09831f21c07f0589c3cdd167cd04c9b8ed3e6f03e66ee64b2d0e364"
-  },
-  "calendar_version": "NAZDAQ-v1",
+  "products": [
+    "TRADES",
+    "TBBO"
+  ],
+  "calendar_version": "v1",
   "tz": "America/New_York",
-  "created_at": "2025-09-24T12:23:46.405919+00:00"
+  "created_at": "2025-09-25T16:50:21.996501+00:00"
 }

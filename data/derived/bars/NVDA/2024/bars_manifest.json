@@ -1,20 +1,14 @@
 {
-  "dataset_id": "NVDA-2024-1m",
+  "dataset_id": "NVDA-2024-1d",
   "symbol": "NVDA",
-  "interval": "1m",
+  "interval": "1d",
   "from_date": "2024-09-20",
   "to_date": "2024-12-31",
-  "rebar_params": {
-    "interval": "1Min"
-  },
-  "input_hashes": {
-    "trades_files": 71,
-    "tbbo_files": 71
-  },
-  "output_hashes": {
-    "bars_1Min.parquet": "59f532cc96942ba1b13200f122c1ac641c953206108181c487c8181e698a9695"
-  },
-  "calendar_version": "NAZDAQ-v1",
+  "products": [
+    "TRADES",
+    "TBBO"
+  ],
+  "calendar_version": "v1",
   "tz": "America/New_York",
-  "created_at": "2025-09-24T12:40:12.362452+00:00"
+  "created_at": "2025-09-25T16:50:22.005984+00:00"
 }
