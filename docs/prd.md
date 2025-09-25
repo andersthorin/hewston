@@ -76,7 +76,7 @@ Authoritative source for architecture choices is docs/brief.md (Technical Consid
 
 ### 4.1 Repository and Runtime
 - Monorepo; local-first development
-- Python 3.11+, Node 20+, macOS (Apple Silicon) dev; Linux optional for headless jobs
+- Python 3.11+, Node 22+, macOS (Apple Silicon) dev; Linux optional for headless jobs
 
 ### 4.2 Stack and Libraries
 - Backend: FastAPI + Uvicorn; Pydantic v2; Typer for jobs

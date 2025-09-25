@@ -4,7 +4,7 @@ Status: v0.1 (aligns with docs/architecture.md §Tech Stack and docs/prd.md)
 
 ## Languages & Runtimes
 - Python: 3.11.9 (pin)
-- Node.js: 20.11.1 (LTS, pin)
+- Node.js: 22.x (LTS, pin)
 
 ## Backend
 - Framework: FastAPI 0.115.x — async‑first; Pydantic v2
