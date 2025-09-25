@@ -56,8 +56,7 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
         chartRef.current = chart
         seriesRef.current = series
         try {
-          chart.applyOptions({ localization: { timeFormatter: (t: any) => fmtTimeLocal(t) } } as any)
-          chart.timeScale().applyOptions({ tickMarkFormatter: (t: any) => fmtTimeLocal(t) })
+          // Use default time formatting for dates; no custom time/tick formatters
           chart.applyOptions({ rightPriceScale: { mode: PriceScaleMode.Normal } } as any)
         } catch {}
 

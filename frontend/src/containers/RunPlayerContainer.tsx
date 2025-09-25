@@ -107,13 +107,12 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
         const day = keys[dayIdxRef.current]
         const snaps = dailySnapshotsRef.current!.get(day) || []
         if (snaps.length === 0) { dayIdxRef.current++; hourIdxRef.current = 0; continue }
-        const midnight = Math.floor(Date.UTC(parseInt(day.slice(0,4)), parseInt(day.slice(5,7))-1, parseInt(day.slice(8,10))) / 1000)
-
+        const y = parseInt(day.slice(0,4)), m = parseInt(day.slice(5,7)), d = parseInt(day.slice(8,10))
         const i = hourIdxRef.current
         const s = snaps[i]
         if (!s) { dayIdxRef.current++; hourIdxRef.current = 0; continue }
 
-        const dp: CandlestickData = { time: midnight as any, open: s.o, high: s.h, low: s.l, close: s.c }
+        const dp: CandlestickData = { time: { year: y, month: m, day: d } as any, open: s.o, high: s.h, low: s.l, close: s.c }
         ohlcRef.current?.update(dp)
 
         hourIdxRef.current = i + 1
