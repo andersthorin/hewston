@@ -1,13 +1,19 @@
-import { useEffect, useRef } from 'react'
-import { createChart as createChartLWC, ColorType, LineSeries } from 'lightweight-charts'
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
+import { createChart as createChartLWC, ColorType, LineSeries, PriceScaleMode } from 'lightweight-charts'
 import type { LineData } from 'lightweight-charts'
 
+
+
 export type EquityChartProps = {
-  data: LineData[]
   formatTime?: (t: any, locale?: string) => string
 }
 
-export function EquityChart({ data, formatTime }: EquityChartProps) {
+export type LineChartAPI = {
+  reset: (initial: LineData[]) => void
+  update: (dp: LineData) => void
+}
+
+export const EquityChart = forwardRef<LineChartAPI, EquityChartProps>(function EquityChart({ formatTime }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<any>(null)
   const seriesRef = useRef<any>(null)
@@ -37,7 +43,7 @@ export function EquityChart({ data, formatTime }: EquityChartProps) {
         const base = {
           height: 300,
           layout: { textColor: '#334155', background: { type: ColorType.Solid, color: '#fff' } },
-          timeScale: { timeVisible: true, secondsVisible: false },
+          timeScale: { timeVisible: true, secondsVisible: false, barSpacing: 12 },
         }
         const chart = createChartLWC(containerRef.current, base as any)
         let series: any
@@ -53,14 +59,13 @@ export function EquityChart({ data, formatTime }: EquityChartProps) {
         try {
           chart.applyOptions({ localization: { timeFormatter: (t: any) => fmtTimeLocal(t) } } as any)
           chart.timeScale().applyOptions({ tickMarkFormatter: (t: any) => fmtTimeLocal(t) })
+          chart.applyOptions({ rightPriceScale: { mode: PriceScaleMode.Logarithmic } } as any)
         } catch {}
 
-        // initial width
         const w = containerRef.current.clientWidth
         try { (chart as any).applyOptions?.({ width: w }) } catch {}
         try { (chart as any).resize?.(w, 300) } catch {}
 
-        // observe resizes
         const ro = new ResizeObserver(() => {
           const cw = containerRef.current?.clientWidth || w
           try { (chart as any).applyOptions?.({ width: cw }) } catch {}
@@ -73,13 +78,19 @@ export function EquityChart({ data, formatTime }: EquityChartProps) {
         return
       }
     }
-    try {
-      seriesRef.current?.setData(data)
-      chartRef.current?.timeScale().fitContent()
-    } catch (err) {
-      console.warn('EquityChart update failed:', err)
-    }
-  }, [data])
+  }, [])
+
+  useImperativeHandle(ref, () => ({
+    reset: (initial: LineData[]) => {
+      try {
+        seriesRef.current?.setData(initial)
+        chartRef.current?.timeScale().fitContent()
+      } catch {}
+    },
+    update: (dp: LineData) => {
+      try { seriesRef.current?.update(dp) } catch {}
+    },
+  }), [])
 
   useEffect(() => () => {
     try { (chartRef.current as any)?.__ro?.disconnect?.() } catch {}
@@ -87,7 +98,7 @@ export function EquityChart({ data, formatTime }: EquityChartProps) {
   }, [])
 
   return <div ref={containerRef} className="w-full border border-slate-200 rounded" />
-}
+})
 
 export default EquityChart
 

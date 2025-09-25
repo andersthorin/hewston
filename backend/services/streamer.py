@@ -136,9 +136,12 @@ async def produce_frames(
     if total == 0:
         return
     # Decimation stride
-    max_frames = max(1, total)  # with realtime, time-based; here index-based
-    target = fps  # logical target; we stride if needed
-    stride = max(1, total // target) if total > target else 1
+    if realtime:
+        target = fps  # logical target; we stride if needed
+        stride = max(1, total // target) if total > target else 1
+    else:
+        # Option A: no decimation in non-realtime mode — emit all frames
+        stride = 1
 
     dropped = 0
     produced = 0

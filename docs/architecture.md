@@ -99,7 +99,7 @@ graph TD
 | Category | Technology | Version | Purpose | Rationale |
 |---|---|---|---|---|
 | Language | Python | 3.11.x (pin) | Backend jobs/API | Async support; mature ecosystem |
-| Runtime | Node.js | 20.x (pin) | Frontend tooling | LTS; stable dev experience |
+| Runtime | Node.js | 22.x (pin) | Frontend tooling | LTS; stable dev experience |
 | Backend Framework | FastAPI | 0.115.x | REST/WS API | Async‑first; Pydantic v2 |
 | CLI/Jobs | Typer | 0.12.x | Ingest/derive/backtest | Ergonomic CLIs; pairs with FastAPI |
 | Dataframe | Polars | 1.9.x | Bar derivation/aggregations | Fast; Arrow‑native |
@@ -117,7 +117,7 @@ graph TD
 | Env/Packaging | uv (preferred) | 0.4.x | Python env mgmt | Fast solver; lockfile |
 
 Version pins:
-- Python 3.11.9; Node 20.11.1 (LTS)
+- Python 3.11.9; Node 22.x (LTS)
 - FastAPI 0.115.x; Typer 0.12.x; Polars 1.9.x; PyArrow 16.x; Databento SDK 0.38.x; Nautilus Trader 0.10.x
 - React 18.3.x; TypeScript 5.6.x; Vite 5.4.x; Tailwind CSS 4.0.x; TanStack Query 5.51.x; Zod 3.23.x; Vitest 1.6.x
 - Ruff 0.6.x; Black 24.8.x; ESLint 9.10.x; Prettier 3.3.x; structlog 24.1.x

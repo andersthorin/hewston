@@ -19,7 +19,7 @@ Reproducible backtesting MVP with time-compressed playback. This README is a Qui
 
 ## Prerequisites
 - macOS (Apple Silicon) or Linux
-- Python 3.11 (uv recommended), Node.js 20.x, npm
+- Python 3.11 (uv recommended), Node.js 22.x, npm
 - sqlite3 CLI
 - Databento API key in env (export DATABENTO_API_KEY=...)
 

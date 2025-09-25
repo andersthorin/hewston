@@ -1,17 +1,22 @@
-import { useEffect, useRef } from 'react'
-import { createChart as createChartLWC, ColorType, CandlestickSeries } from 'lightweight-charts'
+import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
+import { createChart as createChartLWC, ColorType, CandlestickSeries, PriceScaleMode } from 'lightweight-charts'
 import type { CandlestickData } from 'lightweight-charts'
 
+
+
 export type ChartOHLCProps = {
-  data: CandlestickData[]
   formatTime?: (t: any, locale?: string) => string
 }
 
-export function ChartOHLC({ data, formatTime }: ChartOHLCProps) {
+export type CandlestickChartAPI = {
+  reset: (initial: CandlestickData[]) => void
+  update: (dp: CandlestickData) => void
+}
+
+export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(function ChartOHLC({ formatTime }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<any>(null)
   const seriesRef = useRef<any>(null)
-
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -37,7 +42,7 @@ export function ChartOHLC({ data, formatTime }: ChartOHLCProps) {
         const base = {
           height: 300,
           layout: { textColor: '#334155', background: { type: ColorType.Solid, color: '#fff' } },
-          timeScale: { timeVisible: true, secondsVisible: false },
+          timeScale: { timeVisible: false, secondsVisible: false, barSpacing: 12 },
         }
         const chart = createChartLWC(containerRef.current, base as any)
         let series: any
@@ -53,14 +58,13 @@ export function ChartOHLC({ data, formatTime }: ChartOHLCProps) {
         try {
           chart.applyOptions({ localization: { timeFormatter: (t: any) => fmtTimeLocal(t) } } as any)
           chart.timeScale().applyOptions({ tickMarkFormatter: (t: any) => fmtTimeLocal(t) })
+          chart.applyOptions({ rightPriceScale: { mode: PriceScaleMode.Normal } } as any)
         } catch {}
 
-        // initial width
         const w = containerRef.current.clientWidth
         try { (chart as any).applyOptions?.({ width: w }) } catch {}
         try { (chart as any).resize?.(w, 300) } catch {}
 
-        // observe resizes
         const ro = new ResizeObserver(() => {
           const cw = containerRef.current?.clientWidth || w
           try { (chart as any).applyOptions?.({ width: cw }) } catch {}
@@ -73,13 +77,19 @@ export function ChartOHLC({ data, formatTime }: ChartOHLCProps) {
         return
       }
     }
-    try {
-      seriesRef.current?.setData(data)
-      chartRef.current?.timeScale().fitContent()
-    } catch (err) {
-      console.warn('ChartOHLC update failed:', err)
-    }
-  }, [data])
+  }, [])
+
+  useImperativeHandle(ref, () => ({
+    reset: (initial: CandlestickData[]) => {
+      try {
+        seriesRef.current?.setData(initial)
+        chartRef.current?.timeScale().fitContent()
+      } catch {}
+    },
+    update: (dp: CandlestickData) => {
+      try { seriesRef.current?.update(dp) } catch {}
+    },
+  }), [])
 
   useEffect(() => () => {
     try { (chartRef.current as any)?.__ro?.disconnect?.() } catch {}
@@ -87,7 +97,7 @@ export function ChartOHLC({ data, formatTime }: ChartOHLCProps) {
   }, [])
 
   return <div ref={containerRef} className="w-full border border-slate-200 rounded" />
-}
+})
 
 export default ChartOHLC
 
