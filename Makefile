@@ -43,6 +43,9 @@ help:
 		@echo "  restart        Restart backend and frontend (stop→start)"
 		@echo "  derive-bars     Derive 1m bars from local DBN (SYMBOLS=... FROM=YYYY-MM-DD TO=YYYY-MM-DD FORCE=1)"
 
+			@echo "  derive-daily    Derive 1d bars (daily OHLCV) from local DBN (SYMBOLS=... FROM=YYYY-MM-DD TO=YYYY-MM-DD FORCE=1)"
+			@echo "  derive-daily-fast Derive 1d OHLCV from existing 1m parquet (fast path)"
+
 
 
 	@echo "  data            Ingest Databento DBN and derive 1m bars (SYMBOL, YEAR)"
@@ -128,6 +131,18 @@ derive-bars:
 	@echo "[derive-bars] SYMBOLS=$(SYMBOLS) FROM=$(FROM) TO=$(TO) FORCE=$(FORCE)" && \
 	HEWSTON_DATA_DIR="$(HEWSTON_DATA_DIR)" SYMBOLS="$(SYMBOLS)" FROM="$(FROM)" TO="$(TO)" FORCE="$(FORCE)" TF="$(TF)" FORMAT="$(FORMAT)" FILL_GAPS="$(FILL_GAPS)" RTH_ONLY="$(RTH_ONLY)" PYTHONWARNINGS=ignore \
 	  python3 -W ignore:::urllib3.exceptions.NotOpenSSLWarning scripts/derive_bars_runner.py
+.PHONY: derive-daily
+derive-daily:
+	@echo "[derive-daily] SYMBOLS=$(SYMBOLS) FROM=$(FROM) TO=$(TO) FORCE=$(FORCE)" && \
+	HEWSTON_DATA_DIR="$(HEWSTON_DATA_DIR)" SYMBOLS="$(SYMBOLS)" FROM="$(FROM)" TO="$(TO)" FORCE="$(FORCE)" TF="1Day" FORMAT="$(FORMAT)" FILL_GAPS="0" RTH_ONLY="1" PYTHONWARNINGS=ignore \
+	  python3 -W ignore:::urllib3.exceptions.NotOpenSSLWarning scripts/derive_bars_runner.py
+
+.PHONY: derive-daily-fast
+derive-daily-fast:
+	@echo "[derive-daily-fast] SYMBOLS=$(SYMBOLS) FROM=$(FROM) TO=$(TO) FORCE=$(FORCE)" && \
+	HEWSTON_DATA_DIR="$(HEWSTON_DATA_DIR)" SYMBOLS="$(SYMBOLS)" FROM="$(FROM)" TO="$(TO)" FORCE="$(FORCE)" FORMAT="parquet" RTH_ONLY="1" FILL_GAPS="0" \
+	  python3 scripts/derive_daily_from_minute.py
+
 
 .PHONY: derive-bars-legacy
 derive-bars-legacy:

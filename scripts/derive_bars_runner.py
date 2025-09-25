@@ -62,8 +62,12 @@ def main() -> int:
     force = bool(os.environ.get("FORCE"))
     tf = os.environ.get("TF", "1Min")
     out_format = os.environ.get("FORMAT", "parquet").lower()
-    fill_gaps = os.environ.get("FILL_GAPS", "false").lower() in ("1","true","yes","on")
-    rth_only = os.environ.get("RTH_ONLY", "false").lower() in ("1","true","yes","on")
+    # Defaults: for 1Day builds, prefer RTH_ONLY=True and FILL_GAPS=False unless explicitly overridden
+    _fg_env = os.environ.get("FILL_GAPS")
+    _rth_env = os.environ.get("RTH_ONLY")
+    fill_gaps = (_fg_env if _fg_env is not None else "false").lower() in ("1","true","yes","on")
+    rth_only_default = "true" if tf == "1Day" and _rth_env is None else "false"
+    rth_only = (_rth_env if _rth_env is not None else rth_only_default).lower() in ("1","true","yes","on")
 
     if symbols_env.upper() == "ALL" or not symbols_env:
         symbols = discover_symbols(base)
