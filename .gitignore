@@ -1,4 +1,7 @@
 data/raw/
-
 __pycache__/
 .idea/
+.pytest_cache/
+.venv/
+.DS_Store
+.env
