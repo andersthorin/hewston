@@ -36,6 +36,7 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
   const dayIdxRef = useRef<number>(0)
   const hourIdxRef = useRef<number>(0)
 
+
   // Group hourly bars by day and precompute cumulative daily snapshots per hour
   const dailySnapshotsRef = useRef<Map<string, Array<{ o: number, h: number, l: number, c: number }>> | null>(null)
 
@@ -88,7 +89,7 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
     if (!state.playing) return
     if (!dailySnapshotsRef.current || !dayKeysRef.current || dayKeysRef.current.length === 0) return
 
-    const period = 1000 // ms per logical tick at fixed 1×
+    const period = 100 // ms per logical tick at fixed 10×
     let last = Date.now()
     let acc = 0
 
