@@ -1,13 +1,11 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchHour, type HourResponse } from '../services/bars'
 
 import { useRunPlayback } from '../services/ws'
 import PlaybackControls from '../components/PlaybackControls'
 import ChartOHLC, { type CandlestickChartAPI } from '../components/ChartOHLC'
-import EquityChart, { type LineChartAPI } from '../components/EquityChart'
-import type { StreamFrameT } from '../schemas/stream'
-import type { CandlestickData, LineData } from 'lightweight-charts'
+import type { CandlestickData } from 'lightweight-charts'
 
 
 export type RunPlayerContainerProps = { run_id: string; dataset_id?: string }
@@ -27,16 +25,10 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
     staleTime: 5 * 60 * 1000,
   })
 
-  const { state, subscribe, onPlay, onPause, onSpeedChange } = useRunPlayback(run_id)
+  const { state, onPlay, onPause } = useRunPlayback(run_id)
 
-  // Imperative chart refs and last-time guards
+  // Imperative chart refs
   const ohlcRef = useRef<CandlestickChartAPI>(null)
-  const eqRef = useRef<LineChartAPI>(null)
-  const lastOhlcTsRef = useRef<number | null>(null)
-  const lastEquityTsRef = useRef<number | null>(null)
-
-  // Metric only (no full frame accumulation)
-  const [framesCount, setFramesCount] = useState(0)
 
   // Candlestick playback cursors and ticker (daily/api-sim via hourly snapshots)
   const hourTickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -49,28 +41,9 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
 
 
   useEffect(() => {
-    // Reset charts and counters on run change
-    setFramesCount(0)
-    lastOhlcTsRef.current = null
-    lastEquityTsRef.current = null
+    // On run change, clear the candlestick series
     ohlcRef.current?.reset([])
-
-    const unsubscribe = subscribe((f: StreamFrameT) => {
-      setFramesCount((c) => c + 1)
-      const tsSec = Math.floor(new Date(f.ts).getTime() / 1000)
-      // Equity stream → line (unchanged)
-      if (f.equity) {
-        const last = lastEquityTsRef.current
-        if (!(last != null && tsSec < last)) {
-          const dp: LineData = { time: tsSec as any, value: f.equity.value }
-          lastEquityTsRef.current = tsSec
-          eqRef.current?.update(dp)
-        }
-      }
-    })
-
-    return () => unsubscribe()
-  }, [subscribe, run_id])
+  }, [run_id])
   // Run change or new hourly data: reset playback indices and clear ticker
   useEffect(() => {
     dayKeysRef.current = null
@@ -108,14 +81,14 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
   }, [hourResp])
 
   // Hourly ticker driving realtime-style daily playback (mutate same daily bar per hour)
-  // Runs a 100ms timer and advances logical ticks based on elapsed time and speed.
+  // Runs a 100ms timer and advances logical ticks based on elapsed time; fixed 1× (1000 ms per tick).
   useEffect(() => {
-    // Always recreate ticker when play state or speed changes
+    // Always recreate ticker when play state changes
     if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null }
     if (!state.playing) return
     if (!dailySnapshotsRef.current || !dayKeysRef.current || dayKeysRef.current.length === 0) return
 
-    const period = Math.max(50, Math.floor(1000 / (state.speed || 1))) // ms per logical tick; clamp to >=50ms
+    const period = 1000 // ms per logical tick at fixed 1×
     let last = Date.now()
     let acc = 0
 
@@ -148,7 +121,7 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
     }, 100) // 100ms base cadence; logical ticks based on 'period'
 
     return () => { if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null } }
-  }, [state.playing, state.speed])
+  }, [state.playing])
 
 
   const formatTime = (t: any, locale?: string) => {
@@ -168,16 +141,14 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <PlaybackControls playing={state.playing} speed={state.speed} onPlay={onPlay} onPause={onPause} onSpeedChange={onSpeedChange} />
+        <PlaybackControls playing={state.playing} onPlay={onPlay} onPause={onPause} />
         <div className="flex items-center gap-2">
-          <div className="text-slate-500">Transport: {state.status} · Frames: {framesCount} · Dropped: {state.dropped}{state.status==='ws' && state.playing && framesCount===0 ? ' · No frames yet…' : ''} · Candles: daily/api-sim</div>
+          <div className="text-slate-500">Transport: {state.status} · Candles: daily/api-sim</div>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-4">
         <ChartOHLC ref={ohlcRef} formatTime={formatTime} />
         {isHourErr ? <div className="text-sm text-amber-600">No hourly data for {symbol} in this range.</div> : null}
-
-        <EquityChart ref={eqRef} formatTime={formatTime} />
       </div>
     </div>
   )
