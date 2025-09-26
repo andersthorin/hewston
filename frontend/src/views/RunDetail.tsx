@@ -11,17 +11,26 @@ export default function RunDetailView() {
     enabled: !!run_id,
   })
 
-  if (isLoading) return <div className="p-4">Loading run metadata...</div>
-  if (isError) return <div className="p-4">Error: {error?.message}</div>
-  if (!data) return null
-
   return (
     <div className="p-4 grid gap-3">
       <div>
-        <h2 className="m-0">Run {data.run_id}</h2>
-        <div className="text-slate-500">Strategy {data.strategy_id} — Status {data.status}</div>
+        <h2 className="m-0">Run {data?.run_id || run_id}</h2>
+        <div className="text-slate-500">
+          {isLoading ? (
+            'Loading run metadata...'
+          ) : isError ? (
+            <>Error: {error?.message}</>
+          ) : data ? (
+            <>Strategy {data.strategy_id} — Status {data.status}</>
+          ) : null}
+        </div>
       </div>
-      <RunPlayerContainer run_id={run_id} dataset_id={data.dataset_id || undefined} run_from={data.run_from ?? undefined} run_to={data.run_to ?? undefined} />
+      <RunPlayerContainer
+        run_id={run_id}
+        dataset_id={data?.dataset_id || undefined}
+        run_from={data?.run_from ?? undefined}
+        run_to={data?.run_to ?? undefined}
+      />
     </div>
   )
 }

@@ -1,5 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
-import { getRunDetail, type RunSummary, type RunDetail } from '../services/api'
+import type { RunSummary } from '../services/api'
 
 export type RunsTableProps = {
   items: RunSummary[]
@@ -35,13 +34,8 @@ export function RunsTable({ items, onView }: RunsTableProps) {
 }
 
 function Row({ r, onView }: { r: RunSummary; onView?: (id: string) => void }) {
-  const { data } = useQuery<RunDetail, Error>({
-    queryKey: ['run-detail-window', r.run_id],
-    queryFn: () => getRunDetail(r.run_id),
-    staleTime: 5 * 60 * 1000,
-  })
-  const runFrom = data?.run_from ?? '—'
-  const runTo = data?.run_to ?? '—'
+  const runFrom = r.from ?? '—'
+  const runTo = r.to ?? '—'
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50">
       <td className="px-2 py-1 font-mono">{r.run_id}</td>
@@ -53,7 +47,12 @@ function Row({ r, onView }: { r: RunSummary; onView?: (id: string) => void }) {
       <td className="px-2 py-1">{runTo}</td>
       <td className="px-2 py-1">{r.duration_ms ?? ''}</td>
       <td className="px-2 py-1">
-        <button className="px-2 py-1 rounded bg-slate-800 text-white hover:bg-slate-700" onClick={() => onView?.(r.run_id)}>View</button>
+        <button
+          className="px-2 py-1 rounded bg-slate-800 text-white hover:bg-slate-700"
+          onClick={() => onView?.(r.run_id)}
+        >
+          View
+        </button>
       </td>
     </tr>
   )

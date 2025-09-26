@@ -2,8 +2,6 @@ import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react'
 import { createChart as createChartLWC, ColorType, CandlestickSeries, PriceScaleMode } from 'lightweight-charts'
 import type { CandlestickData } from 'lightweight-charts'
 
-
-
 export type ChartOHLCProps = {
   formatTime?: (t: any, locale?: string) => string
 }
@@ -11,12 +9,18 @@ export type ChartOHLCProps = {
 export type CandlestickChartAPI = {
   reset: (initial: CandlestickData[]) => void
   update: (dp: CandlestickData) => void
+  scrollToLatest: () => void
+  setVisibleRange: (from: any, to: any) => void
+  setBarSpacing: (px: number) => void
 }
 
 export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(function ChartOHLC({ formatTime }, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<any>(null)
   const seriesRef = useRef<any>(null)
+
+  const FIXED_BAR_SPACING = 14 // px, keep between 12-16
+
   useEffect(() => {
     if (!containerRef.current) return
 
@@ -42,7 +46,7 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
         const base = {
           height: 300,
           layout: { textColor: '#334155', background: { type: ColorType.Solid, color: '#fff' } },
-          timeScale: { timeVisible: false, secondsVisible: false, barSpacing: 12 },
+          timeScale: { timeVisible: false, secondsVisible: false, barSpacing: FIXED_BAR_SPACING },
         }
         const chart = createChartLWC(containerRef.current, base as any)
         let series: any
@@ -56,17 +60,16 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
         chartRef.current = chart
         seriesRef.current = series
         try {
-          // Use default time formatting for dates; no custom time/tick formatters
-          chart.applyOptions({ rightPriceScale: { mode: PriceScaleMode.Normal } } as any)
+          chart.applyOptions({ rightPriceScale: { mode: PriceScaleMode.Normal }, timeScale: { barSpacing: FIXED_BAR_SPACING } } as any)
         } catch {}
 
         const w = containerRef.current.clientWidth
-        try { (chart as any).applyOptions?.({ width: w }) } catch {}
+        try { (chart as any).applyOptions?.({ width: w, timeScale: { barSpacing: FIXED_BAR_SPACING } }) } catch {}
         try { (chart as any).resize?.(w, 300) } catch {}
 
         const ro = new ResizeObserver(() => {
           const cw = containerRef.current?.clientWidth || w
-          try { (chart as any).applyOptions?.({ width: cw }) } catch {}
+          try { (chart as any).applyOptions?.({ width: cw, timeScale: { barSpacing: FIXED_BAR_SPACING } }) } catch {}
           try { (chart as any).resize?.(cw, 300) } catch {}
         })
         ro.observe(containerRef.current)
@@ -81,12 +84,22 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
   useImperativeHandle(ref, () => ({
     reset: (initial: CandlestickData[]) => {
       try {
+        // Only seed data; do NOT call fitContent here to avoid auto-zoom changing bar width
         seriesRef.current?.setData(initial)
-        chartRef.current?.timeScale().fitContent()
+        try { console.debug('[ChartOHLC] reset (no fitContent)', { points: initial.length }) } catch {}
       } catch {}
     },
     update: (dp: CandlestickData) => {
       try { seriesRef.current?.update(dp) } catch {}
+    },
+    scrollToLatest: () => {
+      try { chartRef.current?.timeScale().scrollToRealTime() } catch {}
+    },
+    setVisibleRange: (from: any, to: any) => {
+      try { chartRef.current?.timeScale().setVisibleRange({ from, to }) } catch {}
+    },
+    setBarSpacing: (px: number) => {
+      try { chartRef.current?.applyOptions({ timeScale: { barSpacing: px } }) } catch {}
     },
   }), [])
 
@@ -99,4 +112,3 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
 })
 
 export default ChartOHLC
-

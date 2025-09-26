@@ -8,6 +8,9 @@ import ChartOHLC, { type CandlestickChartAPI } from '../components/ChartOHLC'
 import type { CandlestickData } from 'lightweight-charts'
 
 
+// Dev logging helper (only logs in Vite dev)
+const devLog = (...args: any[]) => { try { if ((import.meta as any).env?.DEV) console.debug('[RunPlayer]', ...args) } catch {} }
+
 export type RunPlayerContainerProps = { run_id: string; dataset_id?: string; run_from?: string; run_to?: string }
 
 export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: RunPlayerContainerProps) {
@@ -18,7 +21,7 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
   const year = dataset_id?.split('-')[1]
   const from = year ? `${year}-01-01` : undefined
   const to = year ? `${year}-12-31` : undefined
-  const { data: hourResp, isError: isHourErr } = useQuery<HourResponse, Error>({
+  const { data: hourResp, isError: isHourErr, isLoading: isHourLoading } = useQuery<HourResponse, Error>({
     queryKey: ['hour', symbol, year],
     queryFn: () => fetchHour(symbol!, from!, to!, true),
     enabled: !!symbol && !!year,
@@ -51,6 +54,8 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
   // Imperative chart refs
   const ohlcRef = useRef<CandlestickChartAPI>(null)
 
+  const seededRef = useRef<boolean>(false)
+
   // Candlestick playback cursors and ticker (daily/api-sim via hourly snapshots)
   const hourTickerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const dayKeysRef = useRef<string[] | null>(null)
@@ -59,6 +64,8 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
 
 
   // Group hourly bars by day and precompute cumulative daily snapshots per hour
+  const [snapshotsVersion, setSnapshotsVersion] = useState(0)
+
   const dailySnapshotsRef = useRef<Map<string, Array<{ o: number, h: number, l: number, c: number }>> | null>(null)
 
 
@@ -71,6 +78,7 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
     dayKeysRef.current = null
     dayIdxRef.current = 0
     hourIdxRef.current = 0
+    seededRef.current = false
     if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null }
   }, [run_id, hourResp, runFrom, runTo])
 
@@ -104,6 +112,7 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
     if (runFrom && runTo) {
       keys = keys.filter((d) => d >= runFrom && d <= runTo)
     }
+
     const filtered = new Map<string, Array<{ o: number, h: number, l: number, c: number }>>()
     for (const k of keys) {
       const v = byDay.get(k)
@@ -112,22 +121,27 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
     // assign refs
     dailySnapshotsRef.current = filtered
     dayKeysRef.current = keys
+
+    setSnapshotsVersion((v) => v + 1)
   }, [hourResp, runFrom, runTo])
 
   // Hourly ticker driving realtime-style daily playback (mutate same daily bar per hour)
   // Runs a 100ms timer and advances logical ticks based on elapsed time; fixed 1× (1000 ms per tick).
   useEffect(() => {
-    // Always recreate ticker when play state or window changes
+    // Always recreate ticker when play state, window, or snapshots change
     if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null }
     if (!state.playing) return
     if (!runFrom || !runTo) return
     if (!dailySnapshotsRef.current || !dayKeysRef.current || dayKeysRef.current.length === 0) return
 
     const period = 100 // ms per logical tick at fixed 10×
+    devLog('ticker.start', { period, days: dayKeysRef.current?.length })
+
     hourTickerRef.current = setInterval(() => {
       const keys = dayKeysRef.current!
       if (dayIdxRef.current >= keys.length) {
         clearInterval(hourTickerRef.current!); hourTickerRef.current = null; return
+
       }
       const day = keys[dayIdxRef.current]
       const snaps = dailySnapshotsRef.current!.get(day) || []
@@ -138,14 +152,17 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
       if (!s) { dayIdxRef.current++; hourIdxRef.current = 0; return }
 
       const dp: CandlestickData = { time: { year: y, month: m, day: d } as any, open: s.o, high: s.h, low: s.l, close: s.c }
-      ohlcRef.current?.update(dp)
+      const firstOfDay = (hourIdxRef.current === 0)
+      if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
+      if (firstOfDay || !seededRef.current) { ohlcRef.current?.scrollToLatest() }
+      seededRef.current = true
 
       hourIdxRef.current = i + 1
       if (hourIdxRef.current >= snaps.length) { dayIdxRef.current++; hourIdxRef.current = 0 }
     }, period) // fixed step: one snapshot per tick for determinism
 
     return () => { if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null } }
-  }, [state.playing, runFrom, runTo])
+  }, [state.playing, runFrom, runTo, snapshotsVersion])
 
 
   const formatTime = (t: any, locale?: string) => {
@@ -172,6 +189,8 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
       </div>
       <div className="grid grid-cols-1 gap-4">
         <ChartOHLC ref={ohlcRef} formatTime={formatTime} />
+        {!runFrom || !runTo ? <div className="text-sm text-slate-500">Waiting for frames…</div> : null}
+        {isHourLoading ? <div className="text-sm text-slate-500">Loading hourly data…</div> : null}
         {isHourErr ? <div className="text-sm text-amber-600">No hourly data for {symbol} in this range.</div> : null}
       </div>
     </div>
