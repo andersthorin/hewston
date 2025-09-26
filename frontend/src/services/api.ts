@@ -39,6 +39,9 @@ export const RunDetailSchema = z.object({
     run_manifest_path: z.string().optional().nullable(),
   }).optional().nullable(),
   manifest: z.object({ path: z.string().optional().nullable() }).optional().nullable(),
+  // Enriched by backend: window from run-manifest.json
+  run_from: z.string().optional().nullable(),
+  run_to: z.string().optional().nullable(),
 })
 export type RunDetail = z.infer<typeof RunDetailSchema>
 

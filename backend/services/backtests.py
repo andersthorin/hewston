@@ -61,7 +61,26 @@ def get_run_service(run_id: str) -> Optional[dict]:
         run = catalog.get_run(run_id)
     except Exception:
         return None
-    return run if run else None
+    if not run:
+        return None
+    # Enrich with run_from/run_to from run-manifest.json when available
+    try:
+        mp = (run.get("artifacts") or {}).get("run_manifest_path") or (run.get("manifest") or {}).get("path")
+        if mp:
+            import os, json as _json
+            if os.path.isfile(mp):
+                with open(mp, "r") as f:
+                    m = _json.load(f)
+                rf = m.get("from") or m.get("from_date")
+                rt = m.get("to") or m.get("to_date")
+                if rf:
+                    run["run_from"] = rf
+                if rt:
+                    run["run_to"] = rt
+    except Exception:
+        # Best-effort; ignore enrichment errors
+        pass
+    return run
 
 
 

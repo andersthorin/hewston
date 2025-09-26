@@ -21,7 +21,7 @@ export default function RunDetailView() {
         <h2 className="m-0">Run {data.run_id}</h2>
         <div className="text-slate-500">Strategy {data.strategy_id} — Status {data.status}</div>
       </div>
-      <RunPlayerContainer run_id={run_id} dataset_id={data.dataset_id || undefined} />
+      <RunPlayerContainer run_id={run_id} dataset_id={data.dataset_id || undefined} run_from={data.run_from ?? undefined} run_to={data.run_to ?? undefined} />
     </div>
   )
 }

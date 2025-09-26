@@ -8,9 +8,9 @@ import ChartOHLC, { type CandlestickChartAPI } from '../components/ChartOHLC'
 import type { CandlestickData } from 'lightweight-charts'
 
 
-export type RunPlayerContainerProps = { run_id: string; dataset_id?: string }
+export type RunPlayerContainerProps = { run_id: string; dataset_id?: string; run_from?: string; run_to?: string }
 
-export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerProps) {
+export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: RunPlayerContainerProps) {
   // Derive symbol from dataset_id if available (format: SYMBOL-YEAR-1m)
   const symbol = (dataset_id?.split('-')[0] || '').toUpperCase() || undefined
 
@@ -27,12 +27,15 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
 
   const { state, onPlay, onPause, subscribe } = useRunPlayback(run_id)
 
-  // Track the actual run window from the streaming frames (first/last)
-  const [runFrom, setRunFrom] = useState<string | null>(null)
-  const [runTo, setRunTo] = useState<string | null>(null)
+  // Track the actual run window; prefer props (from manifest) and fall back to streaming inference
+  const [runFrom, setRunFrom] = useState<string | null>(run_from ?? null)
+  const [runTo, setRunTo] = useState<string | null>(run_to ?? null)
+  useEffect(() => { setRunFrom(run_from ?? null); }, [run_from])
+  useEffect(() => { setRunTo(run_to ?? null); }, [run_to])
 
-  // Subscribe to frames to infer run window
+  // Subscribe to frames to infer run window only if props not provided
   useEffect(() => {
+    if (run_from && run_to) return
     const unsub = subscribe((f: any) => {
       try {
         const ts: string | undefined = (f && (f.ts || (f.equity && f.equity.ts))) as any
@@ -43,7 +46,7 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
       } catch {}
     })
     return unsub
-  }, [subscribe])
+  }, [subscribe, run_from, run_to])
 
   // Imperative chart refs
   const ohlcRef = useRef<CandlestickChartAPI>(null)
@@ -73,7 +76,9 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
 
   // Prepare daily snapshots (cumulative per hour) grouped by day
   useEffect(() => {
+    // Defer seeding snapshots until we know the run window to avoid pre-window blips
     if (!hourResp?.bars) { dailySnapshotsRef.current = null; dayKeysRef.current = null; return }
+    if (!runFrom || !runTo) { dailySnapshotsRef.current = null; dayKeysRef.current = null; return }
 
     const byDay = new Map<string, Array<{ o: number, h: number, l: number, c: number }>>()
     // bars are sorted by time; build cumulative OHLC per calendar day
@@ -115,38 +120,29 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
     // Always recreate ticker when play state or window changes
     if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null }
     if (!state.playing) return
+    if (!runFrom || !runTo) return
     if (!dailySnapshotsRef.current || !dayKeysRef.current || dayKeysRef.current.length === 0) return
 
     const period = 100 // ms per logical tick at fixed 10×
-    let last = Date.now()
-    let acc = 0
-
     hourTickerRef.current = setInterval(() => {
-      const now = Date.now()
-      acc += now - last
-      last = now
-
-      while (acc >= period) {
-        acc -= period
-        const keys = dayKeysRef.current!
-        if (dayIdxRef.current >= keys.length) {
-          clearInterval(hourTickerRef.current!); hourTickerRef.current = null; return
-        }
-        const day = keys[dayIdxRef.current]
-        const snaps = dailySnapshotsRef.current!.get(day) || []
-        if (snaps.length === 0) { dayIdxRef.current++; hourIdxRef.current = 0; continue }
-        const y = parseInt(day.slice(0,4)), m = parseInt(day.slice(5,7)), d = parseInt(day.slice(8,10))
-        const i = hourIdxRef.current
-        const s = snaps[i]
-        if (!s) { dayIdxRef.current++; hourIdxRef.current = 0; continue }
-
-        const dp: CandlestickData = { time: { year: y, month: m, day: d } as any, open: s.o, high: s.h, low: s.l, close: s.c }
-        ohlcRef.current?.update(dp)
-
-        hourIdxRef.current = i + 1
-        if (hourIdxRef.current >= snaps.length) { dayIdxRef.current++; hourIdxRef.current = 0 }
+      const keys = dayKeysRef.current!
+      if (dayIdxRef.current >= keys.length) {
+        clearInterval(hourTickerRef.current!); hourTickerRef.current = null; return
       }
-    }, 100) // 100ms base cadence; logical ticks based on 'period'
+      const day = keys[dayIdxRef.current]
+      const snaps = dailySnapshotsRef.current!.get(day) || []
+      if (snaps.length === 0) { dayIdxRef.current++; hourIdxRef.current = 0; return }
+      const y = parseInt(day.slice(0,4)), m = parseInt(day.slice(5,7)), d = parseInt(day.slice(8,10))
+      const i = hourIdxRef.current
+      const s = snaps[i]
+      if (!s) { dayIdxRef.current++; hourIdxRef.current = 0; return }
+
+      const dp: CandlestickData = { time: { year: y, month: m, day: d } as any, open: s.o, high: s.h, low: s.l, close: s.c }
+      ohlcRef.current?.update(dp)
+
+      hourIdxRef.current = i + 1
+      if (hourIdxRef.current >= snaps.length) { dayIdxRef.current++; hourIdxRef.current = 0 }
+    }, period) // fixed step: one snapshot per tick for determinism
 
     return () => { if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null } }
   }, [state.playing, runFrom, runTo])
