@@ -18,8 +18,8 @@ export function RunsTable({ items, onView }: RunsTableProps) {
           <th className="px-2 py-1 text-left text-slate-600 font-semibold">strategy_id</th>
           <th className="px-2 py-1 text-left text-slate-600 font-semibold">status</th>
           <th className="px-2 py-1 text-left text-slate-600 font-semibold">symbol</th>
-          <th className="px-2 py-1 text-left text-slate-600 font-semibold">from</th>
-          <th className="px-2 py-1 text-left text-slate-600 font-semibold">to</th>
+          <th className="px-2 py-1 text-left text-slate-600 font-semibold">dataset_from</th>
+          <th className="px-2 py-1 text-left text-slate-600 font-semibold">dataset_to</th>
           <th className="px-2 py-1 text-left text-slate-600 font-semibold">duration_ms</th>
           <th className="px-2 py-1"></th>
         </tr>

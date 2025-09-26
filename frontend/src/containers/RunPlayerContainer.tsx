@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { fetchHour, type HourResponse } from '../services/bars'
 
@@ -25,7 +25,25 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
     staleTime: 5 * 60 * 1000,
   })
 
-  const { state, onPlay, onPause } = useRunPlayback(run_id)
+  const { state, onPlay, onPause, subscribe } = useRunPlayback(run_id)
+
+  // Track the actual run window from the streaming frames (first/last)
+  const [runFrom, setRunFrom] = useState<string | null>(null)
+  const [runTo, setRunTo] = useState<string | null>(null)
+
+  // Subscribe to frames to infer run window
+  useEffect(() => {
+    const unsub = subscribe((f: any) => {
+      try {
+        const ts: string | undefined = (f && (f.ts || (f.equity && f.equity.ts))) as any
+        if (!ts) return
+        const day = ts.slice(0, 10)
+        setRunFrom(prev => (prev && prev <= day ? prev : day))
+        setRunTo(prev => (prev && prev >= day ? prev : day))
+      } catch {}
+    })
+    return unsub
+  }, [subscribe])
 
   // Imperative chart refs
   const ohlcRef = useRef<CandlestickChartAPI>(null)
@@ -45,13 +63,13 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
     // On run change, clear the candlestick series
     ohlcRef.current?.reset([])
   }, [run_id])
-  // Run change or new hourly data: reset playback indices and clear ticker
+  // Run change, new hourly data, or new inferred window: reset playback indices and clear ticker
   useEffect(() => {
     dayKeysRef.current = null
     dayIdxRef.current = 0
     hourIdxRef.current = 0
     if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null }
-  }, [run_id, hourResp])
+  }, [run_id, hourResp, runFrom, runTo])
 
   // Prepare daily snapshots (cumulative per hour) grouped by day
   useEffect(() => {
@@ -76,15 +94,25 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
       arr.push({ o: o!, h, l, c: c! })
       byDay.set(day, arr)
     }
+    // Restrict to the inferred run window if known
+    let keys = Array.from(byDay.keys()).sort()
+    if (runFrom && runTo) {
+      keys = keys.filter((d) => d >= runFrom && d <= runTo)
+    }
+    const filtered = new Map<string, Array<{ o: number, h: number, l: number, c: number }>>()
+    for (const k of keys) {
+      const v = byDay.get(k)
+      if (v) filtered.set(k, v)
+    }
     // assign refs
-    dailySnapshotsRef.current = byDay
-    dayKeysRef.current = Array.from(byDay.keys()).sort()
-  }, [hourResp])
+    dailySnapshotsRef.current = filtered
+    dayKeysRef.current = keys
+  }, [hourResp, runFrom, runTo])
 
   // Hourly ticker driving realtime-style daily playback (mutate same daily bar per hour)
   // Runs a 100ms timer and advances logical ticks based on elapsed time; fixed 1× (1000 ms per tick).
   useEffect(() => {
-    // Always recreate ticker when play state changes
+    // Always recreate ticker when play state or window changes
     if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null }
     if (!state.playing) return
     if (!dailySnapshotsRef.current || !dayKeysRef.current || dayKeysRef.current.length === 0) return
@@ -121,7 +149,7 @@ export function RunPlayerContainer({ run_id, dataset_id }: RunPlayerContainerPro
     }, 100) // 100ms base cadence; logical ticks based on 'period'
 
     return () => { if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null } }
-  }, [state.playing])
+  }, [state.playing, runFrom, runTo])
 
 
   const formatTime = (t: any, locale?: string) => {
