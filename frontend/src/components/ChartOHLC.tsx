@@ -19,7 +19,7 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
   const chartRef = useRef<any>(null)
   const seriesRef = useRef<any>(null)
 
-  const FIXED_BAR_SPACING = 14 // px, keep between 12-16
+  const FIXED_BAR_SPACING = 10
 
   useEffect(() => {
     if (!containerRef.current) return
