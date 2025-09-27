@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import { StreamFrameSchema, type StreamFrameT } from '../schemas/stream'
+import { DEFAULT_FPS, STREAM_PARSER_TARGET_MS, MIN_FRAME_INTERVAL_MS } from '../constants'
 
 // Messages from main thread
 // { type: 'init', fps?: number }
@@ -17,12 +18,12 @@ type InMsg =
 let queue: StreamFrameT[] = []
 let dropped = 0
 let intervalId: number | null = null
-let targetMs = 1000 / 30
+let targetMs = STREAM_PARSER_TARGET_MS
 
 function startTicker(fps: number | undefined) {
   if (intervalId) clearInterval(intervalId)
-  targetMs = 1000 / (fps && fps > 0 ? fps : 30)
-  intervalId = setInterval(() => tick(), Math.max(16, targetMs)) as unknown as number
+  targetMs = 1000 / (fps && fps > 0 ? fps : DEFAULT_FPS)
+  intervalId = setInterval(() => tick(), Math.max(MIN_FRAME_INTERVAL_MS, targetMs)) as unknown as number
 }
 
 function tick() {

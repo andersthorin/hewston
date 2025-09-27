@@ -60,8 +60,8 @@ def list_runs_service(
             if mp and os.path.isfile(mp):
                 with open(mp, "r") as f:
                     m = _json.load(f)
-                rf = m.get("from") or m.get("from_date")
-                rt = m.get("to") or m.get("to_date")
+                rf = m.get("run_from") or m.get("from") or m.get("from_date")
+                rt = m.get("run_to") or m.get("to") or m.get("to_date")
                 if rf:
                     d["run_from"] = rf
                 if rt:
@@ -89,8 +89,8 @@ def get_run_service(run_id: str) -> Optional[dict]:
             if os.path.isfile(mp):
                 with open(mp, "r") as f:
                     m = _json.load(f)
-                rf = m.get("from") or m.get("from_date")
-                rt = m.get("to") or m.get("to_date")
+                rf = m.get("run_from") or m.get("from") or m.get("from_date")
+                rt = m.get("run_to") or m.get("to") or m.get("to_date")
                 if rf:
                     run["run_from"] = rf
                 if rt:

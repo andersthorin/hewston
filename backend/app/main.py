@@ -8,16 +8,17 @@ from backend.api.routes.health import router as health_router
 from backend.api.routes.backtests import router as backtests_router
 from backend.api.routes.bars import router as bars_router
 from backend.app.logging_setup import configure_logging
+from backend.constants import API_TITLE, API_VERSION, CORS_ORIGINS
 
 
 def create_app() -> FastAPI:
     configure_logging()
-    app = FastAPI(title="Hewston API", version="0.1.0")
+    app = FastAPI(title=API_TITLE, version=API_VERSION)
 
     # Local-first defaults; adjust CORS later if needed
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://127.0.0.1:5173", "http://localhost:5173"],
+        allow_origins=CORS_ORIGINS,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

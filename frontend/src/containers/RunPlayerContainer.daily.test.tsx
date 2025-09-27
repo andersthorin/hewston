@@ -27,7 +27,7 @@ vi.mock('../services/ws', () => ({
 }))
 
 import { createChart as createChartLWC } from 'lightweight-charts'
-// @ts-ignore test helper
+// @ts-expect-error test helper
 import { __emit } from '../services/ws'
 import RunPlayerContainer from './RunPlayerContainer'
 

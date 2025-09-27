@@ -2,18 +2,18 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
-from datetime import datetime, timezone
+import sys
+import time
+from glob import glob
 from pathlib import Path
-from typing import Dict, List, Tuple
-
-import polars as pl
+from typing import Callable, Dict, List, Optional, Tuple
 
 import pandas as pd
-from typing import Optional, Callable
-from glob import glob
+import polars as pl
 from databento import DBNStore
-import sys, time
+
+from backend.utils.datetime import utc_now
+from backend.utils.paths import get_base_data_dir, get_derived_bars_dir, get_raw_databento_dir, ensure_dir
 
 
 def _parse_date_from_filename(name: str) -> Optional[str]:
@@ -132,8 +132,7 @@ def _derive_tbbo_minutes(files: list[str], instrument_id: int, progress: Optiona
     return pd.concat(parts, ignore_index=True)
 
 
-def _base_data_dir() -> Path:
-    return Path(os.environ.get("HEWSTON_DATA_DIR", "data"))
+# Removed _base_data_dir - now using get_base_data_dir from utils.paths
 
 
 def _sha256(path: Path) -> str:
@@ -181,10 +180,10 @@ def _make_tbbo_stub(symbol: str, year: int) -> pl.DataFrame:
 
 
 def derive_bars(symbol: str, year: int, *, force: bool = False, from_date: Optional[str] = None, to_date: Optional[str] = None, tf: str = "1Min", out_format: str = "parquet", fill_gaps: bool = False, rth_only: bool = False) -> Dict[str, object]:
-    base = _base_data_dir()
+    base = get_base_data_dir()
     # New layout: data/raw/databento/{trades|tbbo}/*.dbn.zst
-    trades_dir = base / "raw" / "databento" / "trades"
-    tbbo_dir = base / "raw" / "databento" / "tbbo"
+    trades_dir = get_raw_databento_dir() / "trades"
+    tbbo_dir = get_raw_databento_dir() / "tbbo"
 
     # If DBN directories are missing, fall back to stub
     if not trades_dir.exists() or not tbbo_dir.exists():

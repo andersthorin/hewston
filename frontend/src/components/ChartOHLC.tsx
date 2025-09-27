@@ -14,7 +14,7 @@ export type CandlestickChartAPI = {
   setBarSpacing: (px: number) => void
 }
 
-export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(function ChartOHLC({ formatTime }, ref) {
+export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(function ChartOHLC(_props, ref) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<any>(null)
   const seriesRef = useRef<any>(null)

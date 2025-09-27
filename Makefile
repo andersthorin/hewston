@@ -14,6 +14,7 @@ HEWSTON_CATALOG_PATH ?= data/catalog.sqlite
 HEWSTON_DATA_DIR ?= data
 
 # Defaults (override on CLI: make data SYMBOL=AAPL YEAR=2023)
+# These match the baseline values in docs/prd/features/00-baselines.md
 SYMBOL ?= AAPL
 YEAR ?= 2023
 FROM ?=

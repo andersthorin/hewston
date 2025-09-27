@@ -27,7 +27,7 @@ export function wsTransport(run_id: string, base = ''): PlayerTransport {
     try {
       const msg = JSON.parse(ev.data)
       if (msg.t === 'frame' && frameCb) frameCb(msg as StreamFrame)
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
@@ -57,15 +57,15 @@ export function sseTransport(run_id: string, speed = 60, base = ''): PlayerTrans
     try {
       const msg = JSON.parse((ev as MessageEvent).data)
       if (msg.t === 'frame' && frameCb) frameCb(msg as StreamFrame)
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
   })
   es.onerror = (e) => errCb?.(e)
 
   return {
     start() {},
     pause() {},
-    setSpeed(_s: number) {},
-    seek(_iso: string) {},
+    setSpeed() {},
+    seek() {},
     onFrame(cb) { frameCb = cb },
     onError(cb) { errCb = cb },
     dispose() { es?.close(); es = null },
