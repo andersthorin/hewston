@@ -7,6 +7,7 @@ NODE := node
 NPM := npm
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
+BFF_DIR := bff
 CATALOG_DB := data/catalog.sqlite
 # default envs for local dev (override as needed)
 DATABENTO_API_KEY ?= test-key
@@ -37,11 +38,12 @@ SEED ?= 42
 help:
 	@echo "Hewston Make targets"
 	@echo "  setup           Create Python venv (uv), prepare frontend (npm)"
-	@echo "  start           Start backend API and frontend dev server (if present)"
-	@echo "  start-backend   Start FastAPI dev server (uvicorn)"
+	@echo "  start           Start backend API, BFF service, and frontend dev server"
+	@echo "  start-backend   Start FastAPI backend server (uvicorn)"
+	@echo "  start-bff       Start BFF service (uvicorn)"
 	@echo "  start-frontend  Start Vite dev server"
-	@echo "  stop            Stop backend and frontend dev servers"
-	@echo "  restart         Restart backend and frontend (stop→start)"
+	@echo "  stop            Stop backend, BFF, and frontend dev servers"
+	@echo "  restart         Restart all services (stop→start)"
 	@echo "  derive-bars     Derive 1m bars from local DBN (SYMBOLS=... FROM=YYYY-MM-DD TO=YYYY-MM-DD FORCE=1)"
 	@echo "  derive-daily    Derive 1d bars (daily OHLCV) from local DBN (SYMBOLS=... FROM=YYYY-MM-DD TO=YYYY-MM-DD FORCE=1)"
 	@echo "  derive-daily-fast Derive 1d OHLCV from existing 1m parquet (fast path)"
@@ -68,13 +70,13 @@ setup:
 
 .PHONY: stop
 stop:
-	@echo "[stop] stopping servers on ports 8000, 5173-5174" && \
-	pids=`lsof -nP -iTCP:8000,5173-5174 -sTCP:LISTEN -t 2>/dev/null || true`; \
+	@echo "[stop] stopping servers on ports 8000, 8001, 5173-5174" && \
+	pids=`lsof -nP -iTCP:8000,8001,5173-5174 -sTCP:LISTEN -t 2>/dev/null || true`; \
 	if [ -n "$$pids" ]; then \
 	  echo "[stop] killing $$pids"; \
 	  kill $$pids 2>/dev/null || true; \
 	  sleep 0.5; \
-	  pids2=`lsof -nP -iTCP:8000,5173-5174 -sTCP:LISTEN -t 2>/dev/null || true`; \
+	  pids2=`lsof -nP -iTCP:8000,8001,5173-5174 -sTCP:LISTEN -t 2>/dev/null || true`; \
 	  if [ -n "$$pids2" ]; then echo "[stop] force killing $$pids2"; kill -9 $$pids2 2>/dev/null || true; fi; \
 	else \
 	  echo "[stop] no listeners found"; \
@@ -83,10 +85,10 @@ stop:
 .PHONY: restart
 restart:
 	@$(MAKE) stop
-	@$(MAKE) -j2 start-backend start-frontend
+	@$(MAKE) -j3 start-backend start-bff start-frontend
 
 start:
-	@$(MAKE) -j2 start-backend start-frontend
+	@$(MAKE) -j3 start-backend start-bff start-frontend
 
 .PHONY: start-backend
 start-backend:
@@ -95,6 +97,14 @@ start-backend:
 	   DATABENTO_API_KEY=$(DATABENTO_API_KEY) HEWSTON_CATALOG_PATH=$(HEWSTON_CATALOG_PATH) HEWSTON_DATA_DIR=$(HEWSTON_DATA_DIR) \
 	   $(PYTHON) uvicorn $(BACKEND_DIR).app.main:app --reload --host 127.0.0.1 --port 8000) \
 	|| (echo "[backend] missing $(BACKEND_DIR)/ — scaffold later" && true)
+
+.PHONY: start-bff
+start-bff:
+	@test -d $(BFF_DIR) && \
+	  (echo "[bff] starting uvicorn" && \
+	   HEWSTON_BACKEND_URL=http://127.0.0.1:8000 BFF_LOG_LEVEL=INFO \
+	   $(PYTHON) uvicorn $(BFF_DIR).app.main:app --reload --host 127.0.0.1 --port 8001) \
+	|| (echo "[bff] missing $(BFF_DIR)/ — scaffold later" && true)
 
 .PHONY: start-frontend
 start-frontend:
@@ -205,6 +215,8 @@ db-apply:
 lint:
 	@echo "[lint] backend (ruff)" && \
 	test -d $(BACKEND_DIR) && $(PYTHON) ruff check $(BACKEND_DIR) || true ; \
+	echo "[lint] bff (ruff)" && \
+	test -d $(BFF_DIR) && $(PYTHON) ruff check $(BFF_DIR) || true ; \
 	echo "[lint] frontend (eslint)" && \
 	test -d $(FRONTEND_DIR) && (cd $(FRONTEND_DIR) && $(NPM) run lint) || true
 
@@ -212,6 +224,8 @@ lint:
 format:
 	@echo "[format] backend (black)" && \
 	test -d $(BACKEND_DIR) && $(PYTHON) black $(BACKEND_DIR) || true ; \
+	echo "[format] bff (black)" && \
+	test -d $(BFF_DIR) && $(PYTHON) black $(BFF_DIR) || true ; \
 	echo "[format] frontend (prettier)" && \
 	test -d $(FRONTEND_DIR) && (cd $(FRONTEND_DIR) && $(NPM) run format) || true
 
@@ -219,6 +233,8 @@ format:
 test:
 	@echo "[test] backend (pytest)" && \
 	test -d $(BACKEND_DIR) && $(PYTHON) pytest -q || true ; \
+	echo "[test] bff (pytest)" && \
+	test -d $(BFF_DIR) && $(PYTHON) pytest $(BFF_DIR)/tests/ -q || true ; \
 	echo "[test] frontend (vitest)" && \
 	test -d $(FRONTEND_DIR) && (cd $(FRONTEND_DIR) && $(NPM) test -s) || true
 
