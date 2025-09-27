@@ -40,20 +40,15 @@ help:
 	@echo "  start           Start backend API and frontend dev server (if present)"
 	@echo "  start-backend   Start FastAPI dev server (uvicorn)"
 	@echo "  start-frontend  Start Vite dev server"
-		@echo "  stop            Stop backend and frontend dev servers"
-		@echo "  restart        Restart backend and frontend (stop→start)"
-		@echo "  derive-bars     Derive 1m bars from local DBN (SYMBOLS=... FROM=YYYY-MM-DD TO=YYYY-MM-DD FORCE=1)"
-
-			@echo "  derive-daily    Derive 1d bars (daily OHLCV) from local DBN (SYMBOLS=... FROM=YYYY-MM-DD TO=YYYY-MM-DD FORCE=1)"
-			@echo "  derive-daily-fast Derive 1d OHLCV from existing 1m parquet (fast path)"
-
-
-
+	@echo "  stop            Stop backend and frontend dev servers"
+	@echo "  restart         Restart backend and frontend (stop→start)"
+	@echo "  derive-bars     Derive 1m bars from local DBN (SYMBOLS=... FROM=YYYY-MM-DD TO=YYYY-MM-DD FORCE=1)"
+	@echo "  derive-daily    Derive 1d bars (daily OHLCV) from local DBN (SYMBOLS=... FROM=YYYY-MM-DD TO=YYYY-MM-DD FORCE=1)"
+	@echo "  derive-daily-fast Derive 1d OHLCV from existing 1m parquet (fast path)"
 	@echo "  data            Ingest Databento DBN and derive 1m bars (SYMBOL, YEAR)"
 	@echo "  backtest        Run baseline backtest and write artifacts"
 	@echo "  db-init         Initialize SQLite catalog (see docs/architecture.md)"
-	@echo "  db-apply       Apply SQLite schema to $(CATALOG_DB)"
-
+	@echo "  db-apply        Apply SQLite schema to $(CATALOG_DB)"
 	@echo "  lint            Run linters (ruff/eslint)"
 	@echo "  format          Run formatters (black/prettier)"
 	@echo "  test            Run tests (pytest/vitest)"

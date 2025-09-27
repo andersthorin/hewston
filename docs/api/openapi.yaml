@@ -262,39 +262,42 @@ components:
         created_at: { type: string, format: date-time }
         strategy_id: { type: string }
         status: { type: string }
-        symbol: { type: string }
-        from: { type: string, format: date }
-        to: { type: string, format: date }
+        symbol: { type: string, nullable: true }
+        run_from: { type: string, format: date, nullable: true }
+        run_to: { type: string, format: date, nullable: true }
         duration_ms: { type: integer, nullable: true }
 
     Run:
       type: object
       properties:
         run_id: { type: string }
-        dataset_id: { type: string }
+        dataset_id: { type: string, nullable: true }
         strategy_id: { type: string }
-        params: { type: object }
-        seed: { type: integer }
-        slippage_fees:
-          $ref: '#/components/schemas/BacktestCreateRequest/properties/slippage_fees'
-        speed: { type: integer }
-        code_hash: { type: string }
+        params: { type: object, nullable: true }
+        seed: { type: integer, nullable: true }
+        slippage_fees: { type: object, nullable: true }
+        speed: { type: integer, nullable: true }
+        code_hash: { type: string, nullable: true }
         created_at: { type: string, format: date-time }
         status: { type: string }
         duration_ms: { type: integer, nullable: true }
         artifacts:
           type: object
+          nullable: true
           properties:
-            metrics_path: { type: string }
-            equity_path: { type: string }
-            orders_path: { type: string }
-            fills_path: { type: string }
-            run_manifest_path: { type: string }
+            metrics_path: { type: string, nullable: true }
+            equity_path: { type: string, nullable: true }
+            orders_path: { type: string, nullable: true }
+            fills_path: { type: string, nullable: true }
+            run_manifest_path: { type: string, nullable: true }
         manifest:
           type: object
+          nullable: true
           description: Optional embedded manifest or link
           properties:
-            path: { type: string }
+            path: { type: string, nullable: true }
+        run_from: { type: string, format: date, nullable: true }
+        run_to: { type: string, format: date, nullable: true }
       required: [run_id, dataset_id, strategy_id, params, seed, slippage_fees, code_hash, created_at, status]
 
     StreamFrame:
