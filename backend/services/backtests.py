@@ -45,12 +45,30 @@ def list_runs_service(
     except Exception:
         # If catalog not initialized yet, return empty defaults
         return {"items": [], "total": 0, "limit": limit, "offset": offset}
-    # Map RunSummary models to dicts for JSON; rename from_date/to_date → from/to
+    # Map RunSummary models to dicts for JSON and enrich with run_from/run_to from manifest
     resp_items = []
+    import json as _json
     for i in items:
         d = i.model_dump()
-        d["from"] = d.pop("from_date", None)
-        d["to"] = d.pop("to_date", None)
+        # Remove dataset bounds from response to avoid confusion
+        d.pop("from_date", None)
+        d.pop("to_date", None)
+        # Read run manifest to source authoritative window
+        try:
+            run_full = catalog.get_run(i.run_id)
+            mp = (run_full.get("artifacts") or {}).get("run_manifest_path") if run_full else None
+            if mp and os.path.isfile(mp):
+                with open(mp, "r") as f:
+                    m = _json.load(f)
+                rf = m.get("from") or m.get("from_date")
+                rt = m.get("to") or m.get("to_date")
+                if rf:
+                    d["run_from"] = rf
+                if rt:
+                    d["run_to"] = rt
+        except Exception:
+            # Best-effort enrichment; if missing, leave as None
+            pass
         resp_items.append(d)
     return {"items": resp_items, "total": total, "limit": limit, "offset": offset}
 

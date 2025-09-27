@@ -34,8 +34,9 @@ export function RunsTable({ items, onView }: RunsTableProps) {
 }
 
 function Row({ r, onView }: { r: RunSummary; onView?: (id: string) => void }) {
-  const runFrom = r.from ?? '—'
-  const runTo = r.to ?? '—'
+  // Only show the authoritative window from the run manifest
+  const runFrom = r.run_from ?? '—'
+  const runTo = r.run_to ?? '—'
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50">
       <td className="px-2 py-1 font-mono">{r.run_id}</td>

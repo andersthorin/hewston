@@ -24,22 +24,22 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
   useEffect(() => {
     if (!containerRef.current) return
 
-    const fmtTimeLocal = (t: any, locale?: string) => {
-      if (formatTime) return formatTime(t, locale)
-      try {
-        let d: Date
-        if (typeof t === 'number') d = new Date(t * 1000)
-        else if (typeof t === 'string') d = new Date(t)
-        else if (t && typeof t === 'object' && 'year' in t && 'month' in t && 'day' in t) {
-          d = new Date(Date.UTC((t as any).year, (t as any).month - 1, (t as any).day))
-        } else return String(t)
-        return new Intl.DateTimeFormat(locale || undefined, {
-          month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
-        }).format(d)
-      } catch {
-        return String(t)
-      }
-    }
+    // const fmtTimeLocal = (t: any, locale?: string) => {
+    //   if (formatTime) return formatTime(t, locale)
+    //   try {
+    //     let d: Date
+    //     if (typeof t === 'number') d = new Date(t * 1000)
+    //     else if (typeof t === 'string') d = new Date(t)
+    //     else if (t && typeof t === 'object' && 'year' in t && 'month' in t && 'day' in t) {
+    //       d = new Date(Date.UTC((t as any).year, (t as any).month - 1, (t as any).day))
+    //     } else return String(t)
+    //     return new Intl.DateTimeFormat(locale || undefined, {
+    //       month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false,
+    //     }).format(d)
+    //   } catch {
+    //     return String(t)
+    //   }
+    // }
 
     if (!chartRef.current) {
       try {
