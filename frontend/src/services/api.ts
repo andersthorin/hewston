@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { apiGet, apiPost } from '../utils/api'
+import type { OrderData } from '../types/streaming'
 
 export const RunSummarySchema = z.object({
   run_id: z.string(),
@@ -72,7 +73,7 @@ export type StreamFrame = {
   t: 'frame'
   ts: string
   ohlc?: { o?: number; h?: number; l?: number; c?: number; v?: number } | null
-  orders: any[]
+  orders: OrderData[]
   equity?: { ts: string; value: number } | null
   dropped: number
 }
@@ -85,7 +86,7 @@ export async function getRunDetail(run_id: string): Promise<RunDetail> {
 // --- Create Backtest ---
 export type CreateRunRequest = {
   strategy_id: string
-  params?: Record<string, any>
+  params?: Record<string, unknown>
   dataset_id?: string
   symbol?: string
   year?: number

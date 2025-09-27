@@ -3,28 +3,42 @@
 import React from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
+import type { MockChart, MockTimeScale, MockSeries } from '../types/charts'
 
 vi.mock('lightweight-charts', () => {
-  const timeScale = { applyOptions: vi.fn(), fitContent: vi.fn() }
-  const mkChart = () => ({
+  const timeScale: MockTimeScale = {
     applyOptions: vi.fn(),
+    fitContent: vi.fn(),
+    scrollToRealTime: vi.fn(),
+    setVisibleRange: vi.fn()
+  }
+  const series: MockSeries = {
+    setData: vi.fn(),
+    update: vi.fn()
+  }
+  const mkChart = (): MockChart => ({
+    applyOptions: vi.fn(),
+    resize: vi.fn(),
     timeScale: vi.fn(() => timeScale),
-    addCandlestickSeries: vi.fn(() => ({ setData: vi.fn(), update: vi.fn() })),
-    addLineSeries: vi.fn(() => ({ setData: vi.fn(), update: vi.fn() })),
+    addCandlestickSeries: vi.fn(() => series),
+    addLineSeries: vi.fn(() => series),
+    addSeries: vi.fn(() => series),
     remove: vi.fn(),
   })
   const createChart = vi.fn().mockImplementation(() => mkChart())
-  return { createChart, ColorType: { Solid: 'solid' }, CandlestickSeries: {}, LineSeries: {} }
+  return { createChart, ColorType: { Solid: 'solid' }, CandlestickSeries: {}, LineSeries: {}, PriceScaleMode: { Logarithmic: 3 } }
 })
 
-const subs = new Set<(f: any) => void>()
+import type { StreamFrame } from '../services/api'
+
+const subs = new Set<(f: StreamFrame) => void>()
 vi.mock('../services/ws', () => ({
   useRunPlayback: () => ({
     state: { status: 'ws', playing: true, speed: 30, dropped: 0 },
-    subscribe: (cb: (f: any) => void) => { subs.add(cb); return () => subs.delete(cb) },
+    subscribe: (cb: (f: StreamFrame) => void) => { subs.add(cb); return () => subs.delete(cb) },
     onPlay: vi.fn(), onPause: vi.fn(), onSpeedChange: vi.fn(), onSeek: vi.fn(),
   }),
-  __emit: (f: any) => subs.forEach((cb) => cb(f)),
+  __emit: (f: StreamFrame) => subs.forEach((cb) => cb(f)),
 }))
 
 import { createChart as createChartLWC } from 'lightweight-charts'
@@ -32,7 +46,7 @@ import { createChart as createChartLWC } from 'lightweight-charts'
 import { __emit } from '../services/ws'
 import RunPlayerContainer from './RunPlayerContainer'
 
-const charts = () => (createChartLWC as any).mock.results.map((r: any) => r.value)
+const charts = (): MockChart[] => (createChartLWC as jest.MockedFunction<typeof createChartLWC>).mock.results.map((r: { value: MockChart }) => r.value)
 
 describe('RunPlayerContainer imperative updates', () => {
   beforeEach(() => cleanup())
