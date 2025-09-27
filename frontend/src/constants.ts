@@ -1,13 +1,21 @@
 /**
  * Frontend constants and configuration values.
- * 
+ *
  * This module centralizes hardcoded values, magic numbers, and configuration
  * to improve maintainability and consistency across the frontend.
  */
 
-// API Configuration
-export const API_BASE_URL = 'http://127.0.0.1:8000'
-export const WS_BASE_URL = 'ws://127.0.0.1:8000'
+import { featureFlagService } from './services/featureFlags'
+
+// API Configuration - Dynamic based on feature flags
+export const API_BASE_URL = featureFlagService.getEffectiveApiBaseUrl()
+export const WS_BASE_URL = featureFlagService.getEffectiveWsBaseUrl()
+
+// Static fallback URLs for direct access when needed
+export const BACKEND_API_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
+export const BACKEND_WS_URL = import.meta.env.VITE_WS_BASE_URL || 'ws://127.0.0.1:8000'
+export const BFF_API_URL = import.meta.env.VITE_BFF_BASE_URL || 'http://127.0.0.1:8001'
+export const BFF_WS_URL = import.meta.env.VITE_BFF_WS_BASE_URL || 'ws://127.0.0.1:8001'
 
 // Chart Configuration
 export const DEFAULT_CHART_HEIGHT = 400

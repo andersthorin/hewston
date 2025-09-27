@@ -1,15 +1,11 @@
 import { useParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { getRunDetail, type RunDetail } from '../services/api'
+import { useCompleteRunData } from '../hooks/useRunData'
 import RunPlayerContainer from '../containers/RunPlayerContainer'
 
 export default function RunDetailView() {
   const { run_id = '' } = useParams()
-  const { data, isLoading, isError, error } = useQuery<RunDetail, Error>({
-    queryKey: ['run', run_id],
-    queryFn: () => getRunDetail(run_id),
-    enabled: !!run_id,
-  })
+  // Use BFF-aware hook for complete run data (includes aggregated metrics, equity, etc.)
+  const { data, isLoading, isError, error } = useCompleteRunData(run_id, !!run_id)
 
   return (
     <div className="p-4 grid gap-3">

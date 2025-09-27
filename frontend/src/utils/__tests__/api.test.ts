@@ -3,20 +3,41 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { apiRequest, apiGet, apiPost, apiPut, apiDelete } from '../api'
+import {
+  apiRequest,
+  apiGet,
+  apiPost,
+  apiPut,
+  apiDelete,
+  apiGetWithFlags,
+  apiPostWithFlags
+} from '../api'
 
 // Mock fetch globally
 const mockFetch = vi.fn()
 global.fetch = mockFetch
 
+// Mock API router first (hoisted)
+vi.mock('../apiRouter', () => ({
+  apiRouter: {
+    routeAPICall: vi.fn(),
+  }
+}))
+
 // Mock the constants module
-vi.mock('../constants', () => ({
+vi.mock('../../constants', () => ({
   API_BASE_URL: 'http://127.0.0.1:8000'
 }))
 
 describe('API Utilities', () => {
-  beforeEach(() => {
+  let mockApiRouter: any
+
+  beforeEach(async () => {
     mockFetch.mockClear()
+    // Get the mocked router
+    const module = await import('../apiRouter')
+    mockApiRouter = module.apiRouter
+    vi.mocked(mockApiRouter.routeAPICall).mockClear()
   })
 
   afterEach(() => {
@@ -308,6 +329,107 @@ describe('API Utilities', () => {
 
       await expect(apiGet('/test'))
         .rejects.toThrow('HTTP 500: Internal Server Error')
+    })
+  })
+
+  describe('Feature Flag-Enabled API Functions', () => {
+    it('should use API router for feature flag GET requests', async () => {
+      vi.mocked(mockApiRouter.routeAPICall).mockResolvedValue({ data: 'bff-test' })
+
+      const result = await apiGetWithFlags('/bars/daily', 'chartData')
+
+      expect(vi.mocked(mockApiRouter.routeAPICall)).toHaveBeenCalledWith(
+        'chartData',
+        '/bars/daily',
+        expect.objectContaining({
+          method: 'GET',
+          allowFallback: true
+        })
+      )
+      expect(result).toEqual({ data: 'bff-test' })
+    })
+
+    it('should use API router for feature flag POST requests', async () => {
+      vi.mocked(mockApiRouter.routeAPICall).mockResolvedValue({ id: 456 })
+
+      const result = await apiPostWithFlags(
+        '/backtests',
+        'runData',
+        { strategy: 'test' }
+      )
+
+      expect(vi.mocked(mockApiRouter.routeAPICall)).toHaveBeenCalledWith(
+        'runData',
+        '/backtests',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ strategy: 'test' }),
+          allowFallback: true
+        })
+      )
+      expect(result).toEqual({ id: 456 })
+    })
+
+    it('should handle custom headers in feature flag requests', async () => {
+      vi.mocked(mockApiRouter.routeAPICall).mockResolvedValue({ data: 'authorized' })
+
+      await apiGetWithFlags('/bars/daily', 'chartData', {
+        'Authorization': 'Bearer token'
+      })
+
+      expect(vi.mocked(mockApiRouter.routeAPICall)).toHaveBeenCalledWith(
+        'chartData',
+        '/bars/daily',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            'Authorization': 'Bearer token'
+          })
+        })
+      )
+    })
+
+    it('should propagate errors from API router', async () => {
+      vi.mocked(mockApiRouter.routeAPICall).mockRejectedValue(
+        new Error('BFF unavailable')
+      )
+
+      await expect(
+        apiGetWithFlags('/bars/daily', 'chartData')
+      ).rejects.toThrow('BFF unavailable')
+    })
+  })
+
+  describe('Backward Compatibility with Feature Flags', () => {
+    it('should use direct API call when useFeatureFlags is false', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ data: 'direct' })
+      })
+
+      const result = await apiRequest('/test-endpoint', {
+        endpointGroup: 'chartData',
+        useFeatureFlags: false
+      })
+
+      expect(mockFetch).toHaveBeenCalled()
+      expect(vi.mocked(mockApiRouter.routeAPICall)).not.toHaveBeenCalled()
+      expect(result).toEqual({ data: 'direct' })
+    })
+
+    it('should use direct API call when endpointGroup not specified', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: () => Promise.resolve({ data: 'direct' })
+      })
+
+      const result = await apiRequest('/test-endpoint', {
+        useFeatureFlags: true
+        // endpointGroup not specified
+      })
+
+      expect(mockFetch).toHaveBeenCalled()
+      expect(vi.mocked(mockApiRouter.routeAPICall)).not.toHaveBeenCalled()
+      expect(result).toEqual({ data: 'direct' })
     })
   })
 })
