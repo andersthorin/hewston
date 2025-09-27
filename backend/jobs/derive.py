@@ -4,6 +4,7 @@ import hashlib
 import json
 import sys
 import time
+from datetime import datetime, timezone
 from glob import glob
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Tuple
@@ -86,6 +87,104 @@ def _derive_trades_minutes(files: list[str], instrument_id: int, progress: Optio
     if not parts:
         return pd.DataFrame(columns=["ts","o","h","l","c","v"])  # empty
     return pd.concat(parts, ignore_index=True)
+
+
+def _validate_derive_params(symbol: str, year: int, tf: str, out_format: str) -> None:
+    """Validate input parameters for derive_bars function."""
+    if not symbol or not isinstance(symbol, str):
+        raise ValueError("Symbol must be a non-empty string")
+
+    if not isinstance(year, int) or year < 1900 or year > 2100:
+        raise ValueError("Year must be a valid integer between 1900 and 2100")
+
+    tf_map = {"1Min": "1min", "5Min": "5min", "15Min": "15min", "1Hour": "1H", "1Day": "1D"}
+    if tf not in tf_map:
+        raise ValueError(f"Unsupported timeframe: {tf}. Supported: {list(tf_map.keys())}")
+
+    valid_formats = ["parquet", "csv", "jsonl"]
+    if out_format not in valid_formats:
+        raise ValueError(f"Unsupported output format: {out_format}. Supported: {valid_formats}")
+
+
+def _discover_data_files(symbol: str, year: int, from_date: Optional[str] = None, to_date: Optional[str] = None) -> Tuple[List[str], List[str]]:
+    """Discover trades and TBBO data files for the given symbol and time range."""
+    base = get_base_data_dir()
+    trades_dir = get_raw_databento_dir() / "trades"
+    tbbo_dir = get_raw_databento_dir() / "tbbo"
+
+    # Check if new layout exists
+    if not trades_dir.exists() or not tbbo_dir.exists():
+        # Fall back to old layout
+        raw_dir_old = base / "raw" / "databento" / symbol / str(year)
+        trades_path_old = raw_dir_old / "TRADES.dbn.zst"
+        tbbo_path_old = raw_dir_old / "TBBO.dbn.zst"
+
+        if trades_path_old.exists() and tbbo_path_old.exists():
+            return [str(trades_path_old)], [str(tbbo_path_old)]
+        else:
+            return [], []  # Will trigger stub generation
+
+    # New layout: discover files by pattern
+    trades_files = sorted(glob(str(trades_dir / "*.trades.dbn.zst")))
+    tbbo_files = sorted(glob(str(tbbo_dir / "*.tbbo.dbn.zst")))
+
+    # Filter by date window
+    def _in_window(path: str) -> bool:
+        ymd = _parse_date_from_filename(path)
+        if not ymd:
+            return False
+        ok = True
+        if year:
+            ok = ok and (ymd[:4] == str(year))
+        if from_date:
+            ok = ok and (ymd >= str(from_date).replace('-', ''))
+        if to_date:
+            ok = ok and (ymd <= str(to_date).replace('-', ''))
+        return ok
+
+    trades_files = [f for f in trades_files if _in_window(f)]
+    tbbo_files = [f for f in tbbo_files if _in_window(f)]
+
+    return trades_files, tbbo_files
+
+
+def _create_stub_data(symbol: str, year: int, force: bool) -> Dict[str, object]:
+    """Create stub data when no source files are available."""
+    base = get_base_data_dir()
+    derived_dir = base / "derived" / "bars" / symbol / str(year)
+    bars_path = derived_dir / "bars_1m.parquet"
+    tbbo_out_path = derived_dir / "tbbo_1m.parquet"
+
+    if force or not bars_path.exists():
+        _write_parquet(_make_bars_stub(symbol, year), bars_path)
+    if force or not tbbo_out_path.exists():
+        _write_parquet(_make_tbbo_stub(symbol, year), tbbo_out_path)
+
+    input_hashes = {}
+    output_hashes = {
+        "bars_1m.parquet": _sha256(bars_path),
+        "tbbo_1m.parquet": _sha256(tbbo_out_path),
+    }
+
+    manifest = {
+        "dataset_id": f"{symbol}-{year}-1m",
+        "symbol": symbol,
+        "interval": "1m",
+        "from_date": f"{year}-01-01",
+        "to_date": f"{year}-12-31",
+        "rebar_params": {"interval": "1m"},
+        "input_hashes": input_hashes,
+        "output_hashes": output_hashes,
+        "calendar_version": "NAZDAQ-v1",
+        "tz": "America/New_York",
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    manifest_path = derived_dir / "bars_manifest.json"
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+
+    return manifest
 
 
 def _derive_tbbo_minutes(files: list[str], instrument_id: int, progress: Optional[Callable[[int], None]] = None) -> pd.DataFrame:
@@ -179,118 +278,42 @@ def _make_tbbo_stub(symbol: str, year: int) -> pl.DataFrame:
     )
 
 
-def derive_bars(symbol: str, year: int, *, force: bool = False, from_date: Optional[str] = None, to_date: Optional[str] = None, tf: str = "1Min", out_format: str = "parquet", fill_gaps: bool = False, rth_only: bool = False) -> Dict[str, object]:
-    base = get_base_data_dir()
-    # New layout: data/raw/databento/{trades|tbbo}/*.dbn.zst
-    trades_dir = get_raw_databento_dir() / "trades"
-    tbbo_dir = get_raw_databento_dir() / "tbbo"
-
-    # If DBN directories are missing, fall back to stub
-    if not trades_dir.exists() or not tbbo_dir.exists():
-        # Backwards-compat: check old layout, else stub
-        raw_dir_old = base / "raw" / "databento" / symbol / str(year)
-        trades_path_old = raw_dir_old / "TRADES.dbn.zst"
-        tbbo_path_old = raw_dir_old / "TBBO.dbn.zst"
-        if not trades_path_old.exists() or not tbbo_path_old.exists():
-            # Stub
-            derived_dir = base / "derived" / "bars" / symbol / str(year)
-            bars_path = derived_dir / "bars_1m.parquet"
-            tbbo_out_path = derived_dir / "tbbo_1m.parquet"
-            if force or not bars_path.exists():
-                _write_parquet(_make_bars_stub(symbol, year), bars_path)
-            if force or not tbbo_out_path.exists():
-                _write_parquet(_make_tbbo_stub(symbol, year), tbbo_out_path)
-            input_hashes = {}
-            output_hashes = {
-                "bars_1m.parquet": _sha256(bars_path),
-                "tbbo_1m.parquet": _sha256(tbbo_out_path),
-            }
-            manifest_path = derived_dir / "bars_manifest.json"
-            manifest = {
-                "dataset_id": f"{symbol}-{year}-1m",
-                "symbol": symbol,
-                "interval": "1m",
-                "from_date": f"{year}-01-01",
-                "to_date": f"{year}-12-31",
-                "rebar_params": {"interval": "1m"},
-                "input_hashes": input_hashes,
-                "output_hashes": output_hashes,
-                "calendar_version": "NAZDAQ-v1",
-                "tz": "America/New_York",
-                "created_at": datetime.now(timezone.utc).isoformat(),
-            }
-            manifest_path.parent.mkdir(parents=True, exist_ok=True)
-            manifest_path.write_text(json.dumps(manifest, indent=2))
-            return manifest
-        # Otherwise act as if single-file layout
-        trades_files = [str(trades_path_old)]
-        tbbo_files = [str(tbbo_path_old)]
-    else:
-        trades_files = sorted(glob(str(trades_dir / "*.trades.dbn.zst")))
-        tbbo_files = sorted(glob(str(tbbo_dir / "*.tbbo.dbn.zst")))
-        # Restrict to selected window using filename date (YYYYMMDD)
-        def _in_window(path: str) -> bool:
-            ymd = _parse_date_from_filename(path)
-            if not ymd:
-                return False
-            ok = True
-            if year:
-                ok = ok and (ymd[:4] == str(year))
-            if from_date:
-                ok = ok and (ymd >= str(from_date).replace('-', ''))
-            if to_date:
-                ok = ok and (ymd <= str(to_date).replace('-', ''))
-            return ok
-        trades_files = [f for f in trades_files if _in_window(f)]
-        tbbo_files = [f for f in tbbo_files if _in_window(f)]
-
-    if not trades_files:
-        raise SystemExit(f"No trades DBN files found for year={year}")
-
-    inst_id = _read_symbology_id(base, symbol)
-    if inst_id is None:
-        raise SystemExit(f"Symbology missing or no instrument id for symbol {symbol}")
-
-    # --- Derive TRADES → minute OHLCV+N+VW ---
-    total_steps = len(trades_files) + len(tbbo_files)
-    t0_total = time.perf_counter()
-    bar_len = 30
-    def make_progress(offset: int):
-        def _p(i: int) -> None:
-            processed = offset + i
-            if total_steps <= 0 or processed <= 0:
-                return
-            pct = int(processed * 100 / total_steps)
-            elapsed = time.perf_counter() - t0_total
-            eta = (elapsed / processed) * max(0, total_steps - processed)
-            filled = int(bar_len * pct / 100)
-            bar = "#" * filled + "-" * (bar_len - filled)
-            sys.stdout.write(f"[derive][total] [{bar}] {pct}% ETA {eta:.1f}s ({processed}/{total_steps})\n"); sys.stdout.flush()
-        return _p
-    trades_min = _derive_trades_minutes(trades_files, inst_id, progress=make_progress(0))
+def _process_trades_data(trades_files: List[str], inst_id: int, progress_callback: Optional[Callable[[int], None]] = None) -> pd.DataFrame:
+    """Process trades files into minute-level OHLCV data."""
+    trades_min = _derive_trades_minutes(trades_files, inst_id, progress=progress_callback)
     if trades_min.empty:
         raise SystemExit("No trades found for given symbol/year")
-    # Collapse duplicates across files and compute VW
+
+    # Collapse duplicates across files and compute volume-weighted price
     trades_min["ts"] = trades_min["ts"].dt.floor("min").dt.tz_convert("UTC")
     trades_min = trades_min.groupby("ts", as_index=False).agg({
-        "o":"first","h":"max","l":"min","c":"last","v":"sum","n":"sum","pvs":"sum"
+        "o": "first", "h": "max", "l": "min", "c": "last", "v": "sum", "n": "sum", "pvs": "sum"
     })
     trades_min["vw"] = trades_min.apply(lambda r: (r["pvs"] / r["v"]) if r["v"] > 0 else pd.NA, axis=1)
     trades_min = trades_min.drop(columns=["pvs"])
-    trades_min = trades_min.rename(columns={"ts":"t"})
+    trades_min = trades_min.rename(columns={"ts": "t"})
 
-    # --- Derive TBBO → minute mid fills ---
-    tbbo_min = pd.DataFrame(columns=["t","mid_first","mid_mean"])  # default empty
-    if tbbo_files:
-        tbbo_min = _derive_tbbo_minutes(tbbo_files, inst_id, progress=make_progress(len(trades_files)))
-        if not tbbo_min.empty:
-            tbbo_min["ts"] = tbbo_min["ts"].dt.floor("min").dt.tz_convert("UTC")
-            tbbo_min = tbbo_min.groupby("ts", as_index=False).agg({"mid_first":"first","mid_mean":"mean"})
-            tbbo_min = tbbo_min.rename(columns={"ts":"t"})
-        else:
-            tbbo_min = pd.DataFrame(columns=["t","mid_first","mid_mean"])
+    return trades_min
 
-    # --- Combine TRADES primary with TBBO gap fill ---
+
+def _process_tbbo_data(tbbo_files: List[str], inst_id: int, progress_callback: Optional[Callable[[int], None]] = None) -> pd.DataFrame:
+    """Process TBBO files into minute-level mid price data."""
+    if not tbbo_files:
+        return pd.DataFrame(columns=["t", "mid_first", "mid_mean"])
+
+    tbbo_min = _derive_tbbo_minutes(tbbo_files, inst_id, progress=progress_callback)
+    if tbbo_min.empty:
+        return pd.DataFrame(columns=["t", "mid_first", "mid_mean"])
+
+    tbbo_min["ts"] = tbbo_min["ts"].dt.floor("min").dt.tz_convert("UTC")
+    tbbo_min = tbbo_min.groupby("ts", as_index=False).agg({"mid_first": "first", "mid_mean": "mean"})
+    tbbo_min = tbbo_min.rename(columns={"ts": "t"})
+
+    return tbbo_min
+
+
+def _combine_trades_and_tbbo(trades_min: pd.DataFrame, tbbo_min: pd.DataFrame) -> pd.DataFrame:
+    """Combine trades and TBBO data, using TBBO to fill gaps where no trades exist."""
     combined = pd.merge(trades_min, tbbo_min, on="t", how="outer", sort=True)
     has_trades = combined["v"].fillna(0) > 0
 
@@ -328,114 +351,137 @@ def derive_bars(symbol: str, year: int, *, force: bool = False, from_date: Optio
         "corr": False,
     }).dropna(subset=["t"]).sort_values("t")
 
-    # Optional carry-forward gap fill
-    if fill_gaps and not bars_min.empty:
-        start_t = pd.to_datetime(from_date + "T00:00:00Z") if from_date else bars_min["t"].min()
-        end_t = pd.to_datetime(to_date + "T23:59:00Z") if to_date else bars_min["t"].max()
-        freq = "1min"
-        full_idx = pd.date_range(start=start_t, end=end_t, freq=freq, tz="UTC")
-        bars_min = bars_min.set_index("t").reindex(full_idx)
-        # forward-fill close; synthesize carry-forward bars
-        ffc = bars_min["c"].ffill()
-        carry = bars_min[bars_min["o"].isna()].copy()
-        carry["o"] = ffc
-        carry["h"] = ffc
-        carry["l"] = ffc
-        carry["c"] = ffc
-        carry["v"] = 0
-        carry["n"] = 0
-        carry["vw"] = ffc
-        carry["provider"] = "carry_forward"
-        carry["corr"] = False
-        bars_min.update(carry)
-        bars_min = bars_min.reset_index().rename(columns={"index":"t"})
-    else:
-        bars_min = bars_min.reset_index(drop=True)
+    return bars_min
 
-    # Session / RTH labeling (America/New_York)
-    def _label_session(df: pd.DataFrame) -> pd.DataFrame:
-        local = df["t"].dt.tz_convert("America/New_York")
-        mins = local.dt.hour * 60 + local.dt.minute
-        pre = (mins >= 4*60) & (mins < 9*60 + 30)
-        regular = (mins >= 9*60 + 30) & (mins < 16*60)
-        post = (mins >= 16*60) & (mins < 20*60)
-        session = pd.Series("off", index=df.index)
-        session = session.mask(pre, "pre")
-        session = session.mask(regular, "regular")
-        session = session.mask(post, "post")
-        df["session"] = session
-        df["rth"] = regular
-        return df
 
-    bars_min = _label_session(bars_min)
-    if rth_only:
-        bars_min = bars_min[bars_min["rth"]]
+def _apply_gap_filling(bars_min: pd.DataFrame, fill_gaps: bool, from_date: Optional[str], to_date: Optional[str]) -> pd.DataFrame:
+    """Apply gap filling using carry-forward logic if requested."""
+    if not fill_gaps or bars_min.empty:
+        return bars_min.reset_index(drop=True)
 
-    # Resample to target tf if needed
-    tf_map = {"1Min":"1min","5Min":"5min","15Min":"15min","1Hour":"1H","1Day":"1D"}
-    if tf not in tf_map:
-        raise SystemExit(f"Unsupported tf={tf}")
-    if tf != "1Min":
-        freq = tf_map[tf]
-        bars_min = bars_min.sort_values("t")
-        bars_min["bucket"] = bars_min["t"].dt.floor(freq)
-        def _agg(g: pd.DataFrame) -> pd.Series:
-            vv = g["v"].sum()
-            if vv > 0:
-                vw_val = (g["vw"] * g["v"]).sum() / vv
-            else:
-                vw_val = g["vw"].mean(skipna=True)
-            provider_val = "databento_trades" if (g["v"].sum() > 0) else "databento_tbbo_fill"
-            return pd.Series({
-                "t": g["bucket"].iloc[0],
-                "o": g["o"].iloc[0],
-                "h": g["h"].max(),
-                "l": g["l"].min(),
-                "c": g["c"].iloc[-1],
-                "v": vv,
-                "n": g["n"].sum(),
-                "vw": vw_val,
-                "provider": provider_val,
-                "corr": g["corr"].any(),
-                "session": g["session"].mode(dropna=True).iloc[0] if not g["session"].mode(dropna=True).empty else pd.NA,
-                "rth": g["rth"].any(),
-            })
-        bars_min = bars_min.groupby("bucket", as_index=False).apply(_agg, include_groups=False)
+    start_t = pd.to_datetime(from_date + "T00:00:00Z") if from_date else bars_min["t"].min()
+    end_t = pd.to_datetime(to_date + "T23:59:00Z") if to_date else bars_min["t"].max()
+    freq = "1min"
+    full_idx = pd.date_range(start=start_t, end=end_t, freq=freq, tz="UTC")
+    bars_min = bars_min.set_index("t").reindex(full_idx)
 
-    # Finalize schema
+    # Forward-fill close; synthesize carry-forward bars
+    ffc = bars_min["c"].ffill()
+    carry = bars_min[bars_min["o"].isna()].copy()
+    carry["o"] = ffc
+    carry["h"] = ffc
+    carry["l"] = ffc
+    carry["c"] = ffc
+    carry["v"] = 0
+    carry["n"] = 0
+    carry["vw"] = ffc
+    carry["provider"] = "carry_forward"
+    carry["corr"] = False
+    bars_min.update(carry)
+    bars_min = bars_min.reset_index().rename(columns={"index": "t"})
+
+    return bars_min
+
+
+def _label_session(df: pd.DataFrame) -> pd.DataFrame:
+    """Label trading sessions (pre-market, regular, post-market) based on America/New_York timezone."""
+    local = df["t"].dt.tz_convert("America/New_York")
+    mins = local.dt.hour * 60 + local.dt.minute
+    pre = (mins >= 4*60) & (mins < 9*60 + 30)
+    regular = (mins >= 9*60 + 30) & (mins < 16*60)
+    post = (mins >= 16*60) & (mins < 20*60)
+    session = pd.Series("off", index=df.index)
+    session = session.mask(pre, "pre")
+    session = session.mask(regular, "regular")
+    session = session.mask(post, "post")
+    df["session"] = session
+    df["rth"] = regular
+    return df
+
+
+def _resample_to_timeframe(bars_min: pd.DataFrame, tf: str) -> pd.DataFrame:
+    """Resample minute bars to the target timeframe."""
+    tf_map = {"1Min": "1min", "5Min": "5min", "15Min": "15min", "1Hour": "1H", "1Day": "1D"}
+
+    if tf == "1Min":
+        return bars_min
+
+    freq = tf_map[tf]
+    bars_min = bars_min.sort_values("t")
+    bars_min["bucket"] = bars_min["t"].dt.floor(freq)
+
+    def _agg(g: pd.DataFrame) -> pd.Series:
+        vv = g["v"].sum()
+        if vv > 0:
+            vw_val = (g["vw"] * g["v"]).sum() / vv
+        else:
+            vw_val = g["vw"].mean(skipna=True)
+        provider_val = "databento_trades" if (g["v"].sum() > 0) else "databento_tbbo_fill"
+        return pd.Series({
+            "t": g["bucket"].iloc[0],
+            "o": g["o"].iloc[0],
+            "h": g["h"].max(),
+            "l": g["l"].min(),
+            "c": g["c"].iloc[-1],
+            "v": vv,
+            "n": g["n"].sum(),
+            "vw": vw_val,
+            "provider": provider_val,
+            "corr": g["corr"].any(),
+            "session": g["session"].mode(dropna=True).iloc[0] if not g["session"].mode(dropna=True).empty else pd.NA,
+            "rth": g["rth"].any(),
+        })
+
+    return bars_min.groupby("bucket", as_index=False).apply(_agg, include_groups=False)
+
+
+def _finalize_bars_schema(bars_min: pd.DataFrame, symbol: str, tf: str) -> pd.DataFrame:
+    """Add final schema columns and order them according to specification."""
     bars = bars_min.copy()
     bars["symbol"] = symbol
     bars["tf"] = tf
     bars["adj"] = "unadjusted"
     bars["bar_id"] = bars.apply(lambda r: f"{symbol}-{r['t'].strftime('%Y-%m-%dT%H:%M:%SZ')}-{tf}", axis=1)
-    # Order columns per spec
-    cols = ["symbol","t","o","h","l","c","v","n","vw","tf","session","rth","adj","provider","corr","bar_id"]
-    bars = bars[cols].sort_values("t")
 
-    # Write outputs per year/tf
+    # Order columns per spec
+    cols = ["symbol", "t", "o", "h", "l", "c", "v", "n", "vw", "tf", "session", "rth", "adj", "provider", "corr", "bar_id"]
+    return bars[cols].sort_values("t")
+
+
+def _write_output_file(bars: pd.DataFrame, symbol: str, year: int, tf: str, out_format: str) -> Path:
+    """Write the bars data to the specified output format and return the file path."""
+    base = get_base_data_dir()
     derived_dir = base / "derived" / "bars" / symbol / str(year)
     derived_dir.mkdir(parents=True, exist_ok=True)
-    tf_key = {"Min":"m","Hour":"h","Day":"d"}
-    tf_norm = tf.replace("Min","m").replace("Hour","h").replace("Day","d").lower()
-    out_path = derived_dir / f"bars_{tf}.parquet" if out_format == "parquet" else derived_dir / f"bars_{tf}.{out_format}"
+
+    out_path = derived_dir / f"bars_{tf}.{out_format}"
 
     if out_format == "parquet":
         # Ensure timezone-aware timestamp in Polars
         pl.from_pandas(bars).write_parquet(str(out_path))
     elif out_format == "csv":
-        bars_out = bars.copy(); bars_out["t"] = bars_out["t"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        bars_out = bars.copy()
+        bars_out["t"] = bars_out["t"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         bars_out.to_csv(out_path, index=False)
     elif out_format == "jsonl":
-        bars_out = bars.copy(); bars_out["t"] = bars_out["t"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        bars_out = bars.copy()
+        bars_out["t"] = bars_out["t"].dt.strftime("%Y-%m-%dT%H:%M:%SZ")
         bars_out.to_json(out_path, orient="records", lines=True)
     else:
-        raise SystemExit(f"Unsupported out_format={out_format}")
+        raise ValueError(f"Unsupported output format: {out_format}")
 
-    # Hashes & manifest
+    return out_path
+
+
+def _create_manifest(symbol: str, year: int, tf: str, bars: pd.DataFrame, trades_files: List[str], tbbo_files: List[str], out_path: Path, force: bool) -> Dict[str, object]:
+    """Create and write the manifest file for the derived bars."""
+    tf_norm = tf.replace("Min", "m").replace("Hour", "h").replace("Day", "d").lower()
+
+    # Calculate hashes
     input_hashes = {"trades_files": len(trades_files), "tbbo_files": len(tbbo_files)}
     output_hashes = {out_path.name: _sha256(out_path)}
 
-    # Dates from bars
+    # Extract date range from bars
     try:
         from_date = bars["t"].min().strftime("%Y-%m-%d")
         to_date = bars["t"].max().strftime("%Y-%m-%d")
@@ -457,7 +503,9 @@ def derive_bars(symbol: str, year: int, *, force: bool = False, from_date: Optio
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
 
-    manifest_path = derived_dir / "bars_manifest.json"
+    manifest_path = out_path.parent / "bars_manifest.json"
+
+    # Check if manifest already exists and is not forced
     if manifest_path.exists() and not force:
         try:
             old = json.loads(manifest_path.read_text())
@@ -466,11 +514,90 @@ def derive_bars(symbol: str, year: int, *, force: bool = False, from_date: Optio
             pass
 
     manifest_path.write_text(json.dumps(manifest, indent=2))
+
     # Print summary
     try:
         sz = out_path.stat().st_size
         print(f"[derive][summary] {symbol} {tf} rows={len(bars)} size_bytes={sz} file={out_path.name}")
     except Exception:
         pass
+
     return manifest
+
+
+def _create_progress_callback(total_steps: int, t0_total: float) -> Callable[[int], Callable[[int], None]]:
+    """Create a progress callback factory for tracking processing progress."""
+    bar_len = 30
+
+    def make_progress(offset: int):
+        def _p(i: int) -> None:
+            processed = offset + i
+            if total_steps <= 0 or processed <= 0:
+                return
+            pct = int(processed * 100 / total_steps)
+            elapsed = time.perf_counter() - t0_total
+            eta = (elapsed / processed) * max(0, total_steps - processed)
+            filled = int(bar_len * pct / 100)
+            bar = "#" * filled + "-" * (bar_len - filled)
+            sys.stdout.write(f"[derive][total] [{bar}] {pct}% ETA {eta:.1f}s ({processed}/{total_steps})\n")
+            sys.stdout.flush()
+        return _p
+
+    return make_progress
+
+
+def derive_bars(symbol: str, year: int, *, force: bool = False, from_date: Optional[str] = None, to_date: Optional[str] = None, tf: str = "1Min", out_format: str = "parquet", fill_gaps: bool = False, rth_only: bool = False) -> Dict[str, object]:
+    """
+    Derive OHLCV bars from raw Databento trades and TBBO data.
+
+    This function processes raw market data files to create standardized OHLCV bars
+    with various timeframes and output formats.
+    """
+    # Validate input parameters
+    _validate_derive_params(symbol, year, tf, out_format)
+
+    # Discover data files
+    trades_files, tbbo_files = _discover_data_files(symbol, year, from_date, to_date)
+
+    # Handle case where no data files are found
+    if not trades_files:
+        return _create_stub_data(symbol, year, force)
+
+    # Get instrument ID from symbology
+    base = get_base_data_dir()
+    inst_id = _read_symbology_id(base, symbol)
+    if inst_id is None:
+        raise SystemExit(f"Symbology missing or no instrument id for symbol {symbol}")
+
+    # Set up progress tracking
+    total_steps = len(trades_files) + len(tbbo_files)
+    t0_total = time.perf_counter()
+    make_progress = _create_progress_callback(total_steps, t0_total)
+
+    # Process trades and TBBO data
+    trades_min = _process_trades_data(trades_files, inst_id, make_progress(0))
+    tbbo_min = _process_tbbo_data(tbbo_files, inst_id, make_progress(len(trades_files)))
+
+    # Combine trades and TBBO data
+    bars_min = _combine_trades_and_tbbo(trades_min, tbbo_min)
+
+    # Apply gap filling if requested
+    bars_min = _apply_gap_filling(bars_min, fill_gaps, from_date, to_date)
+
+    # Label trading sessions
+    bars_min = _label_session(bars_min)
+    if rth_only:
+        bars_min = bars_min[bars_min["rth"]]
+
+    # Resample to target timeframe
+    bars_min = _resample_to_timeframe(bars_min, tf)
+
+    # Finalize schema
+    bars = _finalize_bars_schema(bars_min, symbol, tf)
+
+    # Write output file
+    out_path = _write_output_file(bars, symbol, year, tf, out_format)
+
+    # Create and return manifest
+    return _create_manifest(symbol, year, tf, bars, trades_files, tbbo_files, out_path, force)
 

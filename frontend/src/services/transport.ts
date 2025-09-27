@@ -1,19 +1,26 @@
 import type { StreamFrame } from './api'
 
+export interface TransportError {
+  message: string
+  code?: string | number
+  timestamp: string
+  source: 'websocket' | 'sse' | 'transport'
+}
+
 export type PlayerTransport = {
   start: () => void
   pause: () => void
   setSpeed: (s: number) => void
   seek: (isoTs: string) => void
   onFrame: (cb: (f: StreamFrame) => void) => void
-  onError: (cb: (e: any) => void) => void
+  onError: (cb: (e: TransportError | Event | Error) => void) => void
   dispose: () => void
 }
 
 export function wsTransport(run_id: string, base = ''): PlayerTransport {
   let ws: WebSocket | null = null
   let frameCb: ((f: StreamFrame) => void) | null = null
-  let errCb: ((e: any) => void) | null = null
+  let errCb: ((e: TransportError | Event | Error) => void) | null = null
 
   const url = (base || '').startsWith('ws')
     ? `${base}/backtests/${run_id}/ws`
@@ -47,7 +54,7 @@ export function wsTransport(run_id: string, base = ''): PlayerTransport {
 export function sseTransport(run_id: string, speed = 60, base = ''): PlayerTransport {
   let es: EventSource | null = null
   let frameCb: ((f: StreamFrame) => void) | null = null
-  let errCb: ((e: any) => void) | null = null
+  let errCb: ((e: TransportError | Event | Error) => void) | null = null
 
   const url = base
     ? `${base}/backtests/${run_id}/stream?speed=${speed}`
