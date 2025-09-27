@@ -1,19 +1,26 @@
 import type { StreamFrame } from './api'
 
+export interface TransportError {
+  message: string
+  code?: string | number
+  timestamp: string
+  source: 'websocket' | 'sse' | 'transport'
+}
+
 export type PlayerTransport = {
   start: () => void
   pause: () => void
   setSpeed: (s: number) => void
   seek: (isoTs: string) => void
   onFrame: (cb: (f: StreamFrame) => void) => void
-  onError: (cb: (e: any) => void) => void
+  onError: (cb: (e: TransportError | Event | Error) => void) => void
   dispose: () => void
 }
 
 export function wsTransport(run_id: string, base = ''): PlayerTransport {
   let ws: WebSocket | null = null
   let frameCb: ((f: StreamFrame) => void) | null = null
-  let errCb: ((e: any) => void) | null = null
+  let errCb: ((e: TransportError | Event | Error) => void) | null = null
 
   const url = (base || '').startsWith('ws')
     ? `${base}/backtests/${run_id}/ws`
@@ -27,7 +34,7 @@ export function wsTransport(run_id: string, base = ''): PlayerTransport {
     try {
       const msg = JSON.parse(ev.data)
       if (msg.t === 'frame' && frameCb) frameCb(msg as StreamFrame)
-    } catch (e) {
+    } catch {
       // ignore
     }
   }
@@ -47,7 +54,7 @@ export function wsTransport(run_id: string, base = ''): PlayerTransport {
 export function sseTransport(run_id: string, speed = 60, base = ''): PlayerTransport {
   let es: EventSource | null = null
   let frameCb: ((f: StreamFrame) => void) | null = null
-  let errCb: ((e: any) => void) | null = null
+  let errCb: ((e: TransportError | Event | Error) => void) | null = null
 
   const url = base
     ? `${base}/backtests/${run_id}/stream?speed=${speed}`
@@ -57,15 +64,15 @@ export function sseTransport(run_id: string, speed = 60, base = ''): PlayerTrans
     try {
       const msg = JSON.parse((ev as MessageEvent).data)
       if (msg.t === 'frame' && frameCb) frameCb(msg as StreamFrame)
-    } catch (e) { /* ignore */ }
+    } catch { /* ignore */ }
   })
   es.onerror = (e) => errCb?.(e)
 
   return {
     start() {},
     pause() {},
-    setSpeed(_s: number) {},
-    seek(_iso: string) {},
+    setSpeed() {},
+    seek() {},
     onFrame(cb) { frameCb = cb },
     onError(cb) { errCb = cb },
     dispose() { es?.close(); es = null },

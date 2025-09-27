@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import React, { createRef } from 'react'
+import { createRef } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
 
@@ -23,9 +23,11 @@ vi.mock('lightweight-charts', () => {
 
 import { createChart as createChartLWC } from 'lightweight-charts'
 import ChartOHLC, { type CandlestickChartAPI } from './ChartOHLC'
-import EquityChart, { type LineChartAPI } from './EquityChart'
+import EquityChart, { type EquityChartAPI } from './EquityChart'
+import type { MockChart } from '../types/charts'
+import type { CandlestickData, LineData } from 'lightweight-charts'
 
-const getChartMock = () => (createChartLWC as any).mock.results[0].value
+const getChartMock = (): MockChart => (createChartLWC as any).mock.results[0].value
 
 describe('imperative charts API', () => {
   beforeEach(() => cleanup())
@@ -36,27 +38,27 @@ describe('imperative charts API', () => {
     const chart = getChartMock()
     const series = chart.addCandlestickSeries.mock.results[0].value
 
-    const initial = [{ time: 1 as any, open: 1, high: 2, low: 0.5, close: 1.5 }]
-    ref.current!.reset(initial as any)
+    const initial: CandlestickData[] = [{ time: 1 as CandlestickData['time'], open: 1, high: 2, low: 0.5, close: 1.5 }]
+    ref.current!.reset(initial)
     expect(series.setData).toHaveBeenCalledWith(initial)
 
-    const dp = { time: 2 as any, open: 2, high: 3, low: 1, close: 2.5 }
-    ref.current!.update(dp as any)
+    const dp: CandlestickData = { time: 2 as CandlestickData['time'], open: 2, high: 3, low: 1, close: 2.5 }
+    ref.current!.update(dp)
     expect(series.update).toHaveBeenCalledWith(dp)
   })
 
   it('EquityChart exposes reset/update and calls setData/update', () => {
-    const ref = createRef<LineChartAPI>()
+    const ref = createRef<EquityChartAPI>()
     render(<EquityChart ref={ref} />)
     const chart = getChartMock()
-    const series = chart.addLineSeries.mock.results[0].value
+    const series = chart.addLineSeries!.mock.results[0].value
 
-    const initial = [{ time: 1 as any, value: 10 }]
-    ref.current!.reset(initial as any)
+    const initial: LineData[] = [{ time: 1 as LineData['time'], value: 10 }]
+    ref.current!.reset(initial)
     expect(series.setData).toHaveBeenCalledWith(initial)
 
-    const dp = { time: 2 as any, value: 12 }
-    ref.current!.update(dp as any)
+    const dp: LineData = { time: 2 as LineData['time'], value: 12 }
+    ref.current!.update(dp)
     expect(series.update).toHaveBeenCalledWith(dp)
   })
 })

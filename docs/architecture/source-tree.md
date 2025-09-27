@@ -25,15 +25,20 @@ backend/
   jobs/derive.py             # Derive 1m bars + TBBO aggregates (Parquet)
   jobs/run_backtest.py       # Execute backtest and write artifacts
 frontend/
-  src/components/            # Presentational only (no fetch/mutate)
-  src/views/                 # RunsList, RunDetail (compose containers + components)
-  src/containers/            # Data wiring (TanStack Query) and WS/SSE integration
-  src/services/api.ts        # REST client; query keys
-  src/services/ws.ts         # WebSocket hook/handler; SSE fallback
-  src/workers/streamParser.ts# Decode/normalize frames off main thread
-  src/features/backtests/    # Feature slice for backtests
-  src/styles/                # Tailwind setup
-  src/lib/                   # Utilities (formatting, schema helpers)
+  src/components/            # Presentational components (ChartOHLC, EquityChart, RunsTable, etc.)
+  src/views/                 # Route-level views (RunDetail)
+  src/containers/            # Data-connected containers (RunsListContainer, RunPlayerContainer)
+  src/services/              # API and data services
+    api.ts                   # REST client with Zod validation
+    ws.ts                    # WebSocket hook for streaming
+    bars.ts                  # Bar data fetching
+    transport.ts             # HTTP transport utilities
+  src/hooks/                 # Custom React hooks (useChartInitialization)
+  src/types/                 # TypeScript type definitions (charts, streaming)
+  src/schemas/               # Zod validation schemas (stream)
+  src/workers/streamParser.ts# Stream parsing Web Worker
+  src/utils/                 # Utility functions (api helpers)
+  src/constants.ts           # Application constants
   index.html, main.tsx, ...  # App bootstrap
 scripts/
   catalog_init.sql           # SQLite schema (see docs/architecture.md)

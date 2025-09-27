@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { apiGet, apiPost } from '../utils/api'
+import type { OrderData } from '../types/streaming'
 
 export const RunSummarySchema = z.object({
   run_id: z.string(),
@@ -71,22 +73,20 @@ export type StreamFrame = {
   t: 'frame'
   ts: string
   ohlc?: { o?: number; h?: number; l?: number; c?: number; v?: number } | null
-  orders: any[]
+  orders: OrderData[]
   equity?: { ts: string; value: number } | null
   dropped: number
 }
 
 export async function getRunDetail(run_id: string): Promise<RunDetail> {
-  const res = await fetch(`/backtests/${run_id}`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const json = await res.json()
+  const json = await apiGet(`/backtests/${run_id}`)
   return RunDetailSchema.parse(json)
 }
 
 // --- Create Backtest ---
 export type CreateRunRequest = {
   strategy_id: string
-  params?: Record<string, any>
+  params?: Record<string, unknown>
   dataset_id?: string
   symbol?: string
   year?: number
@@ -101,14 +101,5 @@ export async function createBacktest(
   req: CreateRunRequest,
   idempotencyKey?: string,
 ): Promise<CreateRunResponse> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey
-  const res = await fetch('/backtests', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(req),
-  })
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const json = await res.json()
-  return json as CreateRunResponse
+  return apiPost<CreateRunResponse>('/backtests', req, { idempotencyKey })
 }

@@ -3,18 +3,19 @@ import tempfile
 from pathlib import Path
 
 import backend.jobs.ingest as ingest
+from tests.utils import setup_test_environment, get_test_symbol_year
 
 
 def test_ingest_idempotent_and_force(tmp_path, monkeypatch):
-    # Ensure env present
-    monkeypatch.setenv("DATABENTO_API_KEY", "test-key")
-    monkeypatch.setenv("HEWSTON_DATA_DIR", str(tmp_path))
+    # Set up test environment
+    setup_test_environment(tmp_path, monkeypatch)
 
-    sizes1 = ingest.ingest_databento("AAPL", 2023, force=False)
+    symbol, year = get_test_symbol_year()
+    sizes1 = ingest.ingest_databento(symbol, year, force=False)
     # Two products
     assert set(sizes1.keys()) == {"TRADES", "TBBO"}
 
-    base = Path(tmp_path) / "raw/databento/AAPL/2023"
+    base = Path(tmp_path) / f"raw/databento/{symbol}/{year}"
     f_trades = base / "TRADES.dbn.zst"
     f_tbbo = base / "TBBO.dbn.zst"
     assert f_trades.exists() and f_tbbo.exists()

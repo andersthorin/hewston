@@ -1,8 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-// Dev logging helper (only logs in Vite dev)
-const devLog = (...args: any[]) => { try { if ((import.meta as any).env?.DEV) console.debug('[run-ws]', ...args) } catch {} }
-
 import type { StreamFrameT } from '../schemas/stream'
+import type { WorkerOutMessage } from '../types/streaming'
+
+// Dev logging helper (only logs in Vite dev)
+const devLog = (...args: unknown[]) => {
+  try {
+    if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) {
+      console.debug('[run-ws]', ...args)
+    }
+  } catch (error) {
+    console.warn('Failed to log debug message:', error)
+  }
+}
 
 export type PlaybackState = {
   status: 'idle' | 'connecting' | 'ws' | 'sse' | 'ended' | 'error'
@@ -30,24 +39,25 @@ export function useRunPlayback(runId: string) {
     // init worker
     const worker = new Worker(new URL('../workers/streamParser.ts', import.meta.url), { type: 'module' })
     worker.postMessage({ type: 'init', fps: 30 })
-    worker.onmessage = (ev: MessageEvent<any>) => {
+    worker.onmessage = (ev: MessageEvent<WorkerOutMessage>) => {
       const msg = ev.data
       if (msg.type === 'frame') {
         framesSeenRef.current += 1
-        notify(msg.frame as StreamFrameT)
+        notify(msg.data as StreamFrameT)
         // Stop keep-alive play retries after first frame
         if (playRetryTimerRef.current) { clearInterval(playRetryTimerRef.current); playRetryTimerRef.current = null }
-      } else if (msg.type === 'end') {
-        setState((s) => ({ ...s, status: 'ended', playing: false }))
-      } else if (msg.type === 'err') {
+      } else if (msg.type === 'error') {
+        console.warn('Worker error:', msg.error)
         setState((s) => ({ ...s, status: 'error', playing: false }))
+      } else if (msg.type === 'ready') {
+        console.debug('Worker ready')
       }
     }
     workerRef.current = worker
 
     let reconnectAttempts = 0
     let closed = false
-    let reconnectTimer: any
+    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
     const startPlayKeepalive = () => {
       if (playRetryTimerRef.current) { clearInterval(playRetryTimerRef.current); playRetryTimerRef.current = null }
@@ -55,7 +65,12 @@ export function useRunPlayback(runId: string) {
         const ws = wsRef.current
         if (!ws || ws.readyState !== WebSocket.OPEN) return
         if (framesSeenRef.current > 0) return
-        try { ws.send(JSON.stringify({ t: 'ctrl', cmd: 'play' })); devLog('play.sent', { runId, reason: 'keepalive' }) } catch {}
+        try {
+          ws.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
+          devLog('play.sent', { runId, reason: 'keepalive' })
+        } catch (error) {
+          console.warn('Failed to send keepalive play command:', error)
+        }
       }, 1000)
     }
 
@@ -72,7 +87,12 @@ export function useRunPlayback(runId: string) {
         framesSeenRef.current = 0
         devLog('ws.open', { runId })
         setState((s) => ({ ...s, status: 'ws', playing: true }))
-        try { ws.send(JSON.stringify({ t: 'ctrl', cmd: 'play' })); devLog('play.sent', { runId, reason: 'open' }) } catch {}
+        try {
+          ws.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
+          devLog('play.sent', { runId, reason: 'open' })
+        } catch (error) {
+          console.warn('Failed to send initial play command:', error)
+        }
         startPlayKeepalive()
       }
       ws.onmessage = (ev) => {
@@ -80,7 +100,9 @@ export function useRunPlayback(runId: string) {
           const msg = JSON.parse(ev.data)
           if (msg.t === 'frame') { devLog('frame.ts', msg.ts); worker.postMessage({ type: 'frame', payload: msg }) }
           // ignore hb and echo
-        } catch { /* ignore */ }
+        } catch (error) {
+          console.warn('Failed to parse WebSocket message:', error)
+        }
       }
 
       const scheduleReconnect = () => {
@@ -104,7 +126,11 @@ export function useRunPlayback(runId: string) {
       if (ws) {
         const rs = ws.readyState
         if (rs === WebSocket.OPEN || rs === WebSocket.CLOSING) {
-          try { ws.close() } catch {}
+          try {
+            ws.close()
+          } catch (error) {
+            console.warn('Failed to close WebSocket:', error)
+          }
         }
       }
       wsRef.current = null

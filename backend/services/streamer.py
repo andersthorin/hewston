@@ -11,7 +11,9 @@ import polars as pl
 import pandas as pd
 
 from backend.adapters.sqlite_catalog import SqliteCatalog
+from backend.constants import DEFAULT_FPS
 from backend.domain.types import StreamFrame
+from backend.utils.datetime import normalize_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -69,10 +71,74 @@ def _iter_parquet_dicts(path: str, select: Optional[List[str]] = None) -> List[d
     return df.to_dicts()
 
 
+def _load_bars_data(dataset_id: Optional[str]) -> Dict[int, dict]:
+    """Load and normalize bars data into a timestamp-keyed dictionary."""
+    bars_map: Dict[int, dict] = {}
+    if not dataset_id:
+        return bars_map
+
+    bars_path = _resolve_bars_path(dataset_id)
+    if not bars_path or not Path(bars_path).exists():
+        return bars_map
+
+    # columns: support both new ('t') and legacy ('ts')
+    df = pl.read_parquet(bars_path)
+    if "ts" not in df.columns and "t" in df.columns:
+        df = df.rename({"t": "ts"})
+
+    if "ts" in df.columns:
+        for r in df.select(["ts", "o", "h", "l", "c", "v"]).to_dicts():
+            key, _ = normalize_timestamp(r["ts"])  # normalize join key only
+            bars_map[key] = {
+                "o": r.get("o"),
+                "h": r.get("h"),
+                "l": r.get("l"),
+                "c": r.get("c"),
+                "v": r.get("v"),
+            }
+    return bars_map
+
+
+def _organize_orders_by_timestamp(orders_rows: List[dict]) -> Dict[int, List[dict]]:
+    """Organize orders by normalized timestamp for efficient lookup."""
+    orders_by_ts: Dict[int, List[dict]] = {}
+    for o in orders_rows:
+        key, _ = normalize_timestamp(o.get("ts_utc"))
+        orders_by_ts.setdefault(key, []).append(o)
+    return orders_by_ts
+
+
+def _normalize_order_timestamps(orders: List[dict]) -> List[dict]:
+    """Normalize datetime values in orders to ISO strings for JSON serialization."""
+    orders_payload: List[dict] = []
+    for o in orders:
+        o2 = dict(o)
+        # normalize any datetime-like values to ISO strings
+        for kk, vv in list(o2.items()):
+            try:
+                if isinstance(vv, (_dt, pd.Timestamp)):
+                    _, iso_v = normalize_timestamp(vv)
+                    o2[kk] = iso_v
+            except Exception:
+                pass
+        orders_payload.append(o2)
+    return orders_payload
+
+
+def _calculate_decimation_stride(total_frames: int, fps: int, realtime: bool) -> int:
+    """Calculate the stride for frame decimation based on total frames and target FPS."""
+    if realtime:
+        target = fps  # logical target; we stride if needed
+        return max(1, total_frames // target) if total_frames > target else 1
+    else:
+        # Option A: no decimation in non-realtime mode — emit all frames
+        return 1
+
+
 async def produce_frames(
     *,
     run_id: str,
-    fps: int = 30,
+    fps: int = DEFAULT_FPS,
     speed: float = 1.0,
     realtime: bool = False,
 ) -> AsyncGenerator[StreamFrame, None]:
@@ -81,56 +147,18 @@ async def produce_frames(
     - If realtime=True, sleeps between frames according to fps and speed; else yields as fast as possible (test mode).
     - Decimation: selects approximately ceil(N / max_frames) stride.
     """
+    # Load and validate artifacts
     artifacts, dataset_id = _resolve_artifacts(run_id)
     if not artifacts.get("equity") or not artifacts.get("orders"):
         raise FileNotFoundError("missing artifacts")
 
+    # Load data from parquet files
     equity_rows = _iter_parquet_dicts(artifacts["equity"], select=["ts_utc", "value"]) if artifacts.get("equity") else []
     orders_rows = _iter_parquet_dicts(artifacts["orders"]) if artifacts.get("orders") else []
 
-    def _norm_ts(ts_val) -> tuple[int, str]:
-        """Return (epoch_sec, iso_z) for robust joining and client parsing."""
-        try:
-            dt = pd.to_datetime(ts_val, utc=True)
-            # epoch seconds as int for join keys
-            epoch = int(dt.timestamp())
-            # ISO 8601 Z string for client
-            iso = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-            return epoch, iso
-        except Exception:
-            s = str(ts_val)
-            s2 = s.replace(" UTC", "Z").replace(" ", "T").replace("+00:00", "Z")
-            try:
-                dt = pd.to_datetime(s2, utc=True)
-                return int(dt.timestamp()), dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-            except Exception:
-                # best effort: fallback to original string, epoch 0
-                return 0, s
-
-    bars_map: Dict[int, dict] = {}
-    if dataset_id:
-        bars_path = _resolve_bars_path(dataset_id)
-        if bars_path and Path(bars_path).exists():
-            # columns: support both new ('t') and legacy ('ts')
-            df = pl.read_parquet(bars_path)
-            if "ts" not in df.columns and "t" in df.columns:
-                df = df.rename({"t": "ts"})
-            if "ts" in df.columns:
-                for r in df.select(["ts", "o", "h", "l", "c", "v"]).to_dicts():
-                    key, _ = _norm_ts(r["ts"])  # normalize join key only
-                    bars_map[key] = {
-                        "o": r.get("o"),
-                        "h": r.get("h"),
-                        "l": r.get("l"),
-                        "c": r.get("c"),
-                        "v": r.get("v"),
-                    }
-
-    # Align orders by ts (normalized to epoch seconds)
-    orders_by_ts: Dict[int, List[dict]] = {}
-    for o in orders_rows:
-        key, _ = _norm_ts(o.get("ts_utc"))
-        orders_by_ts.setdefault(key, []).append(o)
+    # Prepare data structures
+    bars_map = _load_bars_data(dataset_id)
+    orders_by_ts = _organize_orders_by_timestamp(orders_rows)
 
     total = len(equity_rows)
     if total == 0:

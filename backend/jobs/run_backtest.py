@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import json
-import os
 import time
 import uuid
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict
 
@@ -12,26 +10,9 @@ import polars as pl
 
 from backend.adapters.nautilus import NautilusBacktestRunner
 from backend.adapters.sqlite_catalog import SqliteCatalog
-
-
-def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _code_hash() -> str:
-    import subprocess
-
-    try:
-        out = subprocess.run(
-            ["git", "rev-parse", "HEAD"], capture_output=True, check=True, text=True
-        )
-        return out.stdout.strip()
-    except Exception:
-        return "unknown"
-
-
-def _base_data_dir() -> Path:
-    return Path(os.environ.get("HEWSTON_DATA_DIR", "data"))
+from backend.utils.datetime import utc_now
+from backend.utils.git import get_git_commit_hash
+from backend.utils.paths import get_base_data_dir, get_backtests_dir, ensure_dir
 
 
 def _write_parquet(records: list[dict], path: Path) -> None:
@@ -56,14 +37,14 @@ def run_backtest_and_persist(
     slippage_fees = slippage_fees or {}
     cat = SqliteCatalog()
 
-    created_at = _utc_now()
-    code_hash = _code_hash()
+    created_at = utc_now()
+    code_hash = get_git_commit_hash()
 
     # If run_id not supplied, create a new row (QUEUED)
     if not run_id:
         run_id = uuid.uuid4().hex
         # Prepare manifest path for DB row
-        manifest_path_tmp = _base_data_dir() / "backtests" / run_id / "run-manifest.json"
+        manifest_path_tmp = get_backtests_dir(run_id) / "run-manifest.json"
         cat.create_run(
             run_id=run_id,
             dataset_id=dataset_id,
@@ -81,7 +62,7 @@ def run_backtest_and_persist(
         )
 
     # Prepare paths
-    out_dir = _base_data_dir() / "backtests" / run_id
+    out_dir = get_backtests_dir(run_id)
     equity_path = out_dir / "equity.parquet"
     orders_path = out_dir / "orders.parquet"
     fills_path = out_dir / "fills.parquet"
@@ -105,7 +86,7 @@ def run_backtest_and_persist(
         _write_parquet(result.get("orders", []), orders_path)
         _write_parquet(result.get("fills", []), fills_path)
         metrics = result.get("metrics", {})
-        out_dir.mkdir(parents=True, exist_ok=True)
+        ensure_dir(out_dir)
         metrics_path.write_text(json.dumps(metrics, indent=2))
 
         # Write manifest
@@ -117,8 +98,8 @@ def run_backtest_and_persist(
             "seed": seed,
             "slippage_fees": slippage_fees,
             "speed": speed,
-            "from": from_date,
-            "to": to_date,
+            "run_from": from_date,
+            "run_to": to_date,
             "code_hash": code_hash,
             "env_lock": None,
             "calendar_version": "NAZDAQ-v1",

@@ -5,11 +5,19 @@ import { fetchHour, type HourResponse } from '../services/bars'
 import { useRunPlayback } from '../services/ws'
 import PlaybackControls from '../components/PlaybackControls'
 import ChartOHLC, { type CandlestickChartAPI } from '../components/ChartOHLC'
-import type { CandlestickData } from 'lightweight-charts'
-
+import type { CandlestickData, Time } from 'lightweight-charts'
+import type { StreamFrameData } from '../types/streaming'
 
 // Dev logging helper (only logs in Vite dev)
-const devLog = (...args: any[]) => { try { if ((import.meta as any).env?.DEV) console.debug('[RunPlayer]', ...args) } catch {} }
+const devLog = (...args: unknown[]) => {
+  try {
+    if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) {
+      console.debug('[RunPlayer]', ...args)
+    }
+  } catch (error) {
+    console.warn('Failed to log debug message:', error)
+  }
+}
 
 export type RunPlayerContainerProps = { run_id: string; dataset_id?: string; run_from?: string; run_to?: string }
 
@@ -39,14 +47,16 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
   // Subscribe to frames to infer run window only if props not provided
   useEffect(() => {
     if (run_from && run_to) return
-    const unsub = subscribe((f: any) => {
+    const unsub = subscribe((frame: StreamFrameData) => {
       try {
-        const ts: string | undefined = (f && (f.ts || (f.equity && f.equity.ts))) as any
+        const ts: string | undefined = frame?.ts || frame?.equity?.ts
         if (!ts) return
         const day = ts.slice(0, 10)
         setRunFrom(prev => (prev && prev <= day ? prev : day))
         setRunTo(prev => (prev && prev >= day ? prev : day))
-      } catch {}
+      } catch (error) {
+        console.warn('Failed to process frame for run window inference:', error)
+      }
     })
     return unsub
   }, [subscribe, run_from, run_to])
@@ -151,7 +161,7 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
       const s = snaps[i]
       if (!s) { dayIdxRef.current++; hourIdxRef.current = 0; return }
 
-      const dp: CandlestickData = { time: { year: y, month: m, day: d } as any, open: s.o, high: s.h, low: s.l, close: s.c }
+      const dp: CandlestickData = { time: { year: y, month: m, day: d } as Time, open: s.o, high: s.h, low: s.l, close: s.c }
       const firstOfDay = (hourIdxRef.current === 0)
       if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
       if (firstOfDay || !seededRef.current) { ohlcRef.current?.scrollToLatest() }
@@ -165,16 +175,18 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
   }, [state.playing, runFrom, runTo, snapshotsVersion])
 
 
-  const formatTime = (t: any, locale?: string) => {
+  const formatTime = (t: Time, locale?: string) => {
     try {
       let d: Date
       if (typeof t === 'number') d = new Date(t * 1000)
       else if (typeof t === 'string') d = new Date(t)
       else if (t && typeof t === 'object' && 'year' in t && 'month' in t && 'day' in t) {
-        d = new Date(Date.UTC((t as any).year, (t as any).month - 1, (t as any).day))
+        const timeObj = t as { year: number; month: number; day: number }
+        d = new Date(Date.UTC(timeObj.year, timeObj.month - 1, timeObj.day))
       } else return String(t)
       return new Intl.DateTimeFormat(locale || undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(d)
-    } catch {
+    } catch (error) {
+      console.warn('Failed to format time:', error)
       return String(t)
     }
   }

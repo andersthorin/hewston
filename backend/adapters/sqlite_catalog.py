@@ -230,8 +230,9 @@ class SqliteCatalog(CatalogPort):
                     strategy_id=r["strategy_id"],
                     status=r["status"],
                     symbol=r["symbol"],
-                    from_date=r["from_date"],
-                    to_date=r["to_date"],
+                    # Map database field names to model field names
+                    run_from=r["from_date"],
+                    run_to=r["to_date"],
                     duration_ms=r["duration_ms"],
                 )
                 for r in rows
