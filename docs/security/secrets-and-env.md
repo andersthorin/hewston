@@ -19,7 +19,6 @@ Status: v0.1 — Guidance for configuring local development without leaking secr
 ```
 cp .env.example .env
 edit .env
-```
 2) Export into your shell (bash/zsh):
 ```
 export $(grep -v '^#' .env | xargs)

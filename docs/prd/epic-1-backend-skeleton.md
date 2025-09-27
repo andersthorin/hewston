@@ -1,4 +1,4 @@
-# Epic 1 — Backend Skeleton
+s# Epic 1 — Backend Skeleton
 
 Goal
 - Establish the FastAPI application skeleton with health endpoint, WebSocket echo, route stubs, and DI wiring as the foundation for subsequent epics.
