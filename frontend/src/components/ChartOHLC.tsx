@@ -67,3 +67,4 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
 })
 
 export default ChartOHLC
+export type { CandlestickChartAPI }

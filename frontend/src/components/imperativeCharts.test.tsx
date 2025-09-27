@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import React, { createRef } from 'react'
+import { createRef } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
 
@@ -27,7 +27,7 @@ import EquityChart, { type EquityChartAPI } from './EquityChart'
 import type { MockChart } from '../types/charts'
 import type { CandlestickData, LineData } from 'lightweight-charts'
 
-const getChartMock = (): MockChart => (createChartLWC as jest.MockedFunction<typeof createChartLWC>).mock.results[0].value
+const getChartMock = (): MockChart => (createChartLWC as any).mock.results[0].value
 
 describe('imperative charts API', () => {
   beforeEach(() => cleanup())

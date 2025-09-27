@@ -44,7 +44,8 @@ class RunSummary(BaseModel):
     strategy_id: str
     status: str
     symbol: Optional[str] = None
-    from_date: Optional[str] = None
-    to_date: Optional[str] = None
+    # Standardized field names (must match frontend RunSummarySchema)
+    run_from: Optional[str] = None
+    run_to: Optional[str] = None
     duration_ms: Optional[int] = None
 

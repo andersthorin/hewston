@@ -62,7 +62,7 @@ export function useChartInitialization(
       let series: CandlestickSeriesApi | LineSeriesApi
       if (seriesType === 'candlestick') {
         // Try different methods for candlestick series compatibility
-        if ('addSeries' in chart) {
+        if ('addSeries' in chart && chart.addSeries) {
           series = chart.addSeries(CandlestickSeries) as CandlestickSeriesApi
         } else if ('addCandlestickSeries' in chart) {
           series = (chart as unknown as { addCandlestickSeries: () => CandlestickSeriesApi }).addCandlestickSeries()
@@ -71,7 +71,7 @@ export function useChartInitialization(
         }
       } else {
         // Line series
-        if ('addSeries' in chart) {
+        if ('addSeries' in chart && chart.addSeries) {
           series = chart.addSeries(LineSeries, { color: '#2563EB', lineWidth: 2 }) as LineSeriesApi
         } else if ('addLineSeries' in chart) {
           series = (chart as unknown as { addLineSeries: (options: { color: string; lineWidth: number }) => LineSeriesApi }).addLineSeries({ color: '#2563EB', lineWidth: 2 })

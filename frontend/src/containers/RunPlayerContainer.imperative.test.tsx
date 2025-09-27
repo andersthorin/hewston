@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 
-import React from 'react'
+// React import not needed for this test file
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, cleanup } from '@testing-library/react'
 import type { MockChart, MockTimeScale, MockSeries } from '../types/charts'
@@ -46,7 +46,7 @@ import { createChart as createChartLWC } from 'lightweight-charts'
 import { __emit } from '../services/ws'
 import RunPlayerContainer from './RunPlayerContainer'
 
-const charts = (): MockChart[] => (createChartLWC as jest.MockedFunction<typeof createChartLWC>).mock.results.map((r: { value: MockChart }) => r.value)
+const charts = (): MockChart[] => (createChartLWC as any).mock.results.map((r: { value: MockChart }) => r.value)
 
 describe('RunPlayerContainer imperative updates', () => {
   beforeEach(() => cleanup())

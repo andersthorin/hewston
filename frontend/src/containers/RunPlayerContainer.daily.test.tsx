@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import React from 'react'
+// React import not needed for this test file
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, cleanup, fireEvent, screen } from '@testing-library/react'
 import type { MockChart, MockTimeScale, MockSeries } from '../types/charts'
@@ -45,7 +45,7 @@ import { createChart as createChartLWC } from 'lightweight-charts'
 import { __emit } from '../services/ws'
 import RunPlayerContainer from './RunPlayerContainer'
 
-const charts = (): MockChart[] => (createChartLWC as jest.MockedFunction<typeof createChartLWC>).mock.results.map((r: { value: MockChart }) => r.value)
+const charts = (): MockChart[] => (createChartLWC as any).mock.results.map((r: { value: MockChart }) => r.value)
 
 function emitFrame({ ts, ohlc, equity }: { ts: string, ohlc?: { o?: number; h?: number; l?: number; c?: number; v?: number }, equity?: { ts: string; value: number } }) {
   __emit({ t: 'frame', ts, dropped: 0, ohlc: ohlc ?? null, orders: [], equity: equity ?? null })
@@ -101,8 +101,8 @@ describe('RunPlayerContainer daily aggregates', () => {
     // Minute frame should now call update with numeric time (seconds)
     emitFrame({ ts: '2024-10-02T12:00:00Z', ohlc: { o: 30, h: 31, l: 29, c: 30.5 } })
     emitFrame({ ts: '2024-10-02T12:01:00Z', ohlc: { o: 31, h: 32, l: 30, c: 31.2 } })
-    const recent = ohlcSeries.update.mock.calls.slice(-3).map(c => c[0])
-    expect(recent.some(a => typeof a.time === 'number')).toBe(true)
+    const recent = ohlcSeries.update.mock.calls.slice(-3).map((c: any) => c[0])
+    expect(recent.some((a: any) => typeof a.time === 'number')).toBe(true)
   })
 })
 

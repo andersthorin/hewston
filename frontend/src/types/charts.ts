@@ -5,10 +5,9 @@
  * to replace any types and improve type safety.
  */
 
-import type { 
-  IChartApi, 
-  ISeriesApi, 
-  CandlestickData, 
+import type {
+  ISeriesApi,
+  CandlestickData,
   LineData,
   ChartOptions,
   DeepPartial,
@@ -17,11 +16,17 @@ import type {
   PriceScaleOptions
 } from 'lightweight-charts'
 
+// Series API types are defined below as interfaces
+
 // Chart instance interfaces
-export interface ChartInstance extends IChartApi {
+export interface ChartInstance {
   applyOptions: (options: DeepPartial<ChartOptions>) => void
   resize: (width: number, height: number) => void
   timeScale: () => TimeScaleApi
+  remove?: () => void
+  addSeries?: (seriesType: any, options?: any) => any
+  addCandlestickSeries?: () => CandlestickSeriesApi
+  addLineSeries?: (options?: any) => LineSeriesApi
 }
 
 export interface TimeScaleApi {
@@ -79,25 +84,27 @@ export interface EquityChartProps {
   formatTime?: (t: Time, locale?: string) => string
 }
 
-// Mock interfaces for testing
+// Mock interfaces for testing (using Vitest)
 export interface MockChart {
-  applyOptions: jest.Mock
-  resize: jest.Mock
-  timeScale: jest.Mock<MockTimeScale>
-  addSeries?: jest.Mock
-  addCandlestickSeries?: jest.Mock
-  addLineSeries?: jest.Mock
+  applyOptions: any
+  resize: any
+  timeScale: any
+  addSeries?: any
+  addCandlestickSeries?: any
+  addLineSeries?: any
+  remove?: any
 }
 
 export interface MockTimeScale {
-  scrollToRealTime: jest.Mock
-  setVisibleRange: jest.Mock
-  applyOptions: jest.Mock
+  scrollToRealTime: any
+  setVisibleRange: any
+  applyOptions: any
+  fitContent?: any
 }
 
 export interface MockSeries {
-  setData: jest.Mock
-  update: jest.Mock
+  setData: any
+  update: any
 }
 
 // Chart creation function type

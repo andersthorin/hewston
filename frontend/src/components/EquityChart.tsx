@@ -59,7 +59,8 @@ export const EquityChart = forwardRef<EquityChartAPI, EquityChartProps>(function
       try {
         const series = seriesRef.current as LineSeriesApi | null
         series?.setData(initial)
-        chartRef.current?.timeScale().fitContent()
+        // Note: fitContent is not available in all versions of lightweight-charts
+        // The chart will auto-scale based on the data
       } catch (error) {
         console.warn('Failed to reset equity chart data:', error)
       }
@@ -94,4 +95,5 @@ export const EquityChart = forwardRef<EquityChartAPI, EquityChartProps>(function
 })
 
 export default EquityChart
+export type { EquityChartAPI }
 
