@@ -60,6 +60,15 @@ def seed_sample_db(db_path: str):
                 "READY",
             ),
         )
+        # Write minimal run manifests with configured windows
+        import json
+        with open("/tmp/run1.manifest", "w") as f:
+            json.dump({"from": "2024-01-01", "to": "2024-01-31"}, f)
+        with open("/tmp/run2.manifest", "w") as f:
+            json.dump({"from": "2024-06-01", "to": "2024-06-30"}, f)
+        with open("/tmp/run3.manifest", "w") as f:
+            json.dump({"from": "2024-03-01", "to": "2024-03-15"}, f)
+
         # Insert runs
         conn.execute(
             """
@@ -156,7 +165,8 @@ def test_list_runs_filters_and_order(monkeypatch):
         j = r.json()
         assert [it["run_id"] for it in j["items"]] == ["r2", "r1"]
         assert j["total"] >= 2
-        assert "from" in j["items"][0] and "to" in j["items"][0]
+        # List items should expose authoritative manifest window
+        assert "run_from" in j["items"][0] and "run_to" in j["items"][0]
 
         # ASC order
         r2 = client.get("/backtests", params={"symbol": "AAPL", "order": "created_at"})

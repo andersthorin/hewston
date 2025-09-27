@@ -6,8 +6,9 @@ export const RunSummarySchema = z.object({
   strategy_id: z.string(),
   status: z.string(),
   symbol: z.string().optional().nullable(),
-  from: z.string().optional().nullable(),
-  to: z.string().optional().nullable(),
+  // Authoritative window from run manifest (must match RunDetail)
+  run_from: z.string().optional().nullable(),
+  run_to: z.string().optional().nullable(),
   duration_ms: z.number().optional().nullable(),
 })
 export type RunSummary = z.infer<typeof RunSummarySchema>
@@ -39,6 +40,9 @@ export const RunDetailSchema = z.object({
     run_manifest_path: z.string().optional().nullable(),
   }).optional().nullable(),
   manifest: z.object({ path: z.string().optional().nullable() }).optional().nullable(),
+  // Enriched by backend: window from run-manifest.json
+  run_from: z.string().optional().nullable(),
+  run_to: z.string().optional().nullable(),
 })
 export type RunDetail = z.infer<typeof RunDetailSchema>
 

@@ -6,6 +6,7 @@ from uuid import uuid4
 
 from backend.api.routes.health import router as health_router
 from backend.api.routes.backtests import router as backtests_router
+from backend.api.routes.bars import router as bars_router
 from backend.app.logging_setup import configure_logging
 
 
@@ -48,6 +49,7 @@ def create_app() -> FastAPI:
     # REST routes
     app.include_router(health_router)
     app.include_router(backtests_router)
+    app.include_router(bars_router)
 
     return app
 

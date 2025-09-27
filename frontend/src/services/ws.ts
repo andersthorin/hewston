@@ -1,8 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+// Dev logging helper (only logs in Vite dev)
+const devLog = (...args: any[]) => { try { if ((import.meta as any).env?.DEV) console.debug('[run-ws]', ...args) } catch {} }
+
 import type { StreamFrameT } from '../schemas/stream'
 
 export type PlaybackState = {
-  status: 'idle' | 'ws' | 'sse' | 'ended' | 'error'
+  status: 'idle' | 'connecting' | 'ws' | 'sse' | 'ended' | 'error'
   playing: boolean
   speed: number
   dropped: number
@@ -15,6 +18,8 @@ export function useRunPlayback(runId: string) {
   const subsRef = useRef<Set<Subscription>>(new Set())
   const workerRef = useRef<Worker | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
+  const framesSeenRef = useRef<number>(0)
+  const playRetryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const notify = useCallback((f: StreamFrameT) => {
     subsRef.current.forEach((cb) => cb(f))
@@ -27,9 +32,16 @@ export function useRunPlayback(runId: string) {
     worker.postMessage({ type: 'init', fps: 30 })
     worker.onmessage = (ev: MessageEvent<any>) => {
       const msg = ev.data
-      if (msg.type === 'frame') notify(msg.frame as StreamFrameT)
-      else if (msg.type === 'end') setState((s) => ({ ...s, status: 'ended', playing: false }))
-      else if (msg.type === 'err') setState((s) => ({ ...s, status: 'error', playing: false }))
+      if (msg.type === 'frame') {
+        framesSeenRef.current += 1
+        notify(msg.frame as StreamFrameT)
+        // Stop keep-alive play retries after first frame
+        if (playRetryTimerRef.current) { clearInterval(playRetryTimerRef.current); playRetryTimerRef.current = null }
+      } else if (msg.type === 'end') {
+        setState((s) => ({ ...s, status: 'ended', playing: false }))
+      } else if (msg.type === 'err') {
+        setState((s) => ({ ...s, status: 'error', playing: false }))
+      }
     }
     workerRef.current = worker
 
@@ -37,8 +49,19 @@ export function useRunPlayback(runId: string) {
     let closed = false
     let reconnectTimer: any
 
+    const startPlayKeepalive = () => {
+      if (playRetryTimerRef.current) { clearInterval(playRetryTimerRef.current); playRetryTimerRef.current = null }
+      playRetryTimerRef.current = setInterval(() => {
+        const ws = wsRef.current
+        if (!ws || ws.readyState !== WebSocket.OPEN) return
+        if (framesSeenRef.current > 0) return
+        try { ws.send(JSON.stringify({ t: 'ctrl', cmd: 'play' })); devLog('play.sent', { runId, reason: 'keepalive' }) } catch {}
+      }, 1000)
+    }
+
     const connect = () => {
       if (closed) return
+      setState((s) => ({ ...s, status: 'connecting' }))
       const proto = location.protocol === 'https:' ? 'wss' : 'ws'
       const wsUrl = `${proto}://${location.host}/backtests/${runId}/ws`
       const ws = new WebSocket(wsUrl)
@@ -46,19 +69,25 @@ export function useRunPlayback(runId: string) {
 
       ws.onopen = () => {
         reconnectAttempts = 0
+        framesSeenRef.current = 0
+        devLog('ws.open', { runId })
         setState((s) => ({ ...s, status: 'ws', playing: true }))
-        ws.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
+        try { ws.send(JSON.stringify({ t: 'ctrl', cmd: 'play' })); devLog('play.sent', { runId, reason: 'open' }) } catch {}
+        startPlayKeepalive()
       }
       ws.onmessage = (ev) => {
         try {
           const msg = JSON.parse(ev.data)
-          if (msg.t === 'frame') worker.postMessage({ type: 'frame', payload: msg })
+          if (msg.t === 'frame') { devLog('frame.ts', msg.ts); worker.postMessage({ type: 'frame', payload: msg }) }
+          // ignore hb and echo
         } catch { /* ignore */ }
       }
 
       const scheduleReconnect = () => {
         if (closed) return
+        if (playRetryTimerRef.current) { clearInterval(playRetryTimerRef.current); playRetryTimerRef.current = null }
         const delay = Math.min(500 * Math.pow(2, reconnectAttempts++), 5000)
+        devLog('ws.scheduleReconnect', { runId, delay })
         reconnectTimer = setTimeout(connect, delay)
       }
       ws.onerror = () => scheduleReconnect()
@@ -70,6 +99,7 @@ export function useRunPlayback(runId: string) {
     return () => {
       closed = true
       if (reconnectTimer) clearTimeout(reconnectTimer)
+      if (playRetryTimerRef.current) { clearInterval(playRetryTimerRef.current); playRetryTimerRef.current = null }
       const ws = wsRef.current
       if (ws) {
         const rs = ws.readyState

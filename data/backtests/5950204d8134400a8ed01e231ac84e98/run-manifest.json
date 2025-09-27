@@ -1,0 +1,19 @@
+{
+  "run_id": "5950204d8134400a8ed01e231ac84e98",
+  "dataset_id": "NVDA-2024-1m",
+  "strategy_id": "sma_crossover",
+  "params": {
+    "fast": 20,
+    "slow": 50
+  },
+  "seed": 42,
+  "slippage_fees": {},
+  "speed": 60,
+  "from": "2024-10-01",
+  "to": "2024-11-30",
+  "code_hash": "1c2ba1318753539a9fbd43da0b4ee4853bcdfcba",
+  "env_lock": null,
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-09-25T19:59:52.179926+00:00"
+}
