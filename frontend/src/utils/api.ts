@@ -18,6 +18,10 @@ export interface ApiRequestOptions {
   endpointGroup?: EndpointGroup
   /** Whether to use feature flag routing (default: false for backward compatibility) */
   useFeatureFlags?: boolean
+  /** Optional router timeout (ms) when using feature flags; defaults to 30000 */
+  routerTimeoutMs?: number
+  /** Disable backend fallback when using feature flags (default: true for diagnostics) */
+  allowFallback?: boolean
 }
 
 /**
@@ -34,7 +38,8 @@ export async function apiRequest<T>(
     body,
     idempotencyKey,
     endpointGroup,
-    useFeatureFlags = false
+    useFeatureFlags = false,
+    routerTimeoutMs,
   } = options
 
   const requestHeaders: Record<string, string> = {
@@ -59,7 +64,9 @@ export async function apiRequest<T>(
   if (useFeatureFlags && endpointGroup) {
     return await apiRouter.routeAPICall<T>(endpointGroup, endpoint, {
       ...requestInit,
-      allowFallback: true,
+      // Diagnostics-first: disable fallback by default unless explicitly enabled
+      allowFallback: options.allowFallback ?? false,
+      timeout: routerTimeoutMs ?? 30000,
     })
   }
 
@@ -127,13 +134,17 @@ export async function apiDelete<T>(
 export async function apiGetWithFlags<T>(
   endpoint: string,
   endpointGroup: EndpointGroup,
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
+  timeoutMs?: number,
+  allowFallback?: boolean
 ): Promise<T> {
   return apiRequest<T>(endpoint, {
     method: 'GET',
     headers,
     endpointGroup,
-    useFeatureFlags: true
+    useFeatureFlags: true,
+    routerTimeoutMs: timeoutMs,
+    allowFallback,
   })
 }
 
@@ -144,7 +155,7 @@ export async function apiPostWithFlags<T>(
   endpoint: string,
   endpointGroup: EndpointGroup,
   body?: unknown,
-  options?: { headers?: Record<string, string>; idempotencyKey?: string }
+  options?: { headers?: Record<string, string>; idempotencyKey?: string; timeoutMs?: number }
 ): Promise<T> {
   return apiRequest<T>(endpoint, {
     method: 'POST',
@@ -153,5 +164,6 @@ export async function apiPostWithFlags<T>(
     idempotencyKey: options?.idempotencyKey,
     endpointGroup,
     useFeatureFlags: true,
+    routerTimeoutMs: options?.timeoutMs,
   })
 }

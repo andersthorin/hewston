@@ -118,12 +118,14 @@ async def get_chart_data(
         rth_only=request_data.rth_only
     )
     
+    t_cache_get = time.perf_counter()
     cached_response = await cache_service.get_chart_data(cache_key, correlation_id)
+    cache_get_ms = int((time.perf_counter() - t_cache_get) * 1000)
     if cached_response:
         # Update metadata for cache hit
         cached_response.metadata.cache_hit = True
         cached_response.metadata.load_time_ms = int((time.perf_counter() - start_time) * 1000)
-        
+
         logger.info(
             "chart_data.cache_hit",
             extra={
@@ -131,41 +133,48 @@ async def get_chart_data(
                 "symbol": symbol,
                 "timeframe": timeframe,
                 "bars_count": len(cached_response.bars),
+                "cache_get_ms": cache_get_ms,
                 "load_time_ms": cached_response.metadata.load_time_ms,
             }
         )
-        
-        return cached_response
-    
+
+        # Server-Timing for cache hit
+        headers = {"Server-Timing": f"cache;dur={cache_get_ms}, total;dur={cached_response.metadata.load_time_ms}"}
+        return JSONResponse(content=cached_response.model_dump(), headers=headers)
+
     # Fetch data from backend
     try:
+        t_backend_start = time.perf_counter()
         backend_data, backend_calls = await _fetch_backend_data(
             backend_proxy,
             request_data,
             correlation_id
         )
-        
+        backend_time_ms = int((time.perf_counter() - t_backend_start) * 1000)
+
         if not backend_data:
             raise HTTPException(
                 status_code=404,
                 detail=f"No data found for {symbol} in timeframe {timeframe}"
             )
-        
+
+        t_transform_start = time.perf_counter()
         # Transform data
         bars = data_transformer.transform_backend_bars(
             backend_data,
             request_data.timeframe,
             correlation_id
         )
-        
+
         # Validate data
         bars = data_transformer.validate_bar_data(bars, correlation_id)
-        
+        transform_time_ms = int((time.perf_counter() - t_transform_start) * 1000)
+
         # Apply decimation if needed
         decimated = False
         decimation_stride = 1
-        
-        if (request_data.timeframe == TimeframeEnum.MINUTE_DECIMATED or 
+
+        if (request_data.timeframe == TimeframeEnum.MINUTE_DECIMATED or
             len(bars) > request_data.target_points):
             bars, decimation_stride = data_transformer.decimate_data(
                 bars,
@@ -173,13 +182,13 @@ async def get_chart_data(
                 correlation_id
             )
             decimated = decimation_stride > 1
-        
+
         # Determine data source
         data_source = _get_data_source_endpoint(request_data.timeframe)
-        
+
         # Create response
         load_time_ms = int((time.perf_counter() - start_time) * 1000)
-        
+
         response = ChartDataResponse(
             symbol=request_data.symbol,
             timeframe=request_data.timeframe,
@@ -196,21 +205,23 @@ async def get_chart_data(
                 data_source=data_source
             )
         )
-        
+
         # Cache the response
         ttl = cache_service.calculate_ttl(
             str(request_data.from_date),
             str(request_data.to_date),
             request_data.timeframe
         )
-        
+
+        t_cache_set = time.perf_counter()
         await cache_service.set_chart_data(
             cache_key,
             response,
             ttl,
             correlation_id
         )
-        
+        cache_set_ms = int((time.perf_counter() - t_cache_set) * 1000)
+
         logger.info(
             "chart_data.success",
             extra={
@@ -221,11 +232,20 @@ async def get_chart_data(
                 "decimated": decimated,
                 "backend_calls": backend_calls,
                 "load_time_ms": load_time_ms,
+                "backend_time_ms": backend_time_ms,
+                "transform_time_ms": transform_time_ms,
+                "cache_get_ms": cache_get_ms,
+                "cache_set_ms": cache_set_ms,
             }
         )
-        
-        return response
-        
+
+        # Add server timing headers for browser diagnostics
+        headers = {
+            "Server-Timing": f"backend;dur={backend_time_ms}, transform;dur={transform_time_ms}, cache_get;dur={cache_get_ms}, cache_set;dur={cache_set_ms}, total;dur={load_time_ms}",
+        }
+
+        return JSONResponse(content=response.model_dump(), headers=headers)
+
     except HTTPException:
         raise
     except Exception as e:

@@ -65,16 +65,10 @@ export interface ChartDataRequest {
  */
 export class ChartDataService {
   /**
-   * Fetch chart data with automatic BFF/backend routing based on feature flags.
+   * Fetch chart data - force BFF path exclusively for diagnostics.
    */
   public async fetchChartData(request: ChartDataRequest): Promise<BFFChartDataResponse> {
-    const useBFF = featureFlagService.isFeatureFlagEnabled('chartData')
-    
-    if (useBFF) {
-      return await this.fetchFromBFF(request)
-    } else {
-      return await this.fetchFromBackend(request)
-    }
+    return await this.fetchFromBFF(request)
   }
 
   /**
@@ -95,7 +89,10 @@ export class ChartDataService {
 
     const raw = await apiGetWithFlags(
       `/chart-data?${params.toString()}`,
-      'chartData'
+      'chartData',
+      undefined,
+      15000, // Cap BFF attempt at 15s for profiling; no fallback (diagnostics)
+      false
     )
 
     // Normalize BFF response (timestamp/open/high/low/close) to frontend shape (t/o/h/l/c)
