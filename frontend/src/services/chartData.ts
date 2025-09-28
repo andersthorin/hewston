@@ -83,20 +83,53 @@ export class ChartDataService {
   private async fetchFromBFF(request: ChartDataRequest): Promise<BFFChartDataResponse> {
     const params = new URLSearchParams({
       symbol: request.symbol,
-      timeframe: request.timeframe,
+      // Map UI timeframe to BFF enum values
+      timeframe: request.timeframe === 'daily' ? '1D' : request.timeframe === 'hour' ? '1H' : request.timeframe === 'minute' ? '1M' : request.timeframe,
     })
-    
+
     if (request.from) params.set('from', request.from)
     if (request.to) params.set('to', request.to)
-    if (request.target) params.set('target', String(request.target))
+    // BFF expects target_points, not target
+    if (request.target !== undefined) params.set('target_points', String(request.target))
     if (request.rth_only !== undefined) params.set('rth_only', String(request.rth_only))
 
-    const response = await apiGetWithFlags(
+    const raw = await apiGetWithFlags(
       `/chart-data?${params.toString()}`,
       'chartData'
     )
 
-    return BFFChartDataResponseSchema.parse(response)
+    // Normalize BFF response (timestamp/open/high/low/close) to frontend shape (t/o/h/l/c)
+    const timeframeOut: 'daily' | 'minute' | 'hour' =
+      raw?.timeframe === '1D' ? 'daily' : raw?.timeframe === '1H' ? 'hour' : raw?.timeframe === '1M' ? 'minute' : request.timeframe
+
+    const bars = Array.isArray(raw?.bars) ? raw.bars : []
+    const barsOut = bars.map((b: any) => ({
+      t: b?.t ?? b?.timestamp,
+      o: b?.o ?? b?.open ?? 0,
+      h: b?.h ?? b?.high ?? 0,
+      l: b?.l ?? b?.low ?? 0,
+      c: b?.c ?? b?.close ?? 0,
+      v: Number(b?.v ?? b?.volume ?? 0) || 0,
+      n: Number(b?.n ?? 0) || 0,
+    }))
+
+    const out = {
+      symbol: raw?.symbol ?? request.symbol,
+      timeframe: timeframeOut,
+      bars: barsOut,
+      meta: {
+        from: raw?.from_date ?? request.from,
+        to: raw?.to_date ?? request.to,
+        stride_minutes: undefined,
+        points: barsOut.length,
+        decimated: Boolean(raw?.metadata?.decimated),
+        cache_hit: Boolean(raw?.metadata?.cache_hit),
+        load_time_ms: typeof raw?.metadata?.load_time_ms === 'number' ? raw.metadata.load_time_ms : undefined,
+        source: 'bff' as const,
+      },
+    }
+
+    return BFFChartDataResponseSchema.parse(out)
   }
 
   /**

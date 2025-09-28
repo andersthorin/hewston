@@ -422,6 +422,3 @@ export class WebSocketPerformanceTester {
 
 // Export singleton instance
 export const webSocketPerformanceTester = new WebSocketPerformanceTester()
-
-// Export class for testing
-export { WebSocketPerformanceTester }

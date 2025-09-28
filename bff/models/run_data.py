@@ -11,7 +11,7 @@ from datetime import datetime
 
 class RunDetail(BaseModel):
     """Run detail information."""
-    
+
     run_id: str = Field(..., description="Unique run identifier")
     status: str = Field(..., description="Run status (QUEUED, RUNNING, COMPLETED, FAILED)")
     strategy_id: str = Field(..., description="Strategy identifier")
@@ -21,6 +21,10 @@ class RunDetail(BaseModel):
     completed_at: Optional[str] = Field(default=None, description="Run completion timestamp")
     params: Dict[str, Any] = Field(default_factory=dict, description="Strategy parameters")
     error_message: Optional[str] = Field(default=None, description="Error message if failed")
+    # BFF additions propagated from backend manifest/details when available
+    dataset_id: Optional[str] = Field(default=None, description="Dataset identifier for this run")
+    run_from: Optional[str] = Field(default=None, description="Run window start date (YYYY-MM-DD)")
+    run_to: Optional[str] = Field(default=None, description="Run window end date (YYYY-MM-DD)")
 
 
 class RunMetrics(BaseModel):
@@ -42,20 +46,20 @@ class RunMetrics(BaseModel):
 
 
 class EquityPoint(BaseModel):
-    """Equity curve data point."""
-    
-    timestamp: str = Field(..., description="Timestamp")
-    equity: float = Field(..., description="Portfolio equity value")
+    """Equity curve data point (frontend contract)."""
+
+    ts: str = Field(..., description="Timestamp (ISO string)")
+    value: float = Field(..., description="Portfolio equity value")
     drawdown: Optional[float] = Field(default=None, description="Drawdown percentage")
 
 
 class OrderData(BaseModel):
-    """Order execution data."""
-    
+    """Order execution data (frontend contract)."""
+
     order_id: str = Field(..., description="Order identifier")
-    timestamp: str = Field(..., description="Order timestamp")
+    ts: str = Field(..., description="Order timestamp (ISO string)")
     symbol: str = Field(..., description="Trading symbol")
-    side: str = Field(..., description="Order side (BUY/SELL)")
+    side: str = Field(..., description="Order side (buy/sell)")
     quantity: int = Field(..., description="Order quantity")
     price: float = Field(..., description="Execution price")
     order_type: str = Field(..., description="Order type (MARKET/LIMIT)")

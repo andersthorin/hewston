@@ -354,9 +354,13 @@ class RunDataAggregator:
             started_at=data.get("started_at"),
             completed_at=data.get("completed_at"),
             params=data.get("params", {}),
-            error_message=data.get("error_message")
+            error_message=data.get("error_message"),
+            # additional fields from backend details/manifest when available
+            dataset_id=data.get("dataset_id"),
+            run_from=data.get("run_from"),
+            run_to=data.get("run_to"),
         )
-    
+
     def _transform_metrics(
         self,
         data: Dict[str, Any],
@@ -384,33 +388,86 @@ class RunDataAggregator:
         data: Dict[str, Any],
         correlation_id: Optional[str]
     ) -> List[EquityPoint]:
-        """Transform backend equity data to frontend format."""
-        equity_points = []
-        for point in data.get("equity", []):
-            equity_points.append(EquityPoint(
-                timestamp=point.get("timestamp", ""),
-                equity=point.get("equity", 0.0),
-                drawdown=point.get("drawdown")
-            ))
+        """Transform backend equity data to frontend contract {ts, value, drawdown?}.
+        Accepts flexible input shapes: {timestamp,equity}, {ts,value}, or {ts_utc,value}.
+        Filters out records missing timestamp or value.
+        """
+        equity_points: List[EquityPoint] = []
+        for point in data.get("equity", []) or []:
+            # Extract timestamp
+            ts = point.get("ts") or point.get("timestamp") or point.get("ts_utc") or ""
+            # Extract value
+            val = point.get("value") if point.get("value") is not None else point.get("equity")
+            # Skip invalid records
+            if ts in (None, "") or val is None:
+                continue
+            # Ensure ISO string for ts if a datetime-like was passed through
+            try:
+                import pandas as pd  # local import to avoid hard dependency at module import time
+                ts_iso = pd.to_datetime(ts, utc=True).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
+                ts_iso = str(ts)
+            dd = point.get("drawdown")
+            try:
+                dd_val = float(dd) if dd is not None else None
+            except Exception:
+                dd_val = None
+            try:
+                val_f = float(val)
+            except Exception:
+                # If non-numeric, skip
+                continue
+            equity_points.append(EquityPoint(ts=ts_iso, value=val_f, drawdown=dd_val))
         return equity_points
-    
+
     def _transform_orders(
         self,
         data: Dict[str, Any],
         correlation_id: Optional[str]
     ) -> List[OrderData]:
-        """Transform backend order data to frontend format."""
-        orders = []
-        for order in data.get("orders", []):
+        """Transform backend order data to frontend contract with {ts, side, quantity, price, ...}.
+        Normalizes side to lowercase 'buy'|'sell' when possible and maps timestamp→ts.
+        """
+        orders: List[OrderData] = []
+        for order in data.get("orders", []) or []:
+            ts = order.get("ts") or order.get("timestamp") or order.get("ts_utc") or ""
+            try:
+                import pandas as pd
+                ts_iso = pd.to_datetime(ts, utc=True).strftime("%Y-%m-%dT%H:%M:%SZ") if ts else ""
+            except Exception:
+                ts_iso = str(ts) if ts is not None else ""
+            side_raw = order.get("side") or ""
+            side_norm = side_raw.lower() if isinstance(side_raw, str) else ""
+            if side_norm in ("buy", "sell"):
+                side_out = side_norm
+            else:
+                # best-effort mapping from uppercase or other variants
+                if str(side_raw).upper() == "BUY":
+                    side_out = "buy"
+                elif str(side_raw).upper() == "SELL":
+                    side_out = "sell"
+                else:
+                    side_out = side_norm or "buy"  # default to buy for schema satisfaction
+            qty = order.get("quantity")
+            if qty is None:
+                qty = order.get("qty")
+            try:
+                qty_i = int(qty) if qty is not None else 0
+            except Exception:
+                qty_i = 0
+            try:
+                price_f = float(order.get("price", 0.0) or 0.0)
+            except Exception:
+                price_f = 0.0
             orders.append(OrderData(
-                order_id=order.get("order_id", ""),
-                timestamp=order.get("timestamp", ""),
-                symbol=order.get("symbol", ""),
-                side=order.get("side", ""),
-                quantity=order.get("quantity", 0),
-                price=order.get("price", 0.0),
-                order_type=order.get("order_type", ""),
-                status=order.get("status", ""),
-                commission=order.get("commission")
+                order_id=str(order.get("order_id", "")),
+                ts=ts_iso,
+                symbol=str(order.get("symbol", "")),
+                side=side_out,
+                quantity=qty_i,
+                price=price_f,
+                order_type=str(order.get("order_type") or order.get("type") or ""),
+                status=str(order.get("status") or "FILLED"),
+                commission=(float(order.get("commission")) if order.get("commission") is not None else None),
             ))
         return orders

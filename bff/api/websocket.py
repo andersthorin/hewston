@@ -6,6 +6,7 @@ Handles run streaming, connection management, and message routing.
 """
 
 import uuid
+import json
 import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Path, Depends
 from typing import Optional
@@ -58,7 +59,7 @@ async def websocket_run_stream(
         }
         await connection_manager.handle_client_message(
             connection_id,
-            str(subscribe_message).replace("'", '"')
+            json.dumps(subscribe_message)
         )
         
         logger.info(
@@ -84,23 +85,42 @@ async def websocket_run_stream(
                     }
                 )
                 break
-                
+
             except Exception as e:
+                # Log the error with details but avoid cascading error responses
                 logger.error(
-                    "websocket.message_error",
+                    f"websocket.message_error: {str(e)}",
                     extra={
                         "connection_id": connection_id,
                         "run_id": run_id,
                         "error": str(e),
+                        "error_type": type(e).__name__,
                     }
                 )
-                # Send error to client but continue connection
-                await connection_manager._send_error(
-                    connection_id,
-                    "MESSAGE_ERROR",
-                    f"Error processing message: {str(e)}"
-                )
-                
+
+                # Only send error response for certain types of errors to avoid cascades
+                # Don't send error responses for connection-related issues that might cause more errors
+                if not isinstance(e, (ConnectionResetError, BrokenPipeError, OSError)):
+                    try:
+                        await connection_manager._send_error(
+                            connection_id,
+                            "MESSAGE_ERROR",
+                            f"Error processing message: {str(e)}"
+                        )
+                    except Exception as send_error:
+                        # If sending the error response fails, just log it and continue
+                        logger.debug(
+                            "websocket.error_response_failed",
+                            extra={
+                                "connection_id": connection_id,
+                                "run_id": run_id,
+                                "original_error": str(e),
+                                "send_error": str(send_error),
+                            }
+                        )
+                # Break to avoid tight error loop and terminal spam
+                break
+
     except Exception as e:
         logger.exception(
             "websocket.connection_error",
@@ -165,22 +185,40 @@ async def websocket_general_stream(websocket: WebSocket):
                     extra={"connection_id": connection_id}
                 )
                 break
-                
+
             except Exception as e:
+                # Log the error with details but avoid cascading error responses
                 logger.error(
-                    "websocket.general_message_error",
+                    f"websocket.general_message_error: {str(e)}",
                     extra={
                         "connection_id": connection_id,
                         "error": str(e),
+                        "error_type": type(e).__name__,
                     }
                 )
-                # Send error to client but continue connection
-                await connection_manager._send_error(
-                    connection_id,
-                    "MESSAGE_ERROR",
-                    f"Error processing message: {str(e)}"
-                )
-                
+
+                # Only send error response for certain types of errors to avoid cascades
+                # Don't send error responses for connection-related issues that might cause more errors
+                if not isinstance(e, (ConnectionResetError, BrokenPipeError, OSError)):
+                    try:
+                        await connection_manager._send_error(
+                            connection_id,
+                            "MESSAGE_ERROR",
+                            f"Error processing message: {str(e)}"
+                        )
+                    except Exception as send_error:
+                        # If sending the error response fails, just log it and continue
+                        logger.debug(
+                            "websocket.general_error_response_failed",
+                            extra={
+                                "connection_id": connection_id,
+                                "original_error": str(e),
+                                "send_error": str(send_error),
+                            }
+                        )
+                # Break to avoid tight error loop and terminal spam
+                break
+
     except Exception as e:
         logger.exception(
             "websocket.general_connection_error",

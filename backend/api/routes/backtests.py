@@ -112,6 +112,130 @@ async def get_backtest(run_id: str):
         )
     return data
 
+
+
+@router.get("/backtests/{run_id}/metrics")
+async def get_backtest_metrics(run_id: str):
+    """Return metrics.json for a run.
+    Shape: a flat JSON object with numeric fields (arbitrary keys allowed).
+    """
+    run = get_run_service(run_id)
+    if not run:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"error": {"code": "RUN_NOT_FOUND", "message": f"Run {run_id} not found"}},
+        )
+    metrics_path = ((run.get("artifacts") or {}).get("metrics_path"))
+    try:
+        if not metrics_path:
+            raise FileNotFoundError("missing metrics_path")
+        import os
+        if not os.path.isfile(metrics_path):
+            raise FileNotFoundError(metrics_path)
+        with open(metrics_path, "r") as f:
+            data = json.load(f)
+        return JSONResponse(status_code=200, content=data)
+    except FileNotFoundError:
+        return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND", "message": "metrics not available"}})
+    except Exception as e:
+        logger.exception("get_metrics.error", extra={"run_id": run_id, "error": str(e)[:200]})
+        return JSONResponse(status_code=500, content={"error": {"code": "SERVER_ERROR", "message": "failed to load metrics"}})
+
+
+@router.get("/backtests/{run_id}/equity")
+async def get_backtest_equity(run_id: str):
+    """Return equity curve as list of points: { equity: [{timestamp, equity, drawdown?}] }.
+    Parquet schema expected: columns ['ts_utc', 'value'] where ts_utc is datetime-like.
+    """
+    run = get_run_service(run_id)
+    if not run:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"error": {"code": "RUN_NOT_FOUND", "message": f"Run {run_id} not found"}},
+        )
+    eq_path = ((run.get("artifacts") or {}).get("equity_path"))
+    try:
+        if not eq_path:
+            raise FileNotFoundError("missing equity_path")
+        import os
+        if not os.path.isfile(eq_path):
+            raise FileNotFoundError(eq_path)
+        import polars as pl
+        df = pl.read_parquet(eq_path)
+        # Accept legacy naming too; normalize to 'ts_utc'
+        if "ts" in df.columns and "ts_utc" not in df.columns:
+            df = df.rename({"ts": "ts_utc"})
+        cols = [c for c in ["ts_utc", "value", "drawdown"] if c in df.columns]
+        df = df.select(cols)
+        points = []
+        for r in df.to_dicts():
+            ts = r.get("ts_utc")
+            # Normalize to ISO string
+            try:
+                iso = pd.to_datetime(ts, utc=True).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
+                iso = str(ts)
+            pt = {"timestamp": iso, "equity": float(r.get("value", 0.0))}
+            if "drawdown" in r and r.get("drawdown") is not None:
+                try:
+                    pt["drawdown"] = float(r.get("drawdown"))
+                except Exception:
+                    pass
+            points.append(pt)
+        return JSONResponse(status_code=200, content={"equity": points})
+    except FileNotFoundError:
+        return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND", "message": "equity not available"}})
+    except Exception as e:
+        logger.exception("get_equity.error", extra={"run_id": run_id, "error": str(e)[:200]})
+        return JSONResponse(status_code=500, content={"error": {"code": "SERVER_ERROR", "message": "failed to load equity"}})
+
+
+@router.get("/backtests/{run_id}/orders")
+async def get_backtest_orders(run_id: str):
+    """Return orders as list under { orders: [...] }.
+    Parquet schema suggested in docs: ts_utc, side, qty, price, order_id, type, time_in_force, symbol?
+    Response maps to aggregator-friendly shape.
+    """
+    run = get_run_service(run_id)
+    if not run:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content={"error": {"code": "RUN_NOT_FOUND", "message": f"Run {run_id} not found"}},
+        )
+    path = ((run.get("artifacts") or {}).get("orders_path"))
+    try:
+        if not path:
+            raise FileNotFoundError("missing orders_path")
+        import os
+        if not os.path.isfile(path):
+            raise FileNotFoundError(path)
+        import polars as pl
+        df = pl.read_parquet(path)
+        rows = []
+        for r in df.to_dicts():
+            ts = r.get("ts_utc") or r.get("timestamp") or r.get("ts")
+            try:
+                iso = pd.to_datetime(ts, utc=True).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except Exception:
+                iso = str(ts) if ts is not None else ""
+            rows.append({
+                "order_id": str(r.get("order_id", "")),
+                "timestamp": iso,
+                "symbol": str(r.get("symbol", "")),
+                "side": str(r.get("side", "")),
+                "quantity": int(r.get("qty") if r.get("qty") is not None else r.get("quantity") or 0),
+                "price": float(r.get("price", 0.0) or 0.0),
+                "order_type": str(r.get("type") or r.get("order_type") or ""),
+                "status": str(r.get("status") or "FILLED"),
+                "commission": (float(r.get("commission")) if r.get("commission") is not None else None),
+            })
+        return JSONResponse(status_code=200, content={"orders": rows})
+    except FileNotFoundError:
+        return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND", "message": "orders not available"}})
+    except Exception as e:
+        logger.exception("get_orders.error", extra={"run_id": run_id, "error": str(e)[:200]})
+        return JSONResponse(status_code=500, content={"error": {"code": "SERVER_ERROR", "message": "failed to load orders"}})
+
 HEARTBEAT_SECONDS = 5.0
 
 

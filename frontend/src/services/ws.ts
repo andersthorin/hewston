@@ -51,7 +51,7 @@ export function useRunPlayback(runId: string) {
       ...s,
       health,
       connectionSource: health.connectionSource,
-      dropped: health.droppedFrames
+      dropped: health.droppedFrames || s.dropped
     }))
   }, [])
 

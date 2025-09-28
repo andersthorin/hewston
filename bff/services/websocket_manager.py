@@ -137,6 +137,9 @@ class WebSocketConnectionManager:
                 await self._handle_unsubscribe(connection_id, message_dict)
             elif message_type == MessageType.PING:
                 await self._handle_ping(connection_id, message_dict)
+            elif message_dict.get("t") == "ctrl":
+                # Handle frontend control messages (forward to backend)
+                await self._handle_control_message(connection_id, message_dict)
             else:
                 await self._send_error(
                     connection_id,
@@ -236,20 +239,72 @@ class WebSocketConnectionManager:
         """Handle ping message."""
         try:
             ping_msg = PingMessage(**message_dict)
-            
+
             # Update last ping time
             if connection_id in self.connection_metadata:
                 self.connection_metadata[connection_id]["last_ping"] = ping_msg.timestamp
-            
+
             # Send pong response
             pong_msg = PongMessage(ping_timestamp=ping_msg.timestamp)
             await self._send_to_client(connection_id, pong_msg)
-            
+
         except Exception as e:
             await self._send_error(
                 connection_id,
                 "PING_ERROR",
                 f"Error handling ping: {str(e)}"
+            )
+
+    async def _handle_control_message(self, connection_id: str, message_dict: Dict[str, Any]) -> None:
+        """Handle frontend control messages by forwarding to backend."""
+        try:
+            # Find which run this connection is subscribed to
+            if connection_id not in self.connection_metadata:
+                await self._send_error(
+                    connection_id,
+                    "NO_SUBSCRIPTION",
+                    "Must be subscribed to a run to send control messages"
+                )
+                return
+
+            subscriptions = self.connection_metadata[connection_id].get("subscriptions", set())
+            if not subscriptions:
+                await self._send_error(
+                    connection_id,
+                    "NO_SUBSCRIPTION",
+                    "Must be subscribed to a run to send control messages"
+                )
+                return
+
+            # Forward to all subscribed runs (typically just one)
+            for run_id in subscriptions:
+                if run_id in self.backend_connections:
+                    backend_ws = self.backend_connections[run_id]
+                    try:
+                        await backend_ws.send(json.dumps(message_dict))
+                        self.logger.debug(
+                            "control.forwarded",
+                            extra={
+                                "connection_id": connection_id,
+                                "run_id": run_id,
+                                "command": message_dict.get("cmd"),
+                            }
+                        )
+                    except Exception as e:
+                        self.logger.warning(
+                            "control.forward_error",
+                            extra={
+                                "connection_id": connection_id,
+                                "run_id": run_id,
+                                "error": str(e),
+                            }
+                        )
+
+        except Exception as e:
+            await self._send_error(
+                connection_id,
+                "CONTROL_ERROR",
+                f"Error handling control message: {str(e)}"
             )
     
     async def _ensure_backend_connection(self, run_id: str) -> None:
@@ -265,7 +320,7 @@ class WebSocketConnectionManager:
         try:
             # Convert HTTP URL to WebSocket URL
             backend_ws_url = BACKEND_BASE_URL.replace("http://", "ws://").replace("https://", "wss://")
-            ws_url = f"{backend_ws_url}/backtests/{run_id}/stream"
+            ws_url = f"{backend_ws_url}/backtests/{run_id}/ws"
             
             self.logger.info(
                 "backend.connecting",
@@ -346,9 +401,8 @@ class WebSocketConnectionManager:
                 }
             )
         finally:
-            # Clean up backend connection
-            if run_id in self.backend_connections:
-                del self.backend_connections[run_id]
+            # Clean up backend connection (safe deletion)
+            self.backend_connections.pop(run_id, None)
             
             # Notify subscribers of disconnection
             await self._broadcast_to_run_subscribers(
@@ -369,9 +423,10 @@ class WebSocketConnectionManager:
             # If no more subscribers, close backend connection
             if not self.run_subscriptions[run_id]:
                 del self.run_subscriptions[run_id]
-                if run_id in self.backend_connections:
-                    await self.backend_connections[run_id].close()
-                    del self.backend_connections[run_id]
+                # Safe backend connection cleanup
+                backend_conn = self.backend_connections.pop(run_id, None)
+                if backend_conn:
+                    await backend_conn.close()
         
         # Update connection metadata
         if connection_id in self.connection_metadata:
@@ -390,10 +445,27 @@ class WebSocketConnectionManager:
         """Send message to specific client."""
         if connection_id not in self.active_connections:
             return
-        
+
         try:
             websocket = self.active_connections[connection_id]
-            
+
+            # Check if WebSocket is still open (use application_state which guards server send path)
+            app_state = getattr(websocket, "application_state", None)
+            client_state = getattr(websocket, "client_state", None)
+            app_state_name = getattr(app_state, "name", "UNKNOWN")
+            client_state_name = getattr(client_state, "name", "UNKNOWN")
+            if app_state_name != 'CONNECTED':
+                self.logger.debug(
+                    "client.websocket_not_connected",
+                    extra={
+                        "connection_id": connection_id,
+                        "app_state": app_state_name,
+                        "client_state": client_state_name,
+                    }
+                )
+                await self.disconnect_client(connection_id)
+                return
+
             # Convert message to JSON
             if hasattr(message, 'model_dump_json'):
                 message_json = message.model_dump_json()
@@ -401,10 +473,21 @@ class WebSocketConnectionManager:
                 message_json = message.json()
             else:
                 message_json = json.dumps(message)
-            
+
             await websocket.send_text(message_json)
-            
+
         except WebSocketDisconnect:
+            await self.disconnect_client(connection_id)
+        except (ConnectionResetError, BrokenPipeError, OSError) as e:
+            # Connection-related errors - disconnect client but don't log as error
+            self.logger.debug(
+                "client.connection_lost",
+                extra={
+                    "connection_id": connection_id,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                }
+            )
             await self.disconnect_client(connection_id)
         except Exception as e:
             self.logger.error(
@@ -412,17 +495,31 @@ class WebSocketConnectionManager:
                 extra={
                     "connection_id": connection_id,
                     "error": str(e),
+                    "error_type": type(e).__name__,
                 }
             )
             await self.disconnect_client(connection_id)
     
     async def _send_error(self, connection_id: str, error_code: str, error_message: str) -> None:
-        """Send error message to client."""
-        error_msg = ErrorMessage(
-            error_code=error_code,
-            error_message=error_message
-        )
-        await self._send_to_client(connection_id, error_msg)
+        """Send error message to client with error handling to prevent cascades."""
+        try:
+            error_msg = ErrorMessage(
+                error_code=error_code,
+                error_message=error_message
+            )
+            await self._send_to_client(connection_id, error_msg)
+        except Exception as e:
+            # If we can't send the error message, log it but don't raise
+            # This prevents cascading errors when the connection is in a bad state
+            self.logger.debug(
+                "error_send_failed",
+                extra={
+                    "connection_id": connection_id,
+                    "error_code": error_code,
+                    "error_message": error_message,
+                    "send_error": str(e),
+                }
+            )
     
     def get_connection_stats(self) -> Dict[str, Any]:
         """Get connection statistics."""

@@ -146,8 +146,23 @@ class APIClientRouter {
         }
       }
       return `${baseUrl}/api/v1/runs`
+    } else if (endpoint.startsWith('runs')) {
+      // Handle /runs endpoints for BFF
+      const match = endpoint.match(/^runs\/([^\/]+)(?:\/(.+))?$/)
+      if (match) {
+        const [, id, subpath] = match
+        if (!subpath) {
+          return `${baseUrl}/api/v1/runs/${id}/complete`
+        } else if (subpath === 'stream') {
+          return `${baseUrl}/api/v1/runs/${id}/stream`
+        } else {
+          return `${baseUrl}/api/v1/runs/${id}/${subpath}`
+        }
+      }
+      // For /runs (list endpoint), add the /api/v1 prefix
+      return `${baseUrl}/api/v1/${endpoint}`
     }
-    
+
     // Default: pass through
     return `${baseUrl}/${endpoint}`
   }

@@ -21,6 +21,7 @@ from bff.services.backend_client import BackendClient, create_backend_client
 from bff.services.run_aggregator import RunDataAggregator
 from bff.services.cache import CacheService
 from bff.app.dependencies import get_backend_client, get_redis_client
+from typing import Dict, Any, List
 
 router = APIRouter()
 logger = logging.getLogger("bff.run_data")
@@ -31,7 +32,171 @@ async def get_correlation_id_from_state(request) -> str:
     return getattr(request.state, 'correlation_id', 'unknown')
 
 
-@router.get("/runs/{run_id}/complete", response_model=CompleteRunResponse)
+@router.get("/runs")
+async def list_runs(
+    limit: int = Query(default=20, description="Maximum number of runs to return"),
+    offset: int = Query(default=0, description="Number of runs to skip"),
+    symbol: Optional[str] = Query(default=None, description="Filter by trading symbol"),
+    strategy_id: Optional[str] = Query(default=None, description="Filter by strategy ID"),
+    from_date: Optional[str] = Query(default=None, alias="from", description="Filter runs from this date"),
+    to_date: Optional[str] = Query(default=None, alias="to", description="Filter runs to this date"),
+    order: Optional[str] = Query(default=None, description="Sort order (created_at, -created_at)"),
+    backend_client: httpx.AsyncClient = Depends(get_backend_client),
+    redis_client = Depends(get_redis_client),
+) -> Dict[str, Any]:
+    """
+    List runs with filtering and pagination.
+
+    This endpoint provides a unified interface for listing runs with the same
+    parameters as the backend /backtests endpoint, but with BFF enhancements
+    like caching and response optimization.
+
+    Args:
+        limit: Maximum number of runs to return (1-500, default 20)
+        offset: Number of runs to skip for pagination (default 0)
+        symbol: Filter by trading symbol (optional)
+        strategy_id: Filter by strategy identifier (optional)
+        from_date: Filter runs created from this date (optional)
+        to_date: Filter runs created to this date (optional)
+        order: Sort order - 'created_at' or '-created_at' (default -created_at)
+        backend_client: HTTP client for backend communication
+        redis_client: Redis client for caching
+
+    Returns:
+        Dict containing:
+        - items: List of run summaries
+        - total: Total number of matching runs
+        - limit: Applied limit
+        - offset: Applied offset
+        - meta: Response metadata (cache info, performance metrics)
+    """
+    start_time = time.perf_counter()
+    correlation_id = f"list_runs_{int(time.time() * 1000)}"
+
+    logger.info(
+        "list_runs.request",
+        extra={
+            "correlation_id": correlation_id,
+            "limit": limit,
+            "offset": offset,
+            "symbol": symbol,
+            "strategy_id": strategy_id,
+            "from_date": from_date,
+            "to_date": to_date,
+            "order": order,
+        }
+    )
+
+    # Validate and sanitize parameters
+    limit = max(1, min(int(limit), 500))
+    offset = max(0, int(offset))
+    allowed_orders = {"created_at", "-created_at"}
+    order = order if order in allowed_orders else "-created_at"
+
+    # Build query parameters for backend
+    params = {
+        "limit": limit,
+        "offset": offset,
+    }
+    if symbol:
+        params["symbol"] = symbol
+    if strategy_id:
+        params["strategy_id"] = strategy_id
+    if from_date:
+        params["from"] = from_date
+    if to_date:
+        params["to"] = to_date
+    if order:
+        params["order"] = order
+
+    # For now, skip caching for run lists (can be added later)
+    # Run lists change frequently and caching complexity isn't worth it for this endpoint
+
+    # Fetch from backend
+    try:
+        backend_proxy = await create_backend_client(backend_client)
+        response = await backend_proxy.proxy_request(
+            method="GET",
+            path="/backtests",
+            params=params,
+            correlation_id=correlation_id
+        )
+
+        # Parse JSON response
+        if hasattr(response, 'json') and callable(response.json):
+            backend_data = response.json()
+        else:
+            # Handle FastAPI Response object
+            import json
+            backend_data = json.loads(response.body.decode())
+
+        # Add BFF metadata
+        load_time_ms = int((time.perf_counter() - start_time) * 1000)
+        enhanced_response = {
+            **backend_data,
+            "meta": {
+                "cache_hit": False,
+                "load_time_ms": load_time_ms,
+                "source": "bff",
+                "backend_calls": 1,
+            }
+        }
+
+        # Skip caching for now - can be added later if needed
+
+        logger.info(
+            "list_runs.success",
+            extra={
+                "correlation_id": correlation_id,
+                "items_count": len(enhanced_response.get("items", [])),
+                "total": enhanced_response.get("total", 0),
+                "load_time_ms": load_time_ms,
+            }
+        )
+
+        return enhanced_response
+
+    except Exception as e:
+        # Handle both httpx errors and FastAPI response errors
+        status_code = getattr(e, 'status_code', 500)
+        if hasattr(e, 'response') and hasattr(e.response, 'status_code'):
+            status_code = e.response.status_code
+
+        logger.error(
+            "list_runs.backend_error",
+            extra={
+                "correlation_id": correlation_id,
+                "status_code": status_code,
+                "error": str(e),
+                "error_type": type(e).__name__,
+            }
+        )
+
+        if status_code != 500:
+            raise HTTPException(
+                status_code=status_code,
+                detail=f"Backend error: {status_code}"
+            )
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail="Internal server error while fetching runs"
+            )
+    except Exception as e:
+        logger.error(
+            "list_runs.error",
+            extra={
+                "correlation_id": correlation_id,
+                "error": str(e),
+            }
+        )
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error while fetching runs"
+        )
+
+
+@router.get("/runs/{run_id}/complete")
 async def get_complete_run_data(
     run_id: str = Path(..., description="Run identifier"),
     include_orders: bool = Query(default=True, description="Include order execution data"),
@@ -108,7 +273,7 @@ async def get_complete_run_data(
         # Update metadata for cache hit
         cached_response.metadata.cache_hit = True
         cached_response.metadata.load_time_ms = int((time.perf_counter() - start_time) * 1000)
-        
+
         logger.info(
             "run_data.cache_hit",
             extra={
@@ -117,9 +282,82 @@ async def get_complete_run_data(
                 "load_time_ms": cached_response.metadata.load_time_ms,
             }
         )
-        
-        return cached_response
-    
+
+        # Transform to frontend contract while keeping backward-compatible fields
+        metrics_dict = None
+        if cached_response.metrics is not None:
+            md = cached_response.metrics.dict()
+            metrics_dict = {k: v for k, v in md.items() if v is not None}
+            if not metrics_dict:
+                metrics_dict = None
+        equity_list = (
+            [{"ts": p.ts, "value": p.value} for p in (cached_response.equity or [])]
+            if cached_response.equity else None
+        )
+        orders_list = (
+            [
+                {
+                    "ts": o.ts,
+                    "side": o.side,
+                    "quantity": o.quantity,
+                    "price": o.price,
+                    "order_type": o.order_type,
+                    "status": o.status,
+                }
+                for o in (cached_response.orders or [])
+            ] if cached_response.orders else None
+        )
+        # Determine run window and dataset
+        run_from_val = getattr(cached_response.run, "run_from", None)
+        run_to_val = getattr(cached_response.run, "run_to", None)
+        if (not run_from_val or not run_to_val) and equity_list and len(equity_list) > 0:
+            try:
+                run_from_val = run_from_val or equity_list[0]["ts"]
+                run_to_val = run_to_val or equity_list[-1]["ts"]
+            except Exception:
+                pass
+        dataset_id_val = getattr(cached_response.run, "dataset_id", None)
+
+        frontend_payload = {
+            # Top-level fields expected by frontend schema
+            "run_id": cached_response.run.run_id,
+            "strategy_id": cached_response.run.strategy_id,
+            "status": cached_response.run.status,
+            "symbol": cached_response.run.symbol,
+            "params": cached_response.run.params or {},
+            # Preferred naming per app memory (run_from/run_to)
+            "run_from": run_from_val,
+            "run_to": run_to_val,
+            # Optional fields
+            "dataset_id": dataset_id_val,
+            "code_hash": None,
+            "seed": None,
+            "speed": None,
+            "duration_ms": None,
+            # Aggregated data
+            "metrics": metrics_dict,
+            "equity": equity_list,
+            "orders": orders_list,
+            # Meta block for BFF
+            "meta": {
+                "aggregated": True,
+                "cache_hit": cached_response.metadata.cache_hit,
+                "load_time_ms": cached_response.metadata.load_time_ms,
+                "source": "bff",
+                "components_loaded": [
+                    name for name, val in (
+                        ("metrics", cached_response.metrics),
+                        ("equity", cached_response.equity),
+                        ("orders", cached_response.orders),
+                    ) if val
+                ],
+            },
+            # Backward-compatible fields (to avoid breaking existing tests/tools)
+            "run": cached_response.run.dict(),
+            "metadata": cached_response.metadata.dict(),
+        }
+        return JSONResponse(status_code=200, content=frontend_payload)
+
     # Aggregate data from backend
     try:
         response = await aggregator.aggregate_run_data(
@@ -161,9 +399,82 @@ async def get_complete_run_data(
                 "partial_data": response.metadata.partial_data,
             }
         )
-        
-        return response
-        
+
+        # Transform to frontend contract while keeping backward-compatible fields
+        metrics_dict = None
+        if response.metrics is not None:
+            md = response.metrics.dict()
+            metrics_dict = {k: v for k, v in md.items() if v is not None}
+            if not metrics_dict:
+                metrics_dict = None
+        equity_list = (
+            [{"ts": p.ts, "value": p.value} for p in (response.equity or [])]
+            if response.equity else None
+        )
+        orders_list = (
+            [
+                {
+                    "ts": o.ts,
+                    "side": o.side,
+                    "quantity": o.quantity,
+                    "price": o.price,
+                    "order_type": o.order_type,
+                    "status": o.status,
+                }
+                for o in (response.orders or [])
+            ] if response.orders else None
+        )
+        # Determine run window and dataset
+        run_from_val = getattr(response.run, "run_from", None)
+        run_to_val = getattr(response.run, "run_to", None)
+        if (not run_from_val or not run_to_val) and equity_list and len(equity_list) > 0:
+            try:
+                run_from_val = run_from_val or equity_list[0]["ts"]
+                run_to_val = run_to_val or equity_list[-1]["ts"]
+            except Exception:
+                pass
+        dataset_id_val = getattr(response.run, "dataset_id", None)
+
+        frontend_payload = {
+            # Top-level fields expected by frontend schema
+            "run_id": response.run.run_id,
+            "strategy_id": response.run.strategy_id,
+            "status": response.run.status,
+            "symbol": response.run.symbol,
+            "params": response.run.params or {},
+            # Preferred naming per app memory (run_from/run_to)
+            "run_from": run_from_val,
+            "run_to": run_to_val,
+            # Optional fields
+            "dataset_id": dataset_id_val,
+            "code_hash": None,
+            "seed": None,
+            "speed": None,
+            "duration_ms": None,
+            # Aggregated data
+            "metrics": metrics_dict,
+            "equity": equity_list,
+            "orders": orders_list,
+            # Meta block for BFF
+            "meta": {
+                "aggregated": True,
+                "cache_hit": response.metadata.cache_hit,
+                "load_time_ms": response.metadata.load_time_ms,
+                "source": "bff",
+                "components_loaded": [
+                    name for name, val in (
+                        ("metrics", response.metrics),
+                        ("equity", response.equity),
+                        ("orders", response.orders),
+                    ) if val
+                ],
+            },
+            # Backward-compatible fields (to avoid breaking existing tests/tools)
+            "run": response.run.dict(),
+            "metadata": response.metadata.dict(),
+        }
+        return JSONResponse(status_code=200, content=frontend_payload)
+
     except ValueError as e:
         # Run not found
         logger.warning(

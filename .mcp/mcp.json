@@ -15,7 +15,7 @@
       "args": [
         "-y",
         "@modelcontextprotocol/server-filesystem@latest",
-        "/Users/andersthorin/Projects/hewston-app/version-02"
+        "/Users/andersthorin/Projects/hewston-app/version-03"
       ],
       "transport": "stdio"
     }

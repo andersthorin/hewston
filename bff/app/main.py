@@ -36,9 +36,9 @@ async def lifespan(app: FastAPI):
     # Startup
     logger = logging.getLogger("bff.startup")
     logger.info("BFF service starting up", extra={"service": "hewston-bff"})
-    
+
     yield
-    
+
     # Shutdown
     logger.info("BFF service shutting down", extra={"service": "hewston-bff"})
     await cleanup_dependencies()
@@ -47,14 +47,14 @@ async def lifespan(app: FastAPI):
 def create_app() -> FastAPI:
     """
     Create and configure the BFF FastAPI application.
-    
+
     Returns:
         FastAPI: Configured application instance
     """
     # Configure logging using existing backend patterns
     log_level = getattr(logging, LOG_LEVEL.upper(), logging.INFO)
     configure_logging(level=log_level)
-    
+
     # Create FastAPI app with lifespan management
     app = FastAPI(
         title=BFF_API_TITLE,
@@ -82,14 +82,14 @@ def create_app() -> FastAPI:
         """
         req_id = uuid4().hex
         start = time.perf_counter()
-        
+
         # Add correlation ID to request state for downstream use
         request.state.correlation_id = req_id
-        
+
         response = await call_next(request)
-        
+
         dur_ms = int((time.perf_counter() - start) * 1000)
-        
+
         try:
             logger.info(
                 "http.access",
@@ -105,10 +105,10 @@ def create_app() -> FastAPI:
         except Exception:
             # Don't let logging errors break the request
             pass
-        
+
         # Add correlation ID to response headers for debugging
         response.headers["X-Correlation-ID"] = req_id
-        
+
         return response
 
     # Include API routes
@@ -116,6 +116,24 @@ def create_app() -> FastAPI:
     app.include_router(proxy_router, prefix="/api/v1")
     app.include_router(chart_data_router, prefix="/api/v1")
     app.include_router(run_data_router, prefix="/api/v1")
+    # Temporary legacy fallback: expose run_data and chart_data routes also at root (no /api/v1)
+    # This helps when frontend routing misconfigures the prefix.
+    app.include_router(run_data_router, prefix="")
+    app.include_router(chart_data_router, prefix="")
+
+    # Debug: log registered routes on startup to verify routing
+    try:
+        for r in app.routes:
+            methods = getattr(r, 'methods', None)
+            path = getattr(r, 'path', None)
+            if path:
+                logging.getLogger('bff.routes').info('route.registered', extra={
+                    'path': path,
+                    'methods': sorted(list(methods)) if methods else 'WEBSOCKET/OTHER'
+                })
+    except Exception:
+        pass
+
     app.include_router(websocket_router, prefix="/api/v1")
 
     return app
@@ -128,7 +146,7 @@ app = create_app()
 if __name__ == "__main__":
     import uvicorn
     from bff.app.config import BFF_DEFAULT_HOST, BFF_DEFAULT_PORT
-    
+
     uvicorn.run(
         "bff.app.main:app",
         host=BFF_DEFAULT_HOST,
