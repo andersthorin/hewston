@@ -131,6 +131,13 @@ class APIClientRouter {
    * Transform endpoint for BFF routing.
    */
   private transformBffEndpoint(baseUrl: string, endpoint: string): string {
+    // Map frontend endpoints to canonical BFF endpoints
+    if (endpoint.startsWith('chart-data')) {
+      // Preserve any tail (e.g. ?query)
+      const tail = endpoint.slice('chart-data'.length)
+      return `${baseUrl}/api/v1/chart-data${tail}`
+    }
+
     // Map backend endpoints to BFF endpoints
     if (endpoint.startsWith('bars')) {
       return `${baseUrl}/api/v1/chart-data`

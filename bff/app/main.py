@@ -116,9 +116,6 @@ def create_app() -> FastAPI:
     app.include_router(proxy_router, prefix="/api/v1")
     app.include_router(chart_data_router, prefix="/api/v1")
     app.include_router(run_data_router, prefix="/api/v1")
-    # Temporary compatibility alias: expose chart_data routes at root while FE migrates to /api/v1
-    # TODO: Remove after frontend switches to /api/v1 endpoints
-    app.include_router(chart_data_router, prefix="")
 
 
     # Debug: log registered routes on startup to verify routing

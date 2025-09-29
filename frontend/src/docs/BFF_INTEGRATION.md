@@ -30,9 +30,11 @@ VITE_BFF_WEBSOCKET_ENABLED=false    // WebSocket endpoints
 The API router (`frontend/src/utils/apiRouter.ts`) provides conditional endpoint selection:
 
 ```typescript
-// Automatically routes based on feature flags
-const response = await apiGetWithFlags('/chart-data', 'chartData')
+// Canonical BFF endpoint under /api/v1
+const response = await apiGetWithFlags('/api/v1/chart-data', 'chartData')
 ```
+
+Note: If you pass '/chart-data', the API router will remap it to '/api/v1/chart-data' when targeting the BFF. Prefer using the canonical path in new code.
 
 ### Service Layer
 
