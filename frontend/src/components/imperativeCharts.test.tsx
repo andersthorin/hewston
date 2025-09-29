@@ -23,9 +23,8 @@ vi.mock('lightweight-charts', () => {
 
 import { createChart as createChartLWC } from 'lightweight-charts'
 import ChartOHLC, { type CandlestickChartAPI } from './ChartOHLC'
-import EquityChart, { type EquityChartAPI } from './EquityChart'
 import type { MockChart } from '../types/charts'
-import type { CandlestickData, LineData } from 'lightweight-charts'
+import type { CandlestickData } from 'lightweight-charts'
 
 const getChartMock = (): MockChart => (createChartLWC as any).mock.results[0].value
 
@@ -47,19 +46,6 @@ describe('imperative charts API', () => {
     expect(series.update).toHaveBeenCalledWith(dp)
   })
 
-  it('EquityChart exposes reset/update and calls setData/update', () => {
-    const ref = createRef<EquityChartAPI>()
-    render(<EquityChart ref={ref} />)
-    const chart = getChartMock()
-    const series = chart.addLineSeries!.mock.results[0].value
 
-    const initial: LineData[] = [{ time: 1 as LineData['time'], value: 10 }]
-    ref.current!.reset(initial)
-    expect(series.setData).toHaveBeenCalledWith(initial)
-
-    const dp: LineData = { time: 2 as LineData['time'], value: 12 }
-    ref.current!.update(dp)
-    expect(series.update).toHaveBeenCalledWith(dp)
-  })
 })
 

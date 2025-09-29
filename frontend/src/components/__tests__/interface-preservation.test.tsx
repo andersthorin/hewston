@@ -9,7 +9,6 @@ import { describe, it, expect, vi } from 'vitest'
 import { render } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ChartOHLC from '../ChartOHLC'
-import EquityChart from '../EquityChart'
 import RunsTable from '../RunsTable'
 import PlaybackControls from '../PlaybackControls'
 import FiltersBar from '../FiltersBar'
@@ -78,17 +77,7 @@ describe('Component Interface Preservation', () => {
       }).not.toThrow()
     })
 
-    it('should preserve EquityChart props interface', () => {
-      const props = {
-        runId: 'test-run-123',
-        height: 300,
-        width: 600
-      }
-      
-      expect(() => {
-        render(<EquityChart {...props} />, { wrapper })
-      }).not.toThrow()
-    })
+
 
     it('should handle optional props correctly', () => {
       // Test ChartOHLC with minimal props
@@ -96,10 +85,7 @@ describe('Component Interface Preservation', () => {
         render(<ChartOHLC symbol="AAPL" timeframe="daily" />, { wrapper })
       }).not.toThrow()
 
-      // Test EquityChart with minimal props
-      expect(() => {
-        render(<EquityChart runId="test-run" />, { wrapper })
-      }).not.toThrow()
+
     })
   })
 
