@@ -9,7 +9,7 @@ import pandas as pd
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from backend.services.backtests import list_runs_service, get_run_service
+from backend.services.backtests import list_backtests_service, get_backtest_service
 
 from uuid import uuid4
 from fastapi import Body, Header, HTTPException, Request, status, Query
@@ -91,7 +91,7 @@ async def list_backtests(
             "order": order,
         },
     )
-    return list_runs_service(
+    return list_backtests_service(
         symbol=symbol,
         strategy_id=strategy_id,
         from_date=from_date,
@@ -104,7 +104,7 @@ async def list_backtests(
 
 @router.get("/backtests/{run_id}")
 async def get_backtest(run_id: str):
-    data = get_run_service(run_id)
+    data = get_backtest_service(run_id)
     if not data:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -119,7 +119,7 @@ async def get_backtest_metrics(run_id: str):
     """Return metrics.json for a run.
     Shape: a flat JSON object with numeric fields (arbitrary keys allowed).
     """
-    run = get_run_service(run_id)
+    run = get_backtest_service(run_id)
     if not run:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -147,7 +147,7 @@ async def get_backtest_equity(run_id: str):
     """Return equity curve as list of points: { equity: [{timestamp, equity, drawdown?}] }.
     Parquet schema expected: columns ['ts_utc', 'value'] where ts_utc is datetime-like.
     """
-    run = get_run_service(run_id)
+    run = get_backtest_service(run_id)
     if not run:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,

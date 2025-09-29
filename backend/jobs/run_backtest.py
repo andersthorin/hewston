@@ -72,6 +72,9 @@ def run_backtest_and_persist(
     # Move to RUNNING
     cat.set_run_status(run_id, status="RUNNING")
 
+    # Do NOT prepare or derive datasets here; admin-only via CLI/APIs.
+    # If dataset is missing/not-ready, the runner will raise and we record ERROR.
+
     t0 = time.perf_counter()
     try:
         runner = NautilusBacktestRunner()
@@ -131,16 +134,23 @@ def run_backtest_and_persist(
                 "manifest": str(manifest_path),
             },
         }
-    except Exception as e:
+    except BaseException as e:
+        # Catch BaseException to handle SystemExit raised by adapters (e.g., missing dataset)
         duration_ms = int((time.perf_counter() - t0) * 1000)
         cat.set_run_status(run_id, status="ERROR", duration_ms=duration_ms)
         try:
             import logging
             logging.getLogger(__name__).error(
                 "run.error",
-                extra={"run_id": run_id, "duration_ms": duration_ms, "code": "RUNNER_ERROR", "message": str(e)[:200]},
+                extra={
+                    "run_id": run_id,
+                    "duration_ms": duration_ms,
+                    "code": getattr(e, "__class__", type(e)).__name__,
+                    "message": str(e)[:200],
+                },
             )
         except Exception:
             pass
+        # Re-raise so callers (CLI/tests) still observe the failure
         raise
 

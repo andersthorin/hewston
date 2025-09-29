@@ -6,7 +6,7 @@ from backend.app.main import app
 def test_post_backtests_idempotency():
     client = TestClient(app)
     headers = {"Idempotency-Key": "abc123"}
-    body = {"strategy_id": "sma_crossover", "params": {"fast": 10, "slow": 20}}
+    body = {"strategy_id": "sma_crossover", "params": {"fast": 10, "slow": 20}, "symbol": "AAPL", "year": 2024}
 
     r1 = client.post("/backtests", json=body, headers=headers)
     assert r1.status_code == 202
@@ -19,6 +19,19 @@ def test_post_backtests_idempotency():
     j2 = r2.json()
     assert j2["status"] == "EXISTS"
     assert j2["run_id"] == j1["run_id"]
+
+
+def test_post_backtests_missing_symbol_year_returns_400():
+    client = TestClient(app)
+    headers = {"Idempotency-Key": "xyz789"}
+    body = {"strategy_id": "sma_crossover", "params": {"fast": 10, "slow": 20}}
+
+    r = client.post("/backtests", json=body, headers=headers)
+    assert r.status_code == 400
+    j = r.json()
+    assert j["error"]["code"] == "BAD_REQUEST"
+    assert "dataset_id or (symbol + year)" in j["error"]["message"]
+
 
 
 def test_get_backtests_list_empty_defaults():

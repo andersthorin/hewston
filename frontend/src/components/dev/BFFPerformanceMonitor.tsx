@@ -5,7 +5,7 @@
  * Only rendered in development mode with feature flag debugging enabled.
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { useWebSocketHealth, useWebSocketPerformanceMonitor } from '../../hooks/useWebSocketHealth'
 import { useChartDataMetrics } from '../../hooks/useChartData'
 import { useBacktestDataMetrics as useRunDataMetrics } from '../../hooks/useRunData'
@@ -18,21 +18,22 @@ interface BFFPerformanceMonitorProps {
   className?: string
 }
 
-export function BFFPerformanceMonitor({ runId = 'demo-run', className = '' }: BFFPerformanceMonitorProps) {
-  const [isVisible, setIsVisible] = useState(false)
+export function BFFPerformanceMonitor({ runId, className = '' }: BFFPerformanceMonitorProps) {
+  // Compute visibility synchronously; do not mount hooks if not visible or no runId
+  const isDev = !!import.meta.env.DEV
+  const debugEnabled = import.meta.env.VITE_FEATURE_FLAG_DEBUG === 'true'
+  const isVisible = isDev && debugEnabled && !!runId
+
   const [testResults, setTestResults] = useState<PerformanceTestResult[]>([])
   const [isRunningTest, setIsRunningTest] = useState(false)
 
-  // Only show in development with debug enabled
-  useEffect(() => {
-    const isDev = import.meta.env.DEV
-    const debugEnabled = import.meta.env.VITE_FEATURE_FLAG_DEBUG === 'true'
-    setIsVisible(isDev && debugEnabled)
-  }, [])
+  if (!isVisible) {
+    return null
+  }
 
-  // Get performance metrics from hooks
-  const wsHealth = useWebSocketHealth(runId)
-  const wsMonitor = useWebSocketPerformanceMonitor(runId, {
+  // Get performance metrics from hooks (safe: runId is defined here)
+  const wsHealth = useWebSocketHealth(runId!)
+  const wsMonitor = useWebSocketPerformanceMonitor(runId!, {
     fpsThreshold: 25,
     latencyThreshold: 50,
     droppedFrameThreshold: 5,

@@ -72,6 +72,34 @@ def list_runs_service(
         resp_items.append(d)
     return {"items": resp_items, "total": total, "limit": limit, "offset": offset}
 
+# Backward-compatible naming: prefer 'backtest' over 'run'
+# Keep legacy functions but expose backtest-named helpers for clarity
+
+def get_backtest_service(backtest_id: str) -> Optional[dict]:
+    return get_run_service(backtest_id)
+
+
+def list_backtests_service(
+    *,
+    symbol: Optional[str] = None,
+    strategy_id: Optional[str] = None,
+    from_date: Optional[str] = None,
+    to_date: Optional[str] = None,
+    limit: int = 20,
+    offset: int = 0,
+    order: Optional[str] = None,
+) -> Dict[str, Any]:
+    return list_runs_service(
+        symbol=symbol,
+        strategy_id=strategy_id,
+        from_date=from_date,
+        to_date=to_date,
+        limit=limit,
+        offset=offset,
+        order=order,
+    )
+
+
 
 def get_run_service(run_id: str) -> Optional[dict]:
     catalog = get_catalog()
@@ -109,7 +137,6 @@ import threading
 from datetime import datetime, timezone
 from typing import Tuple
 
-from backend.adapters.databento import ensure_dataset
 from backend.jobs.run_backtest import run_backtest_and_persist
 
 
@@ -132,27 +159,69 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
     from_date = body.get("from")
     to_date = body.get("to")
 
-    if not isinstance(params, dict) or not strategy_id:
-        return {"error": {"code": "BAD_REQUEST", "message": "missing strategy_id/params"}}, 400
+    # strategy_id is required; params are optional (defaults provided)
+    if not strategy_id:
+        return {"error": {"code": "BAD_REQUEST", "message": "Missing required parameter: strategy_id"}}, 400
+
+    # Validate optional dates when provided
+    from datetime import datetime
+    def _parse_iso8601(s: str) -> bool:
+        if not isinstance(s, str) or not s:
+            return False
+        ss = s.replace("Z", "+00:00")
+        try:
+            # Accept YYYY-MM-DD or full ISO formats
+            datetime.fromisoformat(ss) if "T" in ss or "+" in ss or ss.endswith("Z") else datetime.fromisoformat(ss)
+            return True
+        except Exception:
+            return False
+
+    if from_date and not _parse_iso8601(from_date):
+        return {"error": {"code": "BAD_REQUEST", "message": "Invalid date format in run_from/run_to fields: 'from' is not ISO 8601"}}, 400
+    if to_date and not _parse_iso8601(to_date):
+        return {"error": {"code": "BAD_REQUEST", "message": "Invalid date format in run_from/run_to fields: 'to' is not ISO 8601"}}, 400
 
     dataset_id = body.get("dataset_id")
     symbol = body.get("symbol")
     year = body.get("year")
 
     if not dataset_id:
+        # Require either dataset_id or (symbol + year); attempt to derive year from dates when possible
+        if symbol is not None and year is None:
+            # Try to derive year from 'from' then 'to'
+            source = from_date or to_date
+            if isinstance(source, str) and len(source) >= 4 and source[:4].isdigit():
+                try:
+                    year = int(source[:4])
+                except Exception:
+                    year = None
         if symbol is None or year is None:
-            # Stub fallback (maintain earlier behavior for minimal body)
-            if idempotency_key:
-                if idempotency_key in _IDEMP_CACHE:
-                    return {"run_id": _IDEMP_CACHE[idempotency_key], "status": "EXISTS"}, 200
-                fake_run_id = f"stub-{__import__('uuid').uuid4().hex[:8]}"
-                _IDEMP_CACHE[idempotency_key] = fake_run_id
-                return {"run_id": fake_run_id, "status": "QUEUED"}, 202
-            return {"error": {"code": "BAD_REQUEST", "message": "provide dataset_id or (symbol, year)"}}, 400
-        # Ensure dataset exists (idempotent)
-        dataset_id = ensure_dataset(symbol, int(year), force=False)
+            return {"error": {"code": "BAD_REQUEST", "message": "Missing required parameter: dataset_id or (symbol + year)"}}, 400
+        # Defer dataset materialization to the background worker; compute canonical id now
+        dataset_id = f"{symbol}-{int(year)}-1m"
 
     catalog = get_catalog()
+
+    # Ensure a placeholder dataset row exists to satisfy FK; background worker will materialize data
+    if dataset_id and (symbol and year):
+        try:
+            from datetime import datetime, timezone as _tz
+            catalog.upsert_dataset({
+                "dataset_id": dataset_id,
+                "symbol": symbol,
+                "from_date": f"{int(year)}-01-01",
+                "to_date": f"{int(year)}-12-31",
+                "products": [],
+                "raw_dbn": [],
+                "bars_parquet": [],
+                "bars_manifest_path": None,
+                "generated_at": datetime.now(_tz.utc).isoformat(),
+                "size_bytes": 0,
+                "status": "BUILDING",
+            })
+        except Exception:
+            # Best-effort; if this fails, create_run will fail FK and bubble up
+            pass
 
     # Compute deterministic input hash
     inputs_for_hash = {
@@ -201,6 +270,29 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
             input_hash=input_hash,
             idempotency_key=idempotency_key,
         )
+        # Write a minimal manifest immediately so list views can display the requested window
+        try:
+            from pathlib import Path as _Path
+            from backend.utils.paths import get_backtests_dir, ensure_dir as _ensure
+            _ensure(get_backtests_dir(run_id))
+            minimal_manifest = {
+                "run_id": run_id,
+                "dataset_id": dataset_id,
+                "strategy_id": strategy_id,
+                "params": params,
+                "seed": seed,
+                "slippage_fees": slippage_fees,
+                "speed": speed,
+                "run_from": from_date,
+                "run_to": to_date,
+                "code_hash": "unknown",
+                "created_at": created_at,
+                "tz": "America/New_York",
+            }
+            _Path(manifest_path).write_text(json.dumps(minimal_manifest, indent=2))
+        except Exception:
+            # Best-effort; runner will overwrite with full manifest later
+            pass
     except Exception:
         # Unique violation fallback: return existing by input_hash
         existing = catalog.find_run_by_input_hash(input_hash)

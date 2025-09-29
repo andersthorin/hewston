@@ -76,6 +76,17 @@ async def create_backtest_via_bff(
         if isinstance(incoming.get("dataset_id"), str) and incoming.get("dataset_id"):
             mapped["dataset_id"] = incoming["dataset_id"]
 
+        # If caller provided symbol without dataset_id, backend expects (symbol, year)
+        # Derive year from run_from (or run_to) to avoid backend stub IDs
+        if symbol and "dataset_id" not in mapped and not incoming.get("year"):
+            year_src = (run_from or run_to or "").strip()
+            # Accept ISO date formats like YYYY-MM-DD or full timestamps
+            if len(year_src) >= 4 and year_src[:4].isdigit():
+                try:
+                    mapped["year"] = int(year_src[:4])
+                except Exception:
+                    pass
+
         # Defaults for removed fields: params, speed, seed
         if isinstance(incoming.get("params"), dict):
             mapped["params"] = incoming["params"]
@@ -97,10 +108,25 @@ async def create_backtest_via_bff(
             correlation_id=getattr(request.state, "correlation_id", "create_backtest"),
         )
         # Transform backend response to canonical backtest_id-only payload
+        data: Dict[str, Any] | None = None
+        # Prefer reading FastAPI JSONResponse body when available
+        if hasattr(response, 'body'):
+            try:
+                raw = response.body.decode()  # type: ignore[attr-defined]
+                data = _json.loads(raw or "{}")
+            except Exception:
+                data = None
+        # Fallback to response.json() if provided
+        # Log mapped payload and backend response for debugging (info level)
         try:
-            data = response.json() if hasattr(response, 'json') else None
+            logger.info("bff.create_backtest.response", extra={"mapped": mapped, "status_code": getattr(response, 'status_code', None)})
         except Exception:
-            data = _json.loads(response.body.decode()) if hasattr(response, 'body') else None
+            pass
+        if data is None and hasattr(response, 'json'):
+            try:
+                data = response.json()  # type: ignore[call-arg]
+            except Exception:
+                data = None
         if not isinstance(data, dict):
             data = {}
         transformed = {

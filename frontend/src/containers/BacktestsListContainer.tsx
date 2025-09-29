@@ -25,7 +25,11 @@ function CreateBacktestForm({ onCreated, creating, setCreating }: { onCreated: (
         request,
         idempotencyKey: `ui-${Date.now()}`,
       })
-      onCreated(resp.backtest_id || resp.run_id)
+      const id = (resp as any)?.backtest_id || (resp as any)?.run_id
+      if (!id) {
+        throw new Error('Failed to create backtest: no id returned')
+      }
+      onCreated(id)
     } finally {
       setCreating(false)
     }

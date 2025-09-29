@@ -125,6 +125,9 @@ export function useBacktestPlayback(backtestId: string) {
         if (msg.t === 'frame') {
           devLog('frame.ts', msg.ts)
           worker.postMessage({ type: 'frame', payload: msg })
+        } else if (msg.t === 'err') {
+          console.warn('Stream error from server:', msg)
+          setState((s) => ({ ...s, status: 'error', playing: false }))
         }
         // ignore hb and echo
       } catch (error) {

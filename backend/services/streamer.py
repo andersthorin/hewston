@@ -177,7 +177,7 @@ async def produce_frames(
     try:
         for i in range(0, total, stride):
             er = equity_rows[i]
-            key, iso = _norm_ts(er["ts_utc"])
+            key, iso = normalize_timestamp(er["ts_utc"])
             ohlc = bars_map.get(key)
             # normalize orders to JSON-serializable (ts_utc -> ISO string)
             orders_payload: List[dict] = []
@@ -187,7 +187,7 @@ async def produce_frames(
                 for kk, vv in list(o2.items()):
                     try:
                         if isinstance(vv, (_dt, pd.Timestamp)):
-                            _, iso_v = _norm_ts(vv)
+                            _, iso_v = normalize_timestamp(vv)
                             o2[kk] = iso_v
                     except Exception:
                         pass
