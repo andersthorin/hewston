@@ -49,3 +49,20 @@ class RunSummary(BaseModel):
     run_to: Optional[str] = None
     duration_ms: Optional[int] = None
 
+
+
+# Backward-compatible aliases for terminology migration (runs → backtests)
+class BacktestManifest(RunManifest):
+    pass
+
+
+class BacktestMetrics(RunMetrics):
+    pass
+
+
+class Backtest(Run):
+    pass
+
+
+class BacktestSummary(RunSummary):
+    pass

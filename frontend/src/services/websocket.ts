@@ -77,7 +77,7 @@ export class BFFWebSocketManager {
   private connectionStartTime: number = 0
 
   constructor(
-    private runId: string,
+    private backtestId: string,
     options: WebSocketOptions = {}
   ) {
     this.options = { ...DEFAULT_OPTIONS, ...options }
@@ -106,13 +106,13 @@ export class BFFWebSocketManager {
   private getWebSocketUrl(): string {
     const useBFF = featureFlagService.isFeatureFlagEnabled('websocket')
     const baseUrl = useBFF ? BFF_WS_URL : BACKEND_WS_URL
-    
+
     if (useBFF) {
-      // BFF WebSocket endpoint: ws://127.0.0.1:8001/api/v1/runs/{id}/stream
-      return `${baseUrl}/api/v1/runs/${this.runId}/stream`
+      // BFF WebSocket endpoint: ws://127.0.0.1:8001/api/v1/backtests/{id}/stream
+      return `${baseUrl}/api/v1/backtests/${this.backtestId}/stream`
     } else {
       // Backend WebSocket endpoint: ws://127.0.0.1:8000/backtests/{id}/ws
-      return `${baseUrl}/backtests/${this.runId}/ws`
+      return `${baseUrl}/backtests/${this.backtestId}/ws`
     }
   }
 
@@ -176,7 +176,7 @@ export class BFFWebSocketManager {
    */
   private logStateChange(oldState: WebSocketState, newState: WebSocketState): void {
     if (import.meta.env.DEV || featureFlagService.getConfiguration().bffEnabled) {
-      console.log(`🔌 WebSocket [${this.runId}] ${oldState} → ${newState} (${this.health.connectionSource})`)
+      console.log(`🔌 WebSocket [${this.backtestId}] ${oldState} → ${newState} (${this.health.connectionSource})`)
     }
   }
 
@@ -275,7 +275,7 @@ export class BFFWebSocketManager {
    */
   private scheduleReconnect(): void {
     if (this.health.reconnectAttempts >= this.options.maxReconnectAttempts) {
-      console.warn(`WebSocket max reconnection attempts reached for run ${this.runId}`)
+      console.warn(`WebSocket max reconnection attempts reached for backtest ${this.backtestId}`)
       return
     }
 
@@ -289,7 +289,7 @@ export class BFFWebSocketManager {
     
     this.reconnectTimer = setTimeout(() => {
       this.connect().catch(error => {
-        console.warn(`WebSocket reconnection failed for run ${this.runId}:`, error)
+        console.warn(`WebSocket reconnection failed for backtest ${this.backtestId}:`, error)
         this.scheduleReconnect()
       })
     }, delay)

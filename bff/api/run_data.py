@@ -32,8 +32,92 @@ async def get_correlation_id_from_state(request) -> str:
     return getattr(request.state, 'correlation_id', 'unknown')
 
 
-@router.get("/runs")
-async def list_runs(
+@router.post("/backtests")
+async def create_backtest_via_bff(
+    request: Any,
+    backend_client: httpx.AsyncClient = Depends(get_backend_client),
+):
+    """
+    Create a backtest via BFF domain endpoint.
+
+    Frontend sends POST /api/v1/backtests; this forwards to backend /backtests
+    while preserving headers (including Idempotency-Key) and body.
+    """
+    try:
+        backend_proxy = await create_backend_client(backend_client)
+        raw_body = await request.body()
+        headers = dict(request.headers)
+
+        # Parse and normalize simplified UI payload → backend payload
+        import json as _json
+        try:
+            incoming = _json.loads(raw_body.decode("utf-8") or "{}") if isinstance(raw_body, (bytes, bytearray)) else {}
+            if not isinstance(incoming, dict):
+                incoming = {}
+        except Exception:
+            incoming = {}
+
+        strategy_id = incoming.get("strategy_id")
+        symbol = incoming.get("symbol")
+        # Prefer canonical run_from/run_to if provided, fallback to from/to
+        run_from = incoming.get("run_from") or incoming.get("from")
+        run_to = incoming.get("run_to") or incoming.get("to")
+
+        mapped: Dict[str, Any] = {}
+        if strategy_id:
+            mapped["strategy_id"] = strategy_id
+        if symbol:
+            mapped["symbol"] = symbol
+        if run_from:
+            mapped["from"] = run_from
+        if run_to:
+            mapped["to"] = run_to
+        # Pass-through dataset_id if caller provided it (not in simplified form)
+        if isinstance(incoming.get("dataset_id"), str) and incoming.get("dataset_id"):
+            mapped["dataset_id"] = incoming["dataset_id"]
+
+        # Defaults for removed fields: params, speed, seed
+        if isinstance(incoming.get("params"), dict):
+            mapped["params"] = incoming["params"]
+        else:
+            if strategy_id == "sma_crossover":
+                mapped["params"] = {"fast": 20, "slow": 50}
+            else:
+                mapped["params"] = {}
+        mapped["speed"] = int(incoming.get("speed") or 60)
+        mapped["seed"] = int(incoming.get("seed") or 42)
+        if isinstance(incoming.get("slippage_fees"), dict):
+            mapped["slippage_fees"] = incoming["slippage_fees"]
+
+        response = await backend_proxy.proxy_request(
+            method="POST",
+            path="/backtests",
+            headers=headers,
+            json_data=mapped,
+            correlation_id=getattr(request.state, "correlation_id", "create_backtest"),
+        )
+        # Transform backend response to canonical backtest_id-only payload
+        try:
+            data = response.json() if hasattr(response, 'json') else None
+        except Exception:
+            data = _json.loads(response.body.decode()) if hasattr(response, 'body') else None
+        if not isinstance(data, dict):
+            data = {}
+        transformed = {
+            "backtest_id": data.get("run_id") or data.get("backtest_id"),
+            "status": data.get("status"),
+        }
+        return JSONResponse(status_code=response.status_code, content=transformed)
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+    except Exception as e:
+        logger.exception("create_run.error", extra={"error": str(e)})
+        raise HTTPException(status_code=500, detail="Internal error creating backtest")
+
+
+
+@router.get("/backtests")
+async def list_backtests(
     limit: int = Query(default=20, description="Maximum number of runs to return"),
     offset: int = Query(default=0, description="Number of runs to skip"),
     symbol: Optional[str] = Query(default=None, description="Filter by trading symbol"),
@@ -45,36 +129,33 @@ async def list_runs(
     redis_client = Depends(get_redis_client),
 ) -> Dict[str, Any]:
     """
-    List runs with filtering and pagination.
+    List backtests with filtering and pagination.
 
-    This endpoint provides a unified interface for listing runs with the same
-    parameters as the backend /backtests endpoint, but with BFF enhancements
-    like caching and response optimization.
+    Canonical backtests endpoint with BFF enhancements like caching and
+    response optimization.
 
     Args:
-        limit: Maximum number of runs to return (1-500, default 20)
-        offset: Number of runs to skip for pagination (default 0)
+        limit: Maximum number of backtests to return (1-500, default 20)
+        offset: Number of backtests to skip (default 0)
         symbol: Filter by trading symbol (optional)
         strategy_id: Filter by strategy identifier (optional)
-        from_date: Filter runs created from this date (optional)
-        to_date: Filter runs created to this date (optional)
+        from_date: Filter created from this date (optional)
+        to_date: Filter created to this date (optional)
         order: Sort order - 'created_at' or '-created_at' (default -created_at)
-        backend_client: HTTP client for backend communication
-        redis_client: Redis client for caching
 
     Returns:
         Dict containing:
-        - items: List of run summaries
-        - total: Total number of matching runs
+        - items: List of backtest summaries
+        - total: Total number of matching backtests
         - limit: Applied limit
         - offset: Applied offset
         - meta: Response metadata (cache info, performance metrics)
     """
     start_time = time.perf_counter()
-    correlation_id = f"list_runs_{int(time.time() * 1000)}"
+    correlation_id = f"list_backtests_{int(time.time() * 1000)}"
 
     logger.info(
-        "list_runs.request",
+        "list_backtests.request",
         extra={
             "correlation_id": correlation_id,
             "limit": limit,
@@ -109,8 +190,7 @@ async def list_runs(
     if order:
         params["order"] = order
 
-    # For now, skip caching for run lists (can be added later)
-    # Run lists change frequently and caching complexity isn't worth it for this endpoint
+    # Skip caching for now
 
     # Fetch from backend
     try:
@@ -126,14 +206,76 @@ async def list_runs(
         if hasattr(response, 'json') and callable(response.json):
             backend_data = response.json()
         else:
-            # Handle FastAPI Response object
             import json
             backend_data = json.loads(response.body.decode())
 
-        # Add BFF metadata
+        # Transform items to backtest_id-only identifiers (robust to backend shapes)
+        items = backend_data.get("items", []) or []
+        new_items = []
+        for item in items:
+            run_obj = item.get("run") if isinstance(item, dict) else None
+            bt_id = (
+                (item.get("backtest_id") if isinstance(item, dict) else None)
+                or (item.get("run_id") if isinstance(item, dict) else None)
+                or (item.get("id") if isinstance(item, dict) else None)
+                or ((run_obj or {}).get("run_id") if isinstance(run_obj, dict) else None)
+                or ((run_obj or {}).get("id") if isinstance(run_obj, dict) else None)
+            )
+            created_at = (
+                (item.get("created_at") if isinstance(item, dict) else None)
+                or ((run_obj or {}).get("created_at") if isinstance(run_obj, dict) else None)
+                or (item.get("createdAt") if isinstance(item, dict) else None)
+            )
+            strategy_id = (
+                (item.get("strategy_id") if isinstance(item, dict) else None)
+                or ((run_obj or {}).get("strategy_id") if isinstance(run_obj, dict) else None)
+                or (item.get("strategyId") if isinstance(item, dict) else None)
+            )
+            status = (
+                (item.get("status") if isinstance(item, dict) else None)
+                or ((run_obj or {}).get("status") if isinstance(run_obj, dict) else None)
+            )
+            symbol = (
+                (item.get("symbol") if isinstance(item, dict) else None)
+                or ((run_obj or {}).get("symbol") if isinstance(run_obj, dict) else None)
+            )
+            run_from = (
+                (item.get("run_from") if isinstance(item, dict) else None)
+                or (item.get("from_date") if isinstance(item, dict) else None)
+                or ((run_obj or {}).get("run_from") if isinstance(run_obj, dict) else None)
+                or ((run_obj or {}).get("from_date") if isinstance(run_obj, dict) else None)
+            )
+            run_to = (
+                (item.get("run_to") if isinstance(item, dict) else None)
+                or (item.get("to_date") if isinstance(item, dict) else None)
+                or ((run_obj or {}).get("run_to") if isinstance(run_obj, dict) else None)
+                or ((run_obj or {}).get("to_date") if isinstance(run_obj, dict) else None)
+            )
+            duration_ms = (
+                (item.get("duration_ms") if isinstance(item, dict) else None)
+                or ((run_obj or {}).get("duration_ms") if isinstance(run_obj, dict) else None)
+                or (item.get("durationMs") if isinstance(item, dict) else None)
+            )
+            new_items.append({
+                "backtest_id": bt_id,
+                "created_at": created_at,
+                "strategy_id": strategy_id,
+                "status": status,
+                "symbol": symbol,
+                "run_from": run_from,
+                "run_to": run_to,
+                "duration_ms": duration_ms,
+                "total_return": item.get("total_return") if isinstance(item, dict) else None,
+                "sharpe_ratio": item.get("sharpe_ratio") if isinstance(item, dict) else None,
+                "max_drawdown": item.get("max_drawdown") if isinstance(item, dict) else None,
+            })
+
         load_time_ms = int((time.perf_counter() - start_time) * 1000)
         enhanced_response = {
-            **backend_data,
+            "items": new_items,
+            "total": backend_data.get("total", len(new_items)),
+            "limit": backend_data.get("limit", limit),
+            "offset": backend_data.get("offset", offset),
             "meta": {
                 "cache_hit": False,
                 "load_time_ms": load_time_ms,
@@ -142,10 +284,8 @@ async def list_runs(
             }
         }
 
-        # Skip caching for now - can be added later if needed
-
         logger.info(
-            "list_runs.success",
+            "list_backtests.success",
             extra={
                 "correlation_id": correlation_id,
                 "items_count": len(enhanced_response.get("items", [])),
@@ -184,21 +324,24 @@ async def list_runs(
             )
 
 
-@router.get("/runs/{run_id}/complete")
-async def get_complete_run_data(
-    run_id: str = Path(..., description="Run identifier"),
+@router.get("/backtests/{backtest_id}/complete")
+async def get_complete_backtest_data(
+    backtest_id: str = Path(..., description="Backtest identifier"),
     include_orders: bool = Query(default=True, description="Include order execution data"),
     include_equity: bool = Query(default=True, description="Include equity curve data"),
     include_metrics: bool = Query(default=True, description="Include performance metrics"),
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
     redis_client = Depends(get_redis_client),
 ):
+    # Normalize local variable name for downstream logic
+    run_id = backtest_id
+
     """
     Get complete aggregated run data.
-    
+
     This endpoint aggregates data from multiple backend endpoints and provides
     optimized responses with caching and concurrent data fetching.
-    
+
     Args:
         run_id: Unique run identifier
         include_orders: Whether to include order execution data
@@ -206,13 +349,13 @@ async def get_complete_run_data(
         include_metrics: Whether to include performance metrics
         backend_client: HTTP client for backend communication
         redis_client: Redis client for caching
-        
+
     Returns:
         CompleteRunResponse: Aggregated run data with metadata
     """
     start_time = time.perf_counter()
     correlation_id = f"run_{run_id}_{int(time.time() * 1000)}"
-    
+
     logger.info(
         "run_data.request",
         extra={
@@ -223,7 +366,7 @@ async def get_complete_run_data(
             "include_metrics": include_metrics,
         }
     )
-    
+
     # Validate run_id format
     if not run_id or not run_id.strip():
         logger.warning(
@@ -235,19 +378,19 @@ async def get_complete_run_data(
             }
         )
         raise HTTPException(status_code=400, detail="Run ID cannot be empty")
-    
+
     # Create request parameters
     request_params = RunDataRequest(
         include_orders=include_orders,
         include_equity=include_equity,
         include_metrics=include_metrics
     )
-    
+
     # Initialize services
     cache_service = CacheService(redis_client)
     aggregator = RunDataAggregator()
     backend_proxy = await create_backend_client(backend_client)
-    
+
     # Check cache first
     cache_key = cache_service.generate_run_cache_key(
         run_id=run_id,
@@ -255,7 +398,7 @@ async def get_complete_run_data(
         include_equity=include_equity,
         include_metrics=include_metrics
     )
-    
+
     cached_response = await cache_service.get_run_data(cache_key, correlation_id)
     if cached_response:
         # Update metadata for cache hit
@@ -307,26 +450,21 @@ async def get_complete_run_data(
         dataset_id_val = getattr(cached_response.run, "dataset_id", None)
 
         frontend_payload = {
-            # Top-level fields expected by frontend schema
-            "run_id": cached_response.run.run_id,
+            "backtest_id": cached_response.run.run_id,
             "strategy_id": cached_response.run.strategy_id,
             "status": cached_response.run.status,
             "symbol": cached_response.run.symbol,
             "params": cached_response.run.params or {},
-            # Preferred naming per app memory (run_from/run_to)
             "run_from": run_from_val,
             "run_to": run_to_val,
-            # Optional fields
             "dataset_id": dataset_id_val,
             "code_hash": None,
             "seed": None,
             "speed": None,
             "duration_ms": None,
-            # Aggregated data
             "metrics": metrics_dict,
             "equity": equity_list,
             "orders": orders_list,
-            # Meta block for BFF
             "meta": {
                 "aggregated": True,
                 "cache_hit": cached_response.metadata.cache_hit,
@@ -340,9 +478,6 @@ async def get_complete_run_data(
                     ) if val
                 ],
             },
-            # Backward-compatible fields (to avoid breaking existing tests/tools)
-            "run": cached_response.run.dict(),
-            "metadata": cached_response.metadata.dict(),
         }
         return JSONResponse(status_code=200, content=frontend_payload)
 
@@ -354,7 +489,7 @@ async def get_complete_run_data(
             request_params=request_params,
             correlation_id=correlation_id
         )
-        
+
         # Cache the response if run is completed
         if response.run.status in ["COMPLETED", "FAILED"]:
             # Use longer TTL for completed runs
@@ -375,7 +510,7 @@ async def get_complete_run_data(
                 correlation_id
             )
         # Don't cache queued runs
-        
+
         logger.info(
             "run_data.success",
             extra={
@@ -424,26 +559,21 @@ async def get_complete_run_data(
         dataset_id_val = getattr(response.run, "dataset_id", None)
 
         frontend_payload = {
-            # Top-level fields expected by frontend schema
-            "run_id": response.run.run_id,
+            "backtest_id": response.run.run_id,
             "strategy_id": response.run.strategy_id,
             "status": response.run.status,
             "symbol": response.run.symbol,
             "params": response.run.params or {},
-            # Preferred naming per app memory (run_from/run_to)
             "run_from": run_from_val,
             "run_to": run_to_val,
-            # Optional fields
             "dataset_id": dataset_id_val,
             "code_hash": None,
             "seed": None,
             "speed": None,
             "duration_ms": None,
-            # Aggregated data
             "metrics": metrics_dict,
             "equity": equity_list,
             "orders": orders_list,
-            # Meta block for BFF
             "meta": {
                 "aggregated": True,
                 "cache_hit": response.metadata.cache_hit,
@@ -457,9 +587,6 @@ async def get_complete_run_data(
                     ) if val
                 ],
             },
-            # Backward-compatible fields (to avoid breaking existing tests/tools)
-            "run": response.run.dict(),
-            "metadata": response.metadata.dict(),
         }
         return JSONResponse(status_code=200, content=frontend_payload)
 
@@ -474,7 +601,7 @@ async def get_complete_run_data(
             }
         )
         raise HTTPException(status_code=404, detail=str(e))
-        
+
     except Exception as e:
         logger.exception(
             "run_data.error",
@@ -484,33 +611,34 @@ async def get_complete_run_data(
                 "error": str(e),
             }
         )
-        
+
         raise HTTPException(
             status_code=500,
             detail=f"Internal error processing run data: {str(e)}"
         )
 
 
-@router.get("/runs/{run_id}/status")
-async def get_run_status(
-    run_id: str = Path(..., description="Run identifier"),
+@router.get("/backtests/{backtest_id}/status")
+async def get_backtest_status(
+    backtest_id: str = Path(..., description="Backtest identifier"),
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
 ):
+    run_id = backtest_id
     """
     Get run status only (lightweight endpoint).
-    
+
     This endpoint provides just the run status and basic details
     without fetching metrics, equity, or order data.
-    
+
     Args:
         run_id: Unique run identifier
         backend_client: HTTP client for backend communication
-        
+
     Returns:
         Dict: Run status and basic details
     """
     correlation_id = f"status_{run_id}_{int(time.time() * 1000)}"
-    
+
     logger.info(
         "run_status.request",
         extra={
@@ -518,16 +646,16 @@ async def get_run_status(
             "run_id": run_id,
         }
     )
-    
+
     try:
         backend_proxy = await create_backend_client(backend_client)
-        
+
         response = await backend_proxy.proxy_request(
             method="GET",
             path=f"/backtests/{run_id}",
             correlation_id=correlation_id
         )
-        
+
         if response.status_code == 200:
             import json
             # Handle both Response objects and mock objects
@@ -542,10 +670,10 @@ async def get_run_status(
                 response_text = str(response_content)
 
             data = json.loads(response_text)
-            
-            # Return lightweight status response
+
+            # Return lightweight status response (backtest_id only)
             status_response = {
-                "run_id": data.get("run_id"),
+                "backtest_id": data.get("run_id") or data.get("backtest_id"),
                 "status": data.get("status"),
                 "strategy_id": data.get("strategy_id"),
                 "symbol": data.get("symbol"),
@@ -554,7 +682,7 @@ async def get_run_status(
                 "completed_at": data.get("completed_at"),
                 "error_message": data.get("error_message")
             }
-            
+
             logger.info(
                 "run_status.success",
                 extra={
@@ -563,9 +691,9 @@ async def get_run_status(
                     "status": status_response["status"],
                 }
             )
-            
+
             return status_response
-            
+
         elif response.status_code == 404:
             raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
         else:
@@ -573,7 +701,7 @@ async def get_run_status(
                 status_code=response.status_code,
                 detail=f"Backend error: {response.status_code}"
             )
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -585,8 +713,12 @@ async def get_run_status(
                 "error": str(e),
             }
         )
-        
+
         raise HTTPException(
             status_code=500,
             detail=f"Internal error getting run status: {str(e)}"
         )
+
+
+# --- Backward-compatible aliases using backtests terminology ---
+

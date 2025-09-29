@@ -27,7 +27,7 @@ export type PlaybackState = {
 
 export type Subscription = (f: StreamFrameT) => void
 
-export function useRunPlayback(runId: string) {
+export function useBacktestPlayback(backtestId: string) {
   const [state, setState] = useState<PlaybackState>({
     status: 'idle',
     playing: false,
@@ -76,7 +76,7 @@ export function useRunPlayback(runId: string) {
     workerRef.current = worker
 
     // Initialize BFF-aware WebSocket manager
-    const wsManager = createWebSocketManager(runId, {
+    const wsManager = createWebSocketManager(backtestId, {
       autoReconnect: true,
       maxReconnectAttempts: 5,
       reconnectDelay: 500,
@@ -96,7 +96,7 @@ export function useRunPlayback(runId: string) {
         if (framesSeenRef.current > 0) return
         try {
           wsManager.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
-          devLog('play.sent', { runId, reason: 'keepalive' })
+          devLog('play.sent', { backtestId, reason: 'keepalive' })
         } catch (error) {
           console.warn('Failed to send keepalive play command:', error)
         }
@@ -106,13 +106,13 @@ export function useRunPlayback(runId: string) {
     // Setup WebSocket manager event listeners
     const unsubscribeOpen = wsManager.addEventListener('open', () => {
       framesSeenRef.current = 0
-      devLog('ws.open', { runId, source: wsManager.getHealth().connectionSource })
+      devLog('ws.open', { backtestId, source: wsManager.getHealth().connectionSource })
       setState((s) => ({ ...s, status: 'ws', playing: true }))
       updateHealthInfo(wsManager.getHealth())
 
       try {
         wsManager.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
-        devLog('play.sent', { runId, reason: 'open' })
+        devLog('play.sent', { backtestId, reason: 'open' })
       } catch (error) {
         console.warn('Failed to send initial play command:', error)
       }
@@ -197,7 +197,7 @@ export function useRunPlayback(runId: string) {
       }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runId])
+  }, [backtestId])
 
   const subscribe = useCallback((cb: Subscription) => {
     subsRef.current.add(cb)

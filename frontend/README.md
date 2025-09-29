@@ -101,8 +101,8 @@ const runs = await listBacktests({
   offset: 0
 });
 
-// Get run details
-const runDetail = await getRunDetail(run_id);
+// Get backtest details
+const runDetail = await getRunDetail(backtest_id);
 ```
 
 ### WebSocket Streaming

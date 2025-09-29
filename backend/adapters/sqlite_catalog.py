@@ -147,6 +147,18 @@ class SqliteCatalog(CatalogPort):
                 "FROM runs r LEFT JOIN datasets d ON d.dataset_id = r.dataset_id"
             )
 
+            # Create terminology-alias views for backtests naming
+            try:
+                conn.execute("DROP VIEW IF EXISTS backtests")
+                conn.execute("CREATE VIEW backtests AS SELECT * FROM runs")
+            except Exception:
+                pass
+            try:
+                conn.execute("DROP VIEW IF EXISTS backtest_metrics")
+                conn.execute("CREATE VIEW backtest_metrics AS SELECT * FROM run_metrics")
+            except Exception:
+                pass
+
     def _ensure_schema(self) -> None:
         with self._connect() as conn:
             conn.executescript(DDL)

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useHourChartData } from '../hooks/useChartData'
 
-import { useRunPlayback } from '../services/ws'
+import { useBacktestPlayback } from '../services/ws'
 import PlaybackControls from '../components/PlaybackControls'
 import ChartOHLC, { type CandlestickChartAPI } from '../components/ChartOHLC'
 import type { CandlestickData, Time } from 'lightweight-charts'
@@ -18,9 +18,9 @@ const devLog = (...args: unknown[]) => {
   }
 }
 
-export type RunPlayerContainerProps = { run_id: string; dataset_id?: string; run_from?: string; run_to?: string }
+export type RunPlayerContainerProps = { backtest_id: string; dataset_id?: string; run_from?: string; run_to?: string }
 
-export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: RunPlayerContainerProps) {
+export function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPlayerContainerProps) {
   // Derive symbol from dataset_id if available (format: SYMBOL-YEAR-1m)
   const symbol = (dataset_id?.split('-')[0] || '').toUpperCase() || undefined
 
@@ -36,7 +36,7 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
     !!symbol && !!from && !!to
   )
 
-  const { state, onPlay, onPause, subscribe } = useRunPlayback(run_id)
+  const { state, onPlay, onPause, subscribe } = useBacktestPlayback(backtest_id)
 
   // Track the actual run window; prefer props (from manifest) and fall back to streaming inference
   const [runFrom, setRunFrom] = useState<string | null>(run_from ?? null)
@@ -82,7 +82,7 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
   useEffect(() => {
     // On run change, clear the candlestick series
     ohlcRef.current?.reset([])
-  }, [run_id])
+  }, [backtest_id])
   // Run change, new hourly data, or new inferred window: reset playback indices and clear ticker
   useEffect(() => {
     dayKeysRef.current = null
@@ -90,7 +90,7 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
     hourIdxRef.current = 0
     seededRef.current = false
     if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null }
-  }, [run_id, hourResp, runFrom, runTo])
+  }, [backtest_id, hourResp, runFrom, runTo])
 
   // Prepare daily snapshots (cumulative per hour) grouped by day
   useEffect(() => {

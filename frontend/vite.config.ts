@@ -31,12 +31,7 @@ export default defineConfig(({ mode }) => {
           }
         },
 
-        // Backend routes (existing - maintained for rollback)
-        '/backtests': {
-          target: backendUrl,
-          changeOrigin: true,
-          ws: true,
-        },
+        // Backend routes still directly proxied (non-SPA paths only)
         '/healthz': {
           target: backendUrl,
           changeOrigin: true,

@@ -82,10 +82,7 @@ class APIClientRouter {
         fallbackEndpoint = fallbackEndpoint.replace(/^chart-data/, 'bars')
       }
     } else if (endpointGroup === 'runData') {
-      // runs -> backtests, and stream -> ws
-      if (fallbackEndpoint.startsWith('runs')) {
-        fallbackEndpoint = fallbackEndpoint.replace(/^runs/, 'backtests')
-      }
+      // backtests stream fallback: map /stream -> /ws on backend
       if (/^backtests\/.+\/stream(\?|$)/.test(fallbackEndpoint)) {
         fallbackEndpoint = fallbackEndpoint.replace(/\/stream(\?|$)/, '/ws$1')
       }
@@ -161,17 +158,30 @@ class APIClientRouter {
     if (endpoint.startsWith('bars')) {
       return `${baseUrl}/api/v1/chart-data`
     } else if (endpoint.startsWith('backtests')) {
-      // Transform /backtests/{id} to /api/v1/runs/{id}/complete for aggregated data
-      const match = endpoint.match(/^backtests\/([^\/]+)(?:\/(.+))?$/)
+      // Handle list routes preserving query string
+      if (endpoint === 'backtests' || endpoint.startsWith('backtests?')) {
+        const tail = endpoint.slice('backtests'.length) // includes leading '?' if present
+        return `${baseUrl}/api/v1/backtests${tail}`
+      }
+      // Transform backtests/{id}[/*] to canonical BFF endpoints
+      const match = endpoint.match(/^backtests\/([^\/\?]+)(?:\/(.+))?$/)
       if (match) {
         const [, id, subpath] = match
         if (!subpath) {
-          return `${baseUrl}/api/v1/runs/${id}/complete`
-        } else if (subpath === 'ws') {
-          return `${baseUrl}/api/v1/runs/${id}/stream`
+          // Default detail → complete aggregate
+          return `${baseUrl}/api/v1/backtests/${id}/complete`
+        } else if (subpath === 'complete') {
+          return `${baseUrl}/api/v1/backtests/${id}/complete`
+        } else if (subpath === 'stream' || subpath === 'ws') {
+          // Canonical WS path under backtests
+          return `${baseUrl}/api/v1/backtests/${id}/stream`
+        } else {
+          // Pass through other subpaths under backtests
+          return `${baseUrl}/api/v1/backtests/${id}/${subpath}`
         }
       }
-      return `${baseUrl}/api/v1/runs`
+      // Fallback: list
+      return `${baseUrl}/api/v1/backtests`
     } else if (endpoint.startsWith('runs')) {
       // Handle /runs endpoints for BFF
       const match = endpoint.match(/^runs\/([^\/]+)(?:\/(.+))?$/)

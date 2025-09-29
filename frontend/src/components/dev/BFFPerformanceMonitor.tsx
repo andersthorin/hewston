@@ -8,7 +8,7 @@
 import React, { useState, useEffect } from 'react'
 import { useWebSocketHealth, useWebSocketPerformanceMonitor } from '../../hooks/useWebSocketHealth'
 import { useChartDataMetrics } from '../../hooks/useChartData'
-import { useRunDataMetrics } from '../../hooks/useRunData'
+import { useBacktestDataMetrics as useRunDataMetrics } from '../../hooks/useRunData'
 import { featureFlagService } from '../../services/featureFlags'
 import { webSocketPerformanceTester } from '../../utils/websocketPerformance'
 import type { PerformanceTestResult } from '../../utils/websocketPerformance'

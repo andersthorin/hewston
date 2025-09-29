@@ -1,19 +1,28 @@
-import type { RunSummary } from '../services/api'
+export type BacktestSummaryRow = {
+  backtest_id: string
+  created_at: string
+  strategy_id: string
+  status: string
+  symbol?: string | null
+  run_from?: string | null
+  run_to?: string | null
+  duration_ms?: number | null
+}
 
 export type RunsTableProps = {
-  items: RunSummary[]
-  onView?: (run_id: string) => void
+  items: BacktestSummaryRow[]
+  onView?: (backtest_id: string) => void
 }
 
 export function RunsTable({ items, onView }: RunsTableProps) {
   if (!items.length) {
-    return <div>No runs yet. Create a run to get started.</div>
+    return <div>No backtests yet. Create a backtest to get started.</div>
   }
   return (
     <table className="w-full border-collapse text-sm">
       <thead>
         <tr className="border-b border-slate-200">
-          <th className="px-2 py-1 text-left text-slate-600 font-semibold">run_id</th>
+          <th className="px-2 py-1 text-left text-slate-600 font-semibold">backtest_id</th>
           <th className="px-2 py-1 text-left text-slate-600 font-semibold">created_at</th>
           <th className="px-2 py-1 text-left text-slate-600 font-semibold">strategy_id</th>
           <th className="px-2 py-1 text-left text-slate-600 font-semibold">status</th>
@@ -26,20 +35,19 @@ export function RunsTable({ items, onView }: RunsTableProps) {
       </thead>
       <tbody>
         {items.map((r) => (
-          <Row key={r.run_id} r={r} onView={onView} />
+          <Row key={r.backtest_id} r={r} onView={onView} />
         ))}
       </tbody>
     </table>
   )
 }
 
-function Row({ r, onView }: { r: RunSummary; onView?: (id: string) => void }) {
-  // Only show the authoritative window from the run manifest
+function Row({ r, onView }: { r: BacktestSummaryRow; onView?: (id: string) => void }) {
   const runFrom = r.run_from ?? '—'
   const runTo = r.run_to ?? '—'
   return (
     <tr className="border-b border-slate-100 hover:bg-slate-50">
-      <td className="px-2 py-1 font-mono">{r.run_id}</td>
+      <td className="px-2 py-1 font-mono">{r.backtest_id}</td>
       <td className="px-2 py-1">{r.created_at}</td>
       <td className="px-2 py-1">{r.strategy_id}</td>
       <td className="px-2 py-1">{r.status}</td>
@@ -50,7 +58,7 @@ function Row({ r, onView }: { r: RunSummary; onView?: (id: string) => void }) {
       <td className="px-2 py-1">
         <button
           className="px-2 py-1 rounded bg-slate-800 text-white hover:bg-slate-700"
-          onClick={() => onView?.(r.run_id)}
+          onClick={() => onView?.(r.backtest_id)}
         >
           View
         </button>
@@ -59,6 +67,4 @@ function Row({ r, onView }: { r: RunSummary; onView?: (id: string) => void }) {
   )
 }
 
-
 export default RunsTable
-
