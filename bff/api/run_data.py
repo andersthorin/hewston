@@ -182,18 +182,6 @@ async def list_runs(
                 status_code=500,
                 detail="Internal server error while fetching runs"
             )
-    except Exception as e:
-        logger.error(
-            "list_runs.error",
-            extra={
-                "correlation_id": correlation_id,
-                "error": str(e),
-            }
-        )
-        raise HTTPException(
-            status_code=500,
-            detail="Internal server error while fetching runs"
-        )
 
 
 @router.get("/runs/{run_id}/complete")

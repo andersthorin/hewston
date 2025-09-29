@@ -136,10 +136,10 @@ async def get_backtest_metrics(run_id: str):
             data = json.load(f)
         return JSONResponse(status_code=200, content=data)
     except FileNotFoundError:
-        return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND", "message": "metrics not available"}})
+        return JSONResponse(status_code=404, content={"error": {"code": "RUN_NOT_FOUND", "message": "metrics not available"}})
     except Exception as e:
         logger.exception("get_metrics.error", extra={"run_id": run_id, "error": str(e)[:200]})
-        return JSONResponse(status_code=500, content={"error": {"code": "SERVER_ERROR", "message": "failed to load metrics"}})
+        return JSONResponse(status_code=500, content={"error": {"code": "INTERNAL", "message": "failed to load metrics"}})
 
 
 @router.get("/backtests/{run_id}/equity")
@@ -184,10 +184,10 @@ async def get_backtest_equity(run_id: str):
             points.append(pt)
         return JSONResponse(status_code=200, content={"equity": points})
     except FileNotFoundError:
-        return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND", "message": "equity not available"}})
+        return JSONResponse(status_code=404, content={"error": {"code": "RUN_NOT_FOUND", "message": "equity not available"}})
     except Exception as e:
         logger.exception("get_equity.error", extra={"run_id": run_id, "error": str(e)[:200]})
-        return JSONResponse(status_code=500, content={"error": {"code": "SERVER_ERROR", "message": "failed to load equity"}})
+        return JSONResponse(status_code=500, content={"error": {"code": "INTERNAL", "message": "failed to load equity"}})
 
 
 @router.get("/backtests/{run_id}/orders")
@@ -231,10 +231,10 @@ async def get_backtest_orders(run_id: str):
             })
         return JSONResponse(status_code=200, content={"orders": rows})
     except FileNotFoundError:
-        return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND", "message": "orders not available"}})
+        return JSONResponse(status_code=404, content={"error": {"code": "RUN_NOT_FOUND", "message": "orders not available"}})
     except Exception as e:
         logger.exception("get_orders.error", extra={"run_id": run_id, "error": str(e)[:200]})
-        return JSONResponse(status_code=500, content={"error": {"code": "SERVER_ERROR", "message": "failed to load orders"}})
+        return JSONResponse(status_code=500, content={"error": {"code": "INTERNAL", "message": "failed to load orders"}})
 
 HEARTBEAT_SECONDS = 5.0
 

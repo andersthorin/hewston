@@ -116,10 +116,6 @@ def create_app() -> FastAPI:
     app.include_router(proxy_router, prefix="/api/v1")
     app.include_router(chart_data_router, prefix="/api/v1")
     app.include_router(run_data_router, prefix="/api/v1")
-    # Temporary legacy fallback: expose run_data and chart_data routes also at root (no /api/v1)
-    # This helps when frontend routing misconfigures the prefix.
-    app.include_router(run_data_router, prefix="")
-    app.include_router(chart_data_router, prefix="")
 
     # Debug: log registered routes on startup to verify routing
     try:

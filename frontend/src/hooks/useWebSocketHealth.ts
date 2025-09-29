@@ -142,7 +142,7 @@ export function useWebSocketHealth(runId: string) {
         droppedFrames: health.droppedFrames,
       }))
     }
-  }, [playback.state, connectionStartTime, playback.getConnectionHealth])
+  }, [playback.state, connectionStartTime])
 
   // Manual reconnection
   const reconnect = useCallback(async () => {

@@ -447,7 +447,7 @@ class RunDataAggregator:
                 elif str(side_raw).upper() == "SELL":
                     side_out = "sell"
                 else:
-                    side_out = side_norm or "buy"  # default to buy for schema satisfaction
+                    side_out = side_norm  # leave empty when unknown; avoid defaulting to 'buy'
             qty = order.get("quantity")
             if qty is None:
                 qty = order.get("qty")
