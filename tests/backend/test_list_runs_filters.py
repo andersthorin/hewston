@@ -69,12 +69,12 @@ def seed_sample_db(db_path: str):
         with open("/tmp/run3.manifest", "w") as f:
             json.dump({"from": "2024-03-01", "to": "2024-03-15"}, f)
 
-        # Insert runs
+        # Insert runs (canonical backtests)
         conn.execute(
             """
-            INSERT INTO runs (run_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
-                              code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
-                              fills_path, run_manifest_path)
+            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
+                                  code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
+                                  fills_path, run_manifest_path)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -98,9 +98,9 @@ def seed_sample_db(db_path: str):
         )
         conn.execute(
             """
-            INSERT INTO runs (run_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
-                              code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
-                              fills_path, run_manifest_path)
+            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
+                                  code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
+                                  fills_path, run_manifest_path)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -124,9 +124,9 @@ def seed_sample_db(db_path: str):
         )
         conn.execute(
             """
-            INSERT INTO runs (run_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
-                              code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
-                              fills_path, run_manifest_path)
+            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
+                                  code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
+                                  fills_path, run_manifest_path)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -160,7 +160,7 @@ def test_list_runs_filters_and_order(monkeypatch):
         client = TestClient(app)
 
         # Default order: -created_at (DESC)
-        r = client.get("/backtests", params={"symbol": "AAPL"})
+        r = client.get("/api/v1/backtests", params={"symbol": "AAPL"})
         assert r.status_code == 200
         j = r.json()
         assert [it["run_id"] for it in j["items"]] == ["r2", "r1"]
@@ -169,24 +169,24 @@ def test_list_runs_filters_and_order(monkeypatch):
         assert "run_from" in j["items"][0] and "run_to" in j["items"][0]
 
         # ASC order
-        r2 = client.get("/backtests", params={"symbol": "AAPL", "order": "created_at"})
+        r2 = client.get("/api/v1/backtests", params={"symbol": "AAPL", "order": "created_at"})
         assert r2.status_code == 200
         j2 = r2.json()
         assert [it["run_id"] for it in j2["items"]] == ["r1", "r2"]
 
         # strategy_id filter
-        r3 = client.get("/backtests", params={"strategy_id": "sma_crossover"})
+        r3 = client.get("/api/v1/backtests", params={"strategy_id": "sma_crossover"})
         j3 = r3.json()
         assert {it["run_id"] for it in j3["items"]} == {"r1", "r3"}
 
         # from/to overlap filter (dataset to_date >= from and from_date <= to)
-        r4 = client.get("/backtests", params={"from": "2024-05-01", "to": "2024-06-30"})
+        r4 = client.get("/api/v1/backtests", params={"from": "2024-05-01", "to": "2024-06-30"})
         j4 = r4.json()
         # Both datasets cover 2024, so all runs shown
         assert {it["run_id"] for it in j4["items"]} == {"r1", "r2", "r3"}
 
         # Clamp limit to 500
-        r5 = client.get("/backtests", params={"limit": 1000})
+        r5 = client.get("/api/v1/backtests", params={"limit": 1000})
         j5 = r5.json()
         assert j5["limit"] == 500
 

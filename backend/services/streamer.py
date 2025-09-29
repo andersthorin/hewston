@@ -25,7 +25,7 @@ def _get_catalog() -> SqliteCatalog:
 def _resolve_artifacts(run_id: str) -> Tuple[Dict[str, str], Optional[str]]:
     """Return artifact paths and dataset_id for a run_id."""
     cat = _get_catalog()
-    row = cat.get_run(run_id)
+    row = cat.get_backtest(run_id)
     if not row:
         raise FileNotFoundError(f"run not found: {run_id}")
     arts = row["artifacts"]

@@ -55,14 +55,14 @@ The app will be available at http://127.0.0.1:5173
 src/
 ├── components/          # Presentational components
 │   ├── ChartOHLC.tsx   # Candlestick chart with imperative API
-│   ├── RunsTable.tsx   # Backtest runs table
+│   ├── BacktestsTable.tsx   # Backtests table
 │   ├── FiltersBar.tsx  # Filtering controls
 │   └── PlaybackControls.tsx # Play/pause/speed controls
 ├── containers/         # Data-connected containers
-│   ├── RunsListContainer.tsx # Runs list with data fetching
+│   ├── BacktestsListContainer.tsx # Backtests list with data fetching
 │   └── RunPlayerContainer.tsx # Playback with WebSocket
 ├── views/              # Route-level views
-│   └── RunDetail.tsx   # Individual run detail page
+│   └── BacktestDetail.tsx   # Individual backtest detail page
 ├── services/           # API and data services
 │   ├── api.ts         # REST API client with Zod validation
 │   ├── ws.ts          # WebSocket hook for streaming
@@ -94,15 +94,15 @@ src/
 
 ### REST API
 ```typescript
-// Fetch backtest runs
-const runs = await listBacktests({
+// Fetch backtests
+const backtests = await listBacktests({
   symbol: 'AAPL',
   limit: 20,
   offset: 0
 });
 
 // Get backtest details
-const runDetail = await getRunDetail(backtest_id);
+const detail = await getBacktestDetail(backtest_id);
 ```
 
 ### WebSocket Streaming

@@ -4,7 +4,7 @@ import os
 import sqlite3
 from typing import Optional, List, Tuple, Dict, Any
 
-from backend.domain.models import RunSummary, Dataset
+from backend.domain.models import BacktestSummary, Dataset
 from backend.ports.catalog import CatalogPort
 
 DDL = """
@@ -17,28 +17,39 @@ CREATE TABLE IF NOT EXISTS datasets (
     manifest_json TEXT
 );
 
-CREATE TABLE IF NOT EXISTS runs (
-    run_id TEXT PRIMARY KEY,
+-- Canonical tables
+CREATE TABLE IF NOT EXISTS backtests (
+    backtest_id TEXT PRIMARY KEY,
     dataset_id TEXT REFERENCES datasets(dataset_id),
     strategy_id TEXT NOT NULL,
     status TEXT NOT NULL,
     created_at TEXT NOT NULL,
     duration_ms INTEGER,
     manifest_json TEXT,
-    metrics_json TEXT
+    metrics_json TEXT,
+    -- Optional extended columns (added in migrations when missing)
+    params_json TEXT,
+    seed INTEGER,
+    slippage_fees_json TEXT,
+    speed INTEGER,
+    code_hash TEXT,
+    metrics_path TEXT,
+    equity_path TEXT,
+    orders_path TEXT,
+    fills_path TEXT,
+    run_manifest_path TEXT,
+    input_hash TEXT,
+    idempotency_key TEXT
 );
 
-CREATE VIEW IF NOT EXISTS runs_list AS
-SELECT r.run_id,
-       r.created_at,
-       r.strategy_id,
-       r.status,
-       d.symbol AS symbol,
-       d.from_date AS from_date,
-       d.to_date AS to_date,
-       r.duration_ms AS duration_ms
-FROM runs r
-LEFT JOIN datasets d ON d.dataset_id = r.dataset_id;
+CREATE TABLE IF NOT EXISTS backtest_metrics (
+    backtest_id TEXT PRIMARY KEY REFERENCES backtests(backtest_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    total_return REAL,
+    max_drawdown REAL,
+    computed_at TEXT NOT NULL
+);
+
+
 """
 
 
@@ -46,6 +57,7 @@ class SqliteCatalog(CatalogPort):
     def __init__(self, db_path: str | None = None) -> None:
         resolved = db_path or os.getenv("HEWSTON_CATALOG_PATH", "data/catalog.sqlite")
         self.db_path = resolved
+        self._conn: sqlite3.Connection | None = None
         if resolved != ":memory:":
             dirn = os.path.dirname(resolved)
             if dirn:
@@ -54,11 +66,18 @@ class SqliteCatalog(CatalogPort):
             # Ensure newer columns/tables exist if DB was created with older minimal DDL
             self._migrate_schema()
         else:
+            # Single shared in-memory connection so schema persists across operations
+            self._conn = sqlite3.connect(":memory:", check_same_thread=False)
+            self._conn.row_factory = sqlite3.Row
+            self._conn.execute("PRAGMA foreign_keys=ON;")
             # Initialize minimal schema in-memory for list/get operations in tests
-            self._ensure_schema()
+            with self._conn:
+                self._conn.executescript(DDL)
             self._migrate_schema()
 
     def _connect(self) -> sqlite3.Connection:
+        if self.db_path == ":memory:" and self._conn is not None:
+            return self._conn
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys=ON;")
@@ -108,8 +127,8 @@ class SqliteCatalog(CatalogPort):
                     if not col_exists("datasets", col):
                         conn.execute(f"ALTER TABLE datasets ADD COLUMN {col} {decl}")
 
-            # runs: ensure columns used by create_run and set_run_status
-            if conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='runs'").fetchone():
+            # backtests: ensure columns used by create_run and set_run_status
+            if conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='backtests'").fetchone():
                 for col, decl in [
                     ("params_json", "TEXT"),
                     ("seed", "INTEGER"),
@@ -124,81 +143,65 @@ class SqliteCatalog(CatalogPort):
                     ("input_hash", "TEXT"),
                     ("idempotency_key", "TEXT"),
                 ]:
-                    if not col_exists("runs", col):
-                        conn.execute(f"ALTER TABLE runs ADD COLUMN {col} {decl}")
+                    if not col_exists("backtests", col):
+                        conn.execute(f"ALTER TABLE backtests ADD COLUMN {col} {decl}")
 
-            # run_metrics: minimal table for metrics upsert
+            # backtest_metrics: minimal table for metrics upsert
             conn.execute(
-                "CREATE TABLE IF NOT EXISTS run_metrics (\n"
-                "  run_id TEXT PRIMARY KEY REFERENCES runs(run_id) ON UPDATE CASCADE ON DELETE CASCADE,\n"
+                "CREATE TABLE IF NOT EXISTS backtest_metrics (\n"
+                "  backtest_id TEXT PRIMARY KEY REFERENCES backtests(backtest_id) ON UPDATE CASCADE ON DELETE CASCADE,\n"
                 "  total_return REAL,\n"
                 "  max_drawdown REAL,\n"
                 "  computed_at TEXT NOT NULL\n"
                 ")"
             )
 
-            # View runs_list to include symbol/period
-            conn.execute("DROP VIEW IF EXISTS runs_list")
-            conn.execute(
-                "CREATE VIEW runs_list AS\n"
-                "SELECT r.run_id, r.created_at, r.strategy_id, r.status,\n"
-                "       d.symbol AS symbol, d.from_date AS from_date, d.to_date AS to_date,\n"
-                "       r.duration_ms AS duration_ms\n"
-                "FROM runs r LEFT JOIN datasets d ON d.dataset_id = r.dataset_id"
-            )
-
-            # Create terminology-alias views for backtests naming
-            try:
-                conn.execute("DROP VIEW IF EXISTS backtests")
-                conn.execute("CREATE VIEW backtests AS SELECT * FROM runs")
-            except Exception:
-                pass
-            try:
-                conn.execute("DROP VIEW IF EXISTS backtest_metrics")
-                conn.execute("CREATE VIEW backtest_metrics AS SELECT * FROM run_metrics")
-            except Exception:
-                pass
+            # No legacy views; canonical tables only
 
     def _ensure_schema(self) -> None:
         with self._connect() as conn:
             conn.executescript(DDL)
 
-    def get_run(self, run_id: str) -> Optional[Dict[str, Any]]:
+    def get_backtest(self, run_id: str) -> Optional[Dict[str, Any]]:
         import json as _json
         with self._connect() as conn:
-            row = conn.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+            row = conn.execute("SELECT * FROM backtests WHERE backtest_id = ?", (run_id,)).fetchone()
             if not row:
                 return None
+            cols = row.keys() if hasattr(row, "keys") else []
+            def _col(name: str):
+                return row[name] if name in cols else None
             # Parse JSON columns safely
             def _parse(j):
                 try:
                     return _json.loads(j) if j is not None else None
                 except Exception:
                     return None
+            run_manifest_path = _col("run_manifest_path")
             return {
-                "run_id": row["run_id"],
+                "run_id": row["backtest_id"],
                 "dataset_id": row["dataset_id"],
                 "strategy_id": row["strategy_id"],
-                "params": _parse(row["params_json"]),
-                "seed": row["seed"],
-                "slippage_fees": _parse(row["slippage_fees_json"]),
-                "speed": row["speed"],
-                "code_hash": row["code_hash"],
+                "params": _parse(_col("params_json")),
+                "seed": _col("seed"),
+                "slippage_fees": _parse(_col("slippage_fees_json")),
+                "speed": _col("speed"),
+                "code_hash": _col("code_hash"),
                 "created_at": row["created_at"],
                 "status": row["status"],
-                "duration_ms": row["duration_ms"],
+                "duration_ms": _col("duration_ms"),
                 "artifacts": {
-                    "metrics_path": row["metrics_path"],
-                    "equity_path": row["equity_path"],
-                    "orders_path": row["orders_path"],
-                    "fills_path": row["fills_path"],
-                    "run_manifest_path": row["run_manifest_path"],
+                    "metrics_path": _col("metrics_path"),
+                    "equity_path": _col("equity_path"),
+                    "orders_path": _col("orders_path"),
+                    "fills_path": _col("fills_path"),
+                    "run_manifest_path": run_manifest_path,
                 },
                 # Optional convenience link
-                "manifest": {"path": row["run_manifest_path"]} if row["run_manifest_path"] else None,
+                "manifest": {"path": run_manifest_path} if run_manifest_path else None,
             }
 
-    def list_runs(
+    def list_backtests(
         self,
         *,
         symbol: Optional[str] = None,
@@ -208,7 +211,7 @@ class SqliteCatalog(CatalogPort):
         limit: int = 20,
         offset: int = 0,
         order: str = "-created_at",
-    ) -> tuple[List[RunSummary], int]:
+    ) -> tuple[List[BacktestSummary], int]:
         clauses = []
         params: list = []
         if symbol:
@@ -229,14 +232,19 @@ class SqliteCatalog(CatalogPort):
         order_dir = "DESC" if str(order).strip().startswith("-") else "ASC"
 
         with self._connect() as conn:
-            total = conn.execute(f"SELECT COUNT(1) AS c FROM runs_list {where}", params).fetchone()["c"]
+            total = conn.execute(
+                f"SELECT COUNT(1) AS c FROM backtests b LEFT JOIN datasets d ON d.dataset_id = b.dataset_id {where}",
+                params,
+            ).fetchone()["c"]
             q = (
-                f"SELECT run_id, created_at, strategy_id, status, symbol, from_date, to_date, duration_ms "
-                f"FROM runs_list {where} ORDER BY created_at {order_dir} LIMIT ? OFFSET ?"
+                "SELECT b.backtest_id AS run_id, b.created_at, b.strategy_id, b.status, "
+                "d.symbol AS symbol, d.from_date AS from_date, d.to_date AS to_date, b.duration_ms AS duration_ms "
+                f"FROM backtests b LEFT JOIN datasets d ON d.dataset_id = b.dataset_id {where} "
+                f"ORDER BY b.created_at {order_dir} LIMIT ? OFFSET ?"
             )
             rows = conn.execute(q, (*params, limit, offset)).fetchall()
             items = [
-                RunSummary(
+                BacktestSummary(
                     run_id=r["run_id"],
                     created_at=r["created_at"],
                     strategy_id=r["strategy_id"],
@@ -288,7 +296,7 @@ class SqliteCatalog(CatalogPort):
             rec.get("tz", "America/New_York"),
             rec["raw_dbn_json"],
             rec["bars_parquet_json"],
-            rec["bars_manifest_path"],
+            (rec.get("bars_manifest_path") or ""),
             rec["generated_at"],
             int(rec.get("size_bytes", 0)),
             rec.get("status", "READY"),
@@ -313,7 +321,7 @@ class SqliteCatalog(CatalogPort):
             )
 
 
-    def create_run(
+    def create_backtest(
         self,
         *,
         run_id: str,
@@ -333,7 +341,7 @@ class SqliteCatalog(CatalogPort):
         with self._connect() as conn:
             conn.execute(
                 (
-                    "INSERT INTO runs (run_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed, "
+                    "INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed, "
                     "code_hash, created_at, status, run_manifest_path, input_hash, idempotency_key) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 ),
@@ -355,7 +363,7 @@ class SqliteCatalog(CatalogPort):
             )
         return run_id
 
-    def set_run_status(
+    def set_backtest_status(
         self,
         run_id: str,
         *,
@@ -385,9 +393,9 @@ class SqliteCatalog(CatalogPort):
             params.append(fills_path)
         params.append(run_id)
         with self._connect() as conn:
-            conn.execute(f"UPDATE runs SET {', '.join(sets)} WHERE run_id = ?", params)
+            conn.execute(f"UPDATE backtests SET {', '.join(sets)} WHERE backtest_id = ?", params)
 
-    def upsert_run_metrics(self, run_id: str, metrics: Dict[str, Any]) -> None:
+    def upsert_backtest_metrics(self, run_id: str, metrics: Dict[str, Any]) -> None:
         from datetime import datetime, timezone
 
         computed_at = datetime.now(timezone.utc).isoformat()
@@ -396,18 +404,22 @@ class SqliteCatalog(CatalogPort):
         max_drawdown = metrics.get("max_drawdown")
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO run_metrics (run_id, total_return, max_drawdown, computed_at) VALUES (?, ?, ?, ?) "
-                "ON CONFLICT(run_id) DO UPDATE SET total_return=excluded.total_return, max_drawdown=excluded.max_drawdown, computed_at=excluded.computed_at",
+                "INSERT INTO backtest_metrics (backtest_id, total_return, max_drawdown, computed_at) VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(backtest_id) DO UPDATE SET total_return=excluded.total_return, max_drawdown=excluded.max_drawdown, computed_at=excluded.computed_at",
                 (run_id, total_return, max_drawdown, computed_at),
             )
 
 
-    def find_run_by_input_hash(self, input_hash: str) -> Optional[Dict[str, Any]]:
+    def find_backtest_by_input_hash(self, input_hash: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
-            row = conn.execute("SELECT * FROM runs WHERE input_hash = ?", (input_hash,)).fetchone()
-            return dict(row) if row else None
+            row = conn.execute("SELECT backtest_id FROM backtests WHERE input_hash = ?", (input_hash,)).fetchone()
+            if not row:
+                return None
+            return {"run_id": row["backtest_id"]}
 
-    def find_run_by_idempotency_key(self, idem: str) -> Optional[Dict[str, Any]]:
+    def find_backtest_by_idempotency_key(self, idem: str) -> Optional[Dict[str, Any]]:
         with self._connect() as conn:
-            row = conn.execute("SELECT * FROM runs WHERE idempotency_key = ?", (idem,)).fetchone()
-            return dict(row) if row else None
+            row = conn.execute("SELECT backtest_id FROM backtests WHERE idempotency_key = ?", (idem,)).fetchone()
+            if not row:
+                return None
+            return {"run_id": row["backtest_id"]}

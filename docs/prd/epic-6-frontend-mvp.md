@@ -1,13 +1,13 @@
 # Epic 6 — Frontend MVP
 
 Goal
-- Implement Runs List and Run Detail playback UI with presentational components and WS hook/Worker.
+- Implement Backtests List and Backtest Detail playback UI with presentational components and WS hook/Worker.
 
 Why (Value)
-- Provides the owner-operator dashboard to browse runs, replay results, and visualize equity/overlays.
+- Provides the owner-operator dashboard to browse backtests, replay results, and visualize equity/overlays.
 
 Scope (In)
-- Views: RunsList, RunDetail (compose containers + presentational components)
+- Views: BacktestsList, BacktestDetail (compose containers + presentational components)
 - Services: REST client (TanStack Query), WS hook (ws.ts), Worker to parse frames
 - Components: charts (Lightweight Charts), metrics, overlays (orders/fills)
 - No data creation/mutation in components; props-only rendering
@@ -16,8 +16,8 @@ Out of Scope
 - Complex strategy controls; multi-symbol playback; auth
 
 Deliverables
-- Runs List shows rows from catalog
-- Run Detail plays back a selected run at time-compressed speed with overlays
+- Backtests List shows rows from catalog
+- Backtest Detail plays back a selected backtest at time-compressed speed with overlays
 
 Acceptance Criteria
 - WS hook connects to /backtests/{id}/ws and handles ctrl/events

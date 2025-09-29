@@ -32,7 +32,8 @@ class TestBFFIntegration:
         
         # Test BFF health check
         app = create_app()
-        async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/v1/health")
             
             assert response.status_code == 200
@@ -57,7 +58,8 @@ class TestBFFIntegration:
         
         # Test BFF readiness check
         app = create_app()
-        async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/v1/health/ready")
             
             assert response.status_code == 200
@@ -84,7 +86,8 @@ class TestBFFIntegration:
         """Test that correlation IDs are properly added to responses."""
         app = create_app()
         
-        async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/v1/health/live")
             
             assert response.status_code == 200
@@ -99,7 +102,8 @@ class TestBFFIntegration:
         """Test that BFF can handle concurrent requests."""
         app = create_app()
         
-        async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             # Make 10 concurrent requests
             tasks = [
                 client.get("/api/v1/health/live")
@@ -179,7 +183,8 @@ class TestBFFProxyIntegration:
 
         # Test BFF proxy endpoints
         app = create_app()
-        async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             # Test backtests list endpoint
             response = await client.get("/api/v1/backtests")
             assert response.status_code == 200
@@ -201,7 +206,8 @@ class TestBFFErrorHandling:
         with patch("bff.app.config.BACKEND_BASE_URL", "http://localhost:9999"):
             app = create_app()
 
-            async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+            transport = httpx.ASGITransport(app=app)
+            async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
                 # Health check should still respond but show degraded status
                 response = await client.get("/api/v1/health")
 
@@ -226,7 +232,8 @@ class TestBFFErrorHandling:
         """Test BFF handling of invalid requests."""
         app = create_app()
 
-        async with httpx.AsyncClient(app=app, base_url="http://test") as client:
+        transport = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             # Test non-existent endpoint
             response = await client.get("/api/v1/nonexistent")
             assert response.status_code == 404

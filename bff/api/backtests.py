@@ -1,7 +1,7 @@
 """
-Run Data API
+Backtests API
 
-Provides unified run data aggregation endpoint that combines multiple
+Provides unified backtest data aggregation endpoints that combine multiple
 backend calls into optimized responses for frontend consumption.
 """
 
@@ -12,19 +12,19 @@ import logging
 import time
 from typing import Optional
 
-from bff.models.run_data import (
-    CompleteRunResponse,
-    RunDataRequest,
-    RunDataError
+from bff.models.backtest_data import (
+    CompleteBacktestResponse,
+    BacktestDataRequest,
+    BacktestDataError,
 )
 from bff.services.backend_client import BackendClient, create_backend_client
-from bff.services.run_aggregator import RunDataAggregator
+from bff.services.backtest_aggregator import BacktestDataAggregator
 from bff.services.cache import CacheService
 from bff.app.dependencies import get_backend_client, get_redis_client
 from typing import Dict, Any, List
 
 router = APIRouter()
-logger = logging.getLogger("bff.run_data")
+logger = logging.getLogger("bff.backtests_api")
 
 
 async def get_correlation_id_from_state(request) -> str:
@@ -137,7 +137,7 @@ async def create_backtest_via_bff(
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=str(e))
     except Exception as e:
-        logger.exception("create_run.error", extra={"error": str(e)})
+        logger.exception("create_backtest.error", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail="Internal error creating backtest")
 
 
@@ -329,7 +329,7 @@ async def list_backtests(
             status_code = e.response.status_code
 
         logger.error(
-            "list_runs.backend_error",
+            "list_backtests.backend_error",
             extra={
                 "correlation_id": correlation_id,
                 "status_code": status_code,
@@ -346,7 +346,7 @@ async def list_backtests(
         else:
             raise HTTPException(
                 status_code=500,
-                detail="Internal server error while fetching runs"
+                detail="Internal server error while fetching backtests"
             )
 
 
@@ -383,7 +383,7 @@ async def get_complete_backtest_data(
     correlation_id = f"run_{run_id}_{int(time.time() * 1000)}"
 
     logger.info(
-        "run_data.request",
+        "backtests.request",
         extra={
             "correlation_id": correlation_id,
             "run_id": run_id,
@@ -403,10 +403,10 @@ async def get_complete_backtest_data(
                 "run_id": run_id,
             }
         )
-        raise HTTPException(status_code=400, detail="Run ID cannot be empty")
+        raise HTTPException(status_code=400, detail="Backtest ID cannot be empty")
 
     # Create request parameters
-    request_params = RunDataRequest(
+    request_params = BacktestDataRequest(
         include_orders=include_orders,
         include_equity=include_equity,
         include_metrics=include_metrics
@@ -414,25 +414,25 @@ async def get_complete_backtest_data(
 
     # Initialize services
     cache_service = CacheService(redis_client)
-    aggregator = RunDataAggregator()
+    aggregator = BacktestDataAggregator()
     backend_proxy = await create_backend_client(backend_client)
 
     # Check cache first
-    cache_key = cache_service.generate_run_cache_key(
+    cache_key = cache_service.generate_backtest_cache_key(
         run_id=run_id,
         include_orders=include_orders,
         include_equity=include_equity,
         include_metrics=include_metrics
     )
 
-    cached_response = await cache_service.get_run_data(cache_key, correlation_id)
+    cached_response = await cache_service.get_backtest_data(cache_key, correlation_id)
     if cached_response:
         # Update metadata for cache hit
         cached_response.metadata.cache_hit = True
         cached_response.metadata.load_time_ms = int((time.perf_counter() - start_time) * 1000)
 
         logger.info(
-            "run_data.cache_hit",
+            "backtests.cache_hit",
             extra={
                 "correlation_id": correlation_id,
                 "run_id": run_id,
@@ -443,27 +443,28 @@ async def get_complete_backtest_data(
         # Transform to frontend contract while keeping backward-compatible fields
         metrics_dict = None
         if cached_response.metrics is not None:
-            md = cached_response.metrics.dict()
+            md = cached_response.metrics.model_dump()
             metrics_dict = {k: v for k, v in md.items() if v is not None}
             if not metrics_dict:
                 metrics_dict = None
-        equity_list = (
-            [{"ts": p.ts, "value": p.value} for p in (cached_response.equity or [])]
-            if cached_response.equity else None
-        )
-        orders_list = (
-            [
+        equity_list = None
+        if cached_response.equity is not None:
+            equity_list = [{"ts": p.ts, "value": p.value} for p in cached_response.equity]
+        orders_list = None
+        if cached_response.orders is not None:
+            orders_list = [
                 {
-                    "ts": o.ts,
+                    "order_id": getattr(o, "order_id", None) or getattr(o, "id", None),
+                    "timestamp": o.ts,
+                    "symbol": getattr(o, "symbol", None),
                     "side": o.side,
                     "quantity": o.quantity,
                     "price": o.price,
                     "order_type": o.order_type,
                     "status": o.status,
                 }
-                for o in (cached_response.orders or [])
-            ] if cached_response.orders else None
-        )
+                for o in cached_response.orders
+            ]
         # Determine run window and dataset
         run_from_val = getattr(cached_response.run, "run_from", None)
         run_to_val = getattr(cached_response.run, "run_to", None)
@@ -476,33 +477,28 @@ async def get_complete_backtest_data(
         dataset_id_val = getattr(cached_response.run, "dataset_id", None)
 
         frontend_payload = {
-            "backtest_id": cached_response.run.run_id,
-            "strategy_id": cached_response.run.strategy_id,
-            "status": cached_response.run.status,
-            "symbol": cached_response.run.symbol,
-            "params": cached_response.run.params or {},
-            "run_from": run_from_val,
-            "run_to": run_to_val,
-            "dataset_id": dataset_id_val,
-            "code_hash": None,
-            "seed": None,
-            "speed": None,
-            "duration_ms": None,
+            "run": {
+                "run_id": cached_response.run.run_id,
+                "strategy_id": cached_response.run.strategy_id,
+                "status": cached_response.run.status,
+                "symbol": cached_response.run.symbol,
+                "params": cached_response.run.params or {},
+                "run_from": run_from_val,
+                "run_to": run_to_val,
+                "dataset_id": dataset_id_val,
+            },
             "metrics": metrics_dict,
             "equity": equity_list,
             "orders": orders_list,
-            "meta": {
-                "aggregated": True,
-                "cache_hit": cached_response.metadata.cache_hit,
+            "metadata": {
                 "load_time_ms": cached_response.metadata.load_time_ms,
-                "source": "bff",
-                "components_loaded": [
-                    name for name, val in (
-                        ("metrics", cached_response.metrics),
-                        ("equity", cached_response.equity),
-                        ("orders", cached_response.orders),
-                    ) if val
-                ],
+                "cache_hit": cached_response.metadata.cache_hit,
+                "backend_calls": cached_response.metadata.backend_calls,
+                "data_sources": cached_response.metadata.data_sources,
+                "partial_data": cached_response.metadata.partial_data,
+                "failed_sources": cached_response.metadata.failed_sources,
+                "orders_count": cached_response.metadata.orders_count,
+                "equity_points": cached_response.metadata.equity_points,
             },
         }
         return JSONResponse(status_code=200, content=frontend_payload)
@@ -520,7 +516,7 @@ async def get_complete_backtest_data(
         if response.run.status in ["COMPLETED", "FAILED"]:
             # Use longer TTL for completed runs
             ttl = 3600  # 1 hour for completed runs
-            await cache_service.set_run_data(
+            await cache_service.set_backtest_data(
                 cache_key,
                 response,
                 ttl,
@@ -529,7 +525,7 @@ async def get_complete_backtest_data(
         elif response.run.status == "RUNNING":
             # Short TTL for running runs
             ttl = 60  # 1 minute for running runs
-            await cache_service.set_run_data(
+            await cache_service.set_backtest_data(
                 cache_key,
                 response,
                 ttl,
@@ -538,7 +534,7 @@ async def get_complete_backtest_data(
         # Don't cache queued runs
 
         logger.info(
-            "run_data.success",
+            "backtests.success",
             extra={
                 "correlation_id": correlation_id,
                 "run_id": run_id,
@@ -552,27 +548,28 @@ async def get_complete_backtest_data(
         # Transform to frontend contract while keeping backward-compatible fields
         metrics_dict = None
         if response.metrics is not None:
-            md = response.metrics.dict()
+            md = response.metrics.model_dump()
             metrics_dict = {k: v for k, v in md.items() if v is not None}
             if not metrics_dict:
                 metrics_dict = None
-        equity_list = (
-            [{"ts": p.ts, "value": p.value} for p in (response.equity or [])]
-            if response.equity else None
-        )
-        orders_list = (
-            [
+        equity_list = None
+        if response.equity is not None:
+            equity_list = [{"ts": p.ts, "value": p.value} for p in response.equity]
+        orders_list = None
+        if response.orders is not None:
+            orders_list = [
                 {
-                    "ts": o.ts,
+                    "order_id": getattr(o, "order_id", None) or getattr(o, "id", None),
+                    "timestamp": o.ts,
+                    "symbol": getattr(o, "symbol", None),
                     "side": o.side,
                     "quantity": o.quantity,
                     "price": o.price,
                     "order_type": o.order_type,
                     "status": o.status,
                 }
-                for o in (response.orders or [])
-            ] if response.orders else None
-        )
+                for o in response.orders
+            ]
         # Determine run window and dataset
         run_from_val = getattr(response.run, "run_from", None)
         run_to_val = getattr(response.run, "run_to", None)
@@ -585,33 +582,28 @@ async def get_complete_backtest_data(
         dataset_id_val = getattr(response.run, "dataset_id", None)
 
         frontend_payload = {
-            "backtest_id": response.run.run_id,
-            "strategy_id": response.run.strategy_id,
-            "status": response.run.status,
-            "symbol": response.run.symbol,
-            "params": response.run.params or {},
-            "run_from": run_from_val,
-            "run_to": run_to_val,
-            "dataset_id": dataset_id_val,
-            "code_hash": None,
-            "seed": None,
-            "speed": None,
-            "duration_ms": None,
+            "run": {
+                "run_id": response.run.run_id,
+                "strategy_id": response.run.strategy_id,
+                "status": response.run.status,
+                "symbol": response.run.symbol,
+                "params": response.run.params or {},
+                "run_from": run_from_val,
+                "run_to": run_to_val,
+                "dataset_id": dataset_id_val,
+            },
             "metrics": metrics_dict,
             "equity": equity_list,
             "orders": orders_list,
-            "meta": {
-                "aggregated": True,
-                "cache_hit": response.metadata.cache_hit,
+            "metadata": {
                 "load_time_ms": response.metadata.load_time_ms,
-                "source": "bff",
-                "components_loaded": [
-                    name for name, val in (
-                        ("metrics", response.metrics),
-                        ("equity", response.equity),
-                        ("orders", response.orders),
-                    ) if val
-                ],
+                "cache_hit": response.metadata.cache_hit,
+                "backend_calls": response.metadata.backend_calls,
+                "data_sources": response.metadata.data_sources,
+                "partial_data": response.metadata.partial_data,
+                "failed_sources": response.metadata.failed_sources,
+                "orders_count": response.metadata.orders_count,
+                "equity_points": response.metadata.equity_points,
             },
         }
         return JSONResponse(status_code=200, content=frontend_payload)
@@ -619,7 +611,7 @@ async def get_complete_backtest_data(
     except ValueError as e:
         # Run not found
         logger.warning(
-            "run_data.not_found",
+            "backtests.not_found",
             extra={
                 "correlation_id": correlation_id,
                 "run_id": run_id,
@@ -630,7 +622,7 @@ async def get_complete_backtest_data(
 
     except Exception as e:
         logger.exception(
-            "run_data.error",
+            "backtests.error",
             extra={
                 "correlation_id": correlation_id,
                 "run_id": run_id,
@@ -640,7 +632,7 @@ async def get_complete_backtest_data(
 
         raise HTTPException(
             status_code=500,
-            detail=f"Internal error processing run data: {str(e)}"
+            detail=f"Internal error processing backtest data: {str(e)}"
         )
 
 
@@ -666,7 +658,7 @@ async def get_backtest_status(
     correlation_id = f"status_{run_id}_{int(time.time() * 1000)}"
 
     logger.info(
-        "run_status.request",
+        "backtest_status.request",
         extra={
             "correlation_id": correlation_id,
             "run_id": run_id,
@@ -699,7 +691,7 @@ async def get_backtest_status(
 
             # Return lightweight status response (backtest_id only)
             status_response = {
-                "backtest_id": data.get("run_id") or data.get("backtest_id"),
+                "run_id": data.get("run_id") or data.get("backtest_id"),
                 "status": data.get("status"),
                 "strategy_id": data.get("strategy_id"),
                 "symbol": data.get("symbol"),
@@ -710,7 +702,7 @@ async def get_backtest_status(
             }
 
             logger.info(
-                "run_status.success",
+                "backtest_status.success",
                 extra={
                     "correlation_id": correlation_id,
                     "run_id": run_id,
@@ -721,7 +713,7 @@ async def get_backtest_status(
             return status_response
 
         elif response.status_code == 404:
-            raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+            raise HTTPException(status_code=404, detail=f"Backtest {run_id} not found")
         else:
             raise HTTPException(
                 status_code=response.status_code,
@@ -732,7 +724,7 @@ async def get_backtest_status(
         raise
     except Exception as e:
         logger.exception(
-            "run_status.error",
+            "backtest_status.error",
             extra={
                 "correlation_id": correlation_id,
                 "run_id": run_id,
@@ -742,7 +734,7 @@ async def get_backtest_status(
 
         raise HTTPException(
             status_code=500,
-            detail=f"Internal error getting run status: {str(e)}"
+            detail=f"Internal error getting backtest status: {str(e)}"
         )
 
 

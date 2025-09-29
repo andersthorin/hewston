@@ -163,11 +163,11 @@ make clean                  # Remove caches and temp files
 
 ## 🧪 Example Usage
 
-### Create and View a Backtest Run
+### Create and View a Backtest
 
-1. **Create a run via API**:
+1. **Create a backtest via API**:
 ```bash
-curl -X POST http://127.0.0.1:8000/backtests \
+curl -X POST http://127.0.0.1:8000/api/v1/backtests \
   -H "Content-Type: application/json" \
   -d '{
     "symbol": "AAPL",
@@ -181,8 +181,8 @@ curl -X POST http://127.0.0.1:8000/backtests \
 ```
 
 2. **View results in browser**:
-   - Navigate to http://127.0.0.1:5173/runs
-   - Click on your run to see detailed playback
+   - Navigate to http://127.0.0.1:5173/backtests
+   - Click on your backtest to see detailed playback
    - Use playback controls to visualize the strategy execution
 
 ### WebSocket Streaming Example

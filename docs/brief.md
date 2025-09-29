@@ -188,7 +188,7 @@ This document is being created collaboratively in interactive mode. No prior res
     - frontend/src/containers (compose data + presentational components)
     - frontend/src/services (API client, query keys, adapters, schema validation)
     - frontend/src/workers (SSE/stream parsing)
-    - frontend/src/features/backtests (views: RunsList, RunDetail)
+    - frontend/src/features/backtests (views: BacktestsList, BacktestDetail)
   - UI contract: presentational components never perform network calls or mutate data; they only format and display props
 
   - scripts/ (helper CLIs), Makefile, .env.example

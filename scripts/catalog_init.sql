@@ -24,9 +24,9 @@ CREATE INDEX IF NOT EXISTS idx_datasets_symbol_dates
 CREATE INDEX IF NOT EXISTS idx_datasets_generated_at
   ON datasets(generated_at);
 
--- Runs: backtest executions referencing a dataset
-CREATE TABLE IF NOT EXISTS runs (
-  run_id                TEXT PRIMARY KEY,
+-- Backtests: executions referencing a dataset (canonical)
+CREATE TABLE IF NOT EXISTS backtests (
+  backtest_id           TEXT PRIMARY KEY,
   dataset_id            TEXT NOT NULL REFERENCES datasets(dataset_id) ON UPDATE CASCADE ON DELETE RESTRICT,
   strategy_id           TEXT NOT NULL,
   params_json           TEXT NOT NULL, -- JSON object
@@ -46,13 +46,13 @@ CREATE TABLE IF NOT EXISTS runs (
   idempotency_key       TEXT UNIQUE    -- optional client-provided key
 );
 
-CREATE INDEX IF NOT EXISTS idx_runs_dataset ON runs(dataset_id);
-CREATE INDEX IF NOT EXISTS idx_runs_strategy_created ON runs(strategy_id, created_at);
-CREATE INDEX IF NOT EXISTS idx_runs_created ON runs(created_at);
+CREATE INDEX IF NOT EXISTS idx_backtests_dataset ON backtests(dataset_id);
+CREATE INDEX IF NOT EXISTS idx_backtests_strategy_created ON backtests(strategy_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_backtests_created ON backtests(created_at);
 
--- Run metrics: denormalized comparables for list/filter
-CREATE TABLE IF NOT EXISTS run_metrics (
-  run_id         TEXT PRIMARY KEY REFERENCES runs(run_id) ON UPDATE CASCADE ON DELETE CASCADE,
+-- Backtest metrics: denormalized comparables for list/filter
+CREATE TABLE IF NOT EXISTS backtest_metrics (
+  backtest_id     TEXT PRIMARY KEY REFERENCES backtests(backtest_id) ON UPDATE CASCADE ON DELETE CASCADE,
   total_return   REAL,
   cagr           REAL,
   max_drawdown   REAL,
@@ -67,14 +67,9 @@ CREATE TABLE IF NOT EXISTS run_metrics (
   computed_at    TEXT NOT NULL -- ISO datetime UTC
 );
 
-CREATE INDEX IF NOT EXISTS idx_metrics_sharpe ON run_metrics(sharpe);
-CREATE INDEX IF NOT EXISTS idx_metrics_drawdown ON run_metrics(max_drawdown);
+CREATE INDEX IF NOT EXISTS idx_metrics_sharpe ON backtest_metrics(sharpe);
+CREATE INDEX IF NOT EXISTS idx_metrics_drawdown ON backtest_metrics(max_drawdown);
 
--- Convenience view for listing runs with symbol and date range
-CREATE VIEW IF NOT EXISTS runs_list AS
-SELECT r.run_id, r.created_at, r.strategy_id, r.status,
-       d.symbol, d.from_date, d.to_date,
-       r.duration_ms
-FROM runs r
-JOIN datasets d ON d.dataset_id = r.dataset_id;
+
+
 

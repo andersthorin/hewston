@@ -28,7 +28,7 @@ def test_ws_stream_frames_basic(tmp_path, monkeypatch):
     run_id = out["run_id"]
 
     client = TestClient(app)
-    with client.websocket_connect(f"/backtests/{run_id}/ws") as ws:
+    with client.websocket_connect(f"/api/v1/backtests/{run_id}/ws") as ws:
         # Ask to play
         ws.send_json({"t": "ctrl", "cmd": "play"})
         # First receive should be echo; then frames

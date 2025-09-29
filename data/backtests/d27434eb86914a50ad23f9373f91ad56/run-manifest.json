@@ -1,0 +1,16 @@
+{
+  "run_id": "d27434eb86914a50ad23f9373f91ad56",
+  "dataset_id": "AAPL-2023-1m",
+  "strategy_id": "sma_crossover",
+  "params": {},
+  "seed": 42,
+  "slippage_fees": {},
+  "speed": 60,
+  "run_from": null,
+  "run_to": null,
+  "code_hash": "363be7f1c4a030523d799cdb77aa5de71faeedb3",
+  "env_lock": null,
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-09-29T16:59:50.794683+00:00"
+}

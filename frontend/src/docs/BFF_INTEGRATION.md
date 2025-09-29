@@ -39,7 +39,7 @@ const response = await apiGetWithFlags('/api/v1/chart-data', 'chartData')
 Note: The API router maps frontend paths to canonical BFF paths. For example:
 - '/chart-data' → '/api/v1/chart-data'
 - '/backtests/:id' → '/api/v1/backtests/:id/complete' (canonical alias)
-- '/backtests/:id/ws' → '/api/v1/runs/:id/stream' (stream alias; canonical backtests stream may be added later)
+- '/backtests/:id/ws' → '/api/v1/backtests/:id/stream' (canonical backtests stream)
 
 ### Service Layer
 

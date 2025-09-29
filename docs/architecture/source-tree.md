@@ -25,9 +25,9 @@ backend/
   jobs/derive.py             # Derive 1m bars + TBBO aggregates (Parquet)
   jobs/run_backtest.py       # Execute backtest and write artifacts
 frontend/
-  src/components/            # Presentational components (ChartOHLC, RunsTable, etc.)
-  src/views/                 # Route-level views (RunDetail)
-  src/containers/            # Data-connected containers (RunsListContainer, RunPlayerContainer)
+  src/components/            # Presentational components (ChartOHLC, Backtests table, etc.)
+  src/views/                 # Route-level views (BacktestDetail)
+  src/containers/            # Data-connected containers (BacktestsListContainer, RunPlayerContainer)
   src/services/              # API and data services
     api.ts                   # REST client with Zod validation
     ws.ts                    # WebSocket hook for streaming

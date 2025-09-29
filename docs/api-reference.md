@@ -5,16 +5,16 @@
 
 ## Table of Contents
 
-1. [Runs Catalog Overview](#1-runs-catalog-overview)
+1. [Backtests Catalog Overview](#1-backtests-catalog-overview)
 2. [Error Codes & Handling](#2-error-codes--handling)
 3. [WebSocket Protocol](#3-websocket-protocol)
 4. [Schema References](#4-schema-references)
 
 ---
 
-## 1. Runs Catalog Overview
+## 1. Backtests Catalog Overview
 
-**Purpose**: Lightweight local catalog to index datasets and runs for listing, filtering, and retrieving artifacts. SQLite chosen for simplicity and determinism.
+**Purpose**: Lightweight local catalog to index datasets and backtests for listing, filtering, and retrieving artifacts. SQLite chosen for simplicity and determinism.
 
 ### Database Tables
 
@@ -25,56 +25,55 @@
 - **generated_at** (UTC), size_bytes, status (READY|BUILDING|ERROR)
 - **Indices**: (symbol, from_date, to_date), (generated_at)
 
-#### runs
-- **run_id** (PK), dataset_id (FK → datasets)
+#### backtests
+- **backtest_id** (PK), dataset_id (FK → datasets)
 - **strategy_id**, params_json, seed, slippage_fees_json, speed
 - **code_hash**, created_at (UTC), status, duration_ms
 - **metrics_path**, equity_path, orders_path, fills_path, run_manifest_path
 - **input_hash** (deterministic hash of inputs), idempotency_key
 - **Indices**: (dataset_id), (strategy_id, created_at), (created_at)
 
-#### run_metrics
-- **run_id** (PK, FK → runs), total_return, cagr, max_drawdown, sharpe, sortino
+#### backtest_metrics
+- **backtest_id** (PK, FK → backtests), total_return, cagr, max_drawdown, sharpe, sortino
 - **hit_rate**, avg_win, avg_loss, turnover, slippage_share, fees_paid, computed_at
 - **Indices**: (sharpe), (max_drawdown)
 
-#### View: runs_list
-- Joins runs with datasets for convenient listing (symbol, from_date, to_date)
-
 ### Common Queries
 
-**Count runs by symbol**
+**Count backtests by symbol**
 ```sql
 SELECT d.symbol, COUNT(*) AS n
-FROM runs r
-JOIN datasets d ON d.dataset_id = r.dataset_id
+FROM backtests b
+JOIN datasets d ON d.dataset_id = b.dataset_id
 GROUP BY d.symbol
 ORDER BY n DESC;
 ```
 
-**List last N runs**
+**List last N backtests**
 ```sql
-SELECT * FROM runs_list
-ORDER BY created_at DESC
+SELECT b.*
+FROM backtests b
+ORDER BY b.created_at DESC
 LIMIT 20;
 ```
 
-**Filter runs (symbol + date overlap)**
+**Filter backtests (symbol + date overlap)**
 ```sql
-SELECT *
-FROM runs_list
-WHERE symbol = 'AAPL'
-  AND from_date >= '2023-01-01'
-  AND to_date   <= '2023-12-31'
-ORDER BY created_at DESC;
+SELECT b.*
+FROM backtests b
+JOIN datasets d ON d.dataset_id = b.dataset_id
+WHERE d.symbol = 'AAPL'
+  AND d.from_date >= '2023-01-01'
+  AND d.to_date   <= '2023-12-31'
+ORDER BY b.created_at DESC;
 ```
 
-**Get run detail with artifact paths**
+**Get backtest detail with artifact paths**
 ```sql
-SELECT r.*, d.symbol, d.from_date, d.to_date
-FROM runs r
-JOIN datasets d ON d.dataset_id = r.dataset_id
-WHERE r.run_id = ?;
+SELECT b.*, d.symbol, d.from_date, d.to_date
+FROM backtests b
+JOIN datasets d ON d.dataset_id = b.dataset_id
+WHERE b.backtest_id = ?;
 ```
 
 ### Operational Notes

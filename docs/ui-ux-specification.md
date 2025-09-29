@@ -18,7 +18,7 @@
 
 ### Primary Flow: Create → List → Detail → Playback → Rerun
 
-#### 1. Create Run (Backend/API)
+#### 1. Create Backtest (Backend/API)
 - **Endpoint**: `POST /backtests`
 - **Payload**: `{ dataset_id OR (symbol, from, to), strategy_id, params, seed, slippage_fees, speed }`
 - **Response**: 
@@ -27,14 +27,14 @@
 - **Error codes**: VALIDATION, CONFLICT, IDP_CONFLICT
 - **Artifacts path**: `data/backtests/{run_id}/`
 
-#### 2. List Runs (UI: Runs List)
+#### 2. List Backtests (UI: Backtests List)
 - **Endpoint**: `GET /backtests?symbol=&from=&to=&strategy_id=&limit=&offset=`
 - **Display**: Table with symbol, date range, strategy, status, created_at, duration
 - **States**: 
   - **Empty**: Guidance to create a run
   - **Error**: Render error code/message
 
-#### 3. View Run (UI: Run Detail)
+#### 3. View Backtest (UI: Backtest Detail)
 - **Endpoint**: `GET /backtests/{id}` → metadata and artifact refs
 - **Display**: Equity chart, overlays for orders/fills (when available)
 - **Actions**: Connect to playback; rerun from manifest
@@ -57,8 +57,8 @@
 - Submit to create new run
 
 ### UI States to Design
-- **Runs List**: normal, empty, loading, error
-- **Run Detail**: loading metadata, error (RUN_NOT_FOUND), waiting for playback, playing, paused, end
+- **Backtests List**: normal, empty, loading, error
+- **Backtest Detail**: loading metadata, error (RUN_NOT_FOUND), waiting for playback, playing, paused, end
 - **Controls**: play/pause, seek, speed; show error toast on `{t:"err"}`
 
 ---
@@ -75,9 +75,9 @@
 
 ### Core UI Components
 
-#### RunsTable
-- **Props**: `{ items: RunSummary[], onView?: (run_id: string) => void }`
-- **Features**: Displays run list with standardized `run_from`/`run_to` fields
+#### BacktestsTable
+- **Props**: `{ items: BacktestSummary[], onView?: (backtest_id: string) => void }`
+- **Features**: Displays backtests list with standardized `run_from`/`run_to` fields
 - **States**: loading, empty, error (handled by container)
 
 #### FiltersBar
@@ -99,9 +99,9 @@
 ### Containers & Views (Data Layer)
 
 #### Containers
-- **RunsListContainer**
+- **BacktestsListContainer**
   - **Uses**: `@tanstack/react-query` for data fetching, `services/api.listBacktests`
-  - **Features**: Pagination, filtering, create run functionality
+  - **Features**: Pagination, filtering, create backtest functionality
   - **Manages**: Loading states, error handling, query parameters
 
 - **RunPlayerContainer**
@@ -110,10 +110,10 @@
   - **Manages**: WebSocket connection, playback state, chart API refs
 
 #### Views
-- **RunDetailView**
-  - **Route**: `/runs/:run_id`
-  - **Features**: Run metadata display, embedded RunPlayerContainer
-  - **Uses**: `useQuery` for run details, `useParams` for routing
+- **BacktestDetailView**
+  - **Route**: `/backtests/:backtest_id`
+  - **Features**: Backtest metadata display, embedded RunPlayerContainer
+  - **Uses**: `useQuery` for backtest details, `useParams` for routing
 
 ### TypeScript Types (Post-Standardization)
 
@@ -184,14 +184,14 @@ CandlestickChartAPI: {
 frontend/src/
 ├── components/           # Presentational components
 │   ├── ChartOHLC.tsx    # Candlestick chart with imperative API
-│   ├── FiltersBar.tsx   # Run filtering UI
+│   ├── FiltersBar.tsx   # Backtest filtering UI
 │   ├── PlaybackControls.tsx # Playback control buttons
-│   └── RunsTable.tsx    # Runs list table
+│   └── BacktestsTable.tsx    # Backtests list table
 ├── containers/          # Data-connected containers
-│   ├── RunsListContainer.tsx # Runs list with data fetching
+│   ├── BacktestsListContainer.tsx # Backtests list with data fetching
 │   └── RunPlayerContainer.tsx # Playback with WebSocket
 ├── views/               # Route-level views
-│   └── RunDetail.tsx    # Individual run detail page
+│   └── BacktestDetail.tsx    # Individual backtest detail page
 ├── services/            # API and data services
 │   ├── api.ts          # REST API client with Zod validation
 │   ├── ws.ts           # WebSocket hook for streaming
@@ -215,27 +215,27 @@ frontend/src/
 
 ## 3. Wireframes & Layouts
 
-### Runs List Wireframe
+### Backtests List Wireframe
 
 #### Layout (Normal)
 - **Header**
-  - Title: "Runs"
+  - Title: "Backtests"
   - Filters: symbol (input), strategy (select)
-  - Actions: Create baseline run (button)
+  - Actions: Create baseline backtest (button)
 - **Table** (20 per page)
-  - Columns: run_id, created_at, strategy_id, status, symbol, from, to, duration_ms, action
-  - Row action: "View" → navigates to `/runs/{run_id}`
+  - Columns: backtest_id, created_at, strategy_id, status, symbol, run_from, run_to, duration_ms, action
+  - Row action: "View" → navigates to `/backtests/{backtest_id}`
 - **Footer**
   - Pagination: prev/next, page size
 
 #### States
 - **Loading**: Replace table with 10 skeleton rows (monospace widths aligned to columns)
-- **Empty**: 
+- **Empty**:
   - Illustration/placeholder
-  - Message: "No runs yet."
-  - CTA: Create baseline run
-- **Error**: 
-  - Banner: "Error loading runs" + error code/message
+  - Message: "No backtests yet."
+  - CTA: Create baseline backtest
+- **Error**:
+  - Banner: "Error loading backtests" + error code/message
   - Retry button
 
 #### Interaction Notes
@@ -260,7 +260,7 @@ frontend/src/
 
 #### States
 - **Loading metadata**: Skeletons for header/meta; disabled controls
-- **Error (RUN_NOT_FOUND)**: Banner + back link to Runs List
+- **Error (RUN_NOT_FOUND)**: Banner + back link to Backtests List
 - **Waiting for playback**: Metadata visible; controls enabled; chart placeholder
 - **Playing**: Live frames; dropped counter visible
 - **Paused**: Controls show paused; charts static

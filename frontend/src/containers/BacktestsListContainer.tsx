@@ -1,7 +1,7 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useBacktestList, useCreateBacktest } from '../hooks/useRunData'
 import type { BacktestListQuery } from '../services/api'
-import RunsTable from '../components/RunsTable'
+import BacktestsTable from '../components/BacktestsTable'
 import FiltersBar, { type Filters } from '../components/FiltersBar'
 import { useNavigate } from 'react-router-dom'
 
@@ -121,7 +121,7 @@ export function BacktestsListContainer() {
       )}
       {data && data.items.length > 0 && (
         <>
-          <RunsTable items={data.items} onView={(id) => navigate(`/backtests/${id}`)} />
+          <BacktestsTable items={data.items} onView={(id) => navigate(`/backtests/${id}`)} />
           <div className="mt-3 flex items-center gap-2">
             <button disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - limit))}>
               Prev

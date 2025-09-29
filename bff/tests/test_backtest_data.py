@@ -12,9 +12,9 @@ import json
 import asyncio
 
 
-class TestRunDataEndpoint:
-    """Test suite for run data aggregation endpoint."""
-    
+class TestBacktestDataEndpoint:
+    """Test suite for backtest data aggregation endpoint."""
+
     def test_complete_run_data_success(self, test_client: TestClient, mock_backend_client, mock_backend_response):
         """Test successful complete run data request."""
         # Arrange - Mock all backend responses
@@ -68,7 +68,7 @@ class TestRunDataEndpoint:
         mock_backend_client.request.side_effect = responses
         
         # Act
-        response = test_client.get("/api/v1/runs/test-run-123/complete")
+        response = test_client.get("/api/v1/backtests/test-run-123/complete")
         
         # Assert
         assert response.status_code == 200
@@ -87,8 +87,8 @@ class TestRunDataEndpoint:
         
         # Verify equity curve
         assert len(data["equity"]) == 2
-        assert data["equity"][0]["equity"] == 100000.0
-        assert data["equity"][1]["equity"] == 115500.0
+        assert data["equity"][0]["value"] == 100000.0
+        assert data["equity"][1]["value"] == 115500.0
         
         # Verify orders
         assert len(data["orders"]) == 1
@@ -128,7 +128,7 @@ class TestRunDataEndpoint:
         mock_backend_client.request.side_effect = responses
         
         # Act
-        response = test_client.get("/api/v1/runs/test-run-123/complete")
+        response = test_client.get("/api/v1/backtests/test-run-123/complete")
         
         # Assert
         assert response.status_code == 200
@@ -156,7 +156,7 @@ class TestRunDataEndpoint:
         mock_backend_client.request.return_value = mock_response
         
         # Act
-        response = test_client.get("/api/v1/runs/nonexistent-run/complete")
+        response = test_client.get("/api/v1/backtests/nonexistent-run/complete")
         
         # Assert
         assert response.status_code == 404
@@ -183,7 +183,7 @@ class TestRunDataEndpoint:
         
         # Act - Request only metrics, no equity or orders
         response = test_client.get(
-            "/api/v1/runs/test-run-123/complete",
+            "/api/v1/backtests/test-run-123/complete",
             params={
                 "include_orders": False,
                 "include_equity": False,
@@ -220,7 +220,7 @@ class TestRunDataEndpoint:
         mock_backend_client.request.return_value = mock_response
         
         # Act
-        response = test_client.get("/api/v1/runs/test-run-123/status")
+        response = test_client.get("/api/v1/backtests/test-run-123/status")
         
         # Assert
         assert response.status_code == 200
@@ -237,14 +237,14 @@ class TestRunDataEndpoint:
         assert mock_backend_client.request.call_count == 1
 
 
-class TestRunDataAggregation:
-    """Test suite for run data aggregation logic."""
-    
+class TestBacktestDataAggregation:
+    """Test suite for backtest data aggregation logic."""
+
     @pytest.mark.asyncio
     async def test_concurrent_backend_calls(self):
         """Test that backend calls are made concurrently."""
-        from bff.services.run_aggregator import RunDataAggregator
-        from bff.models.run_data import RunDataRequest
+        from bff.services.backtest_aggregator import BacktestDataAggregator as RunDataAggregator
+        from bff.models.backtest_data import BacktestDataRequest as RunDataRequest
         from unittest.mock import AsyncMock, MagicMock
 
         # Arrange
@@ -288,7 +288,7 @@ class TestRunDataAggregation:
     
     def test_data_transformation(self):
         """Test backend data transformation to frontend format."""
-        from bff.services.run_aggregator import RunDataAggregator
+        from bff.services.backtest_aggregator import BacktestDataAggregator as RunDataAggregator
         
         # Arrange
         aggregator = RunDataAggregator()
@@ -313,7 +313,7 @@ class TestRunDataAggregation:
     
     def test_metrics_transformation(self):
         """Test metrics data transformation."""
-        from bff.services.run_aggregator import RunDataAggregator
+        from bff.services.backtest_aggregator import BacktestDataAggregator as RunDataAggregator
         
         # Arrange
         aggregator = RunDataAggregator()
@@ -340,32 +340,32 @@ class TestRunDataAggregation:
         assert metrics.losing_trades == 3
 
 
-class TestRunDataCaching:
-    """Test suite for run data caching functionality."""
-    
+class TestBacktestDataCaching:
+    """Test suite for backtest data caching functionality."""
+
     @pytest.mark.asyncio
-    async def test_run_cache_key_generation(self):
-        """Test run data cache key generation."""
+    async def test_backtest_cache_key_generation(self):
+        """Test backtest data cache key generation."""
         from bff.services.cache import CacheService
-        
+
         # Arrange
         cache_service = CacheService()
-        
+
         # Act
-        key1 = cache_service.generate_run_cache_key("run-123", True, True, True)
-        key2 = cache_service.generate_run_cache_key("run-123", True, True, True)
-        key3 = cache_service.generate_run_cache_key("run-123", False, True, True)
-        
+        key1 = cache_service.generate_backtest_cache_key("run-123", True, True, True)
+        key2 = cache_service.generate_backtest_cache_key("run-123", True, True, True)
+        key3 = cache_service.generate_backtest_cache_key("run-123", False, True, True)
+
         # Assert
         assert key1 == key2  # Same parameters = same key
         assert key1 != key3  # Different parameters = different key
-        assert key1.startswith("run:")
-    
+        assert key1.startswith("backtest:")
+
     def test_caching_ttl_by_status(self, test_client: TestClient, mock_backend_client, mock_backend_response):
         """Test that caching TTL varies by run status."""
         # This test verifies the caching logic in the endpoint
         # Completed runs should have longer TTL than running runs
-        
+
         # Arrange - Completed run
         run_details = {
             "run_id": "completed-run",
@@ -373,13 +373,13 @@ class TestRunDataCaching:
             "strategy_id": "test",
             "symbol": "AAPL"
         }
-        
+
         mock_response = mock_backend_response(200, run_details)
         mock_backend_client.request.return_value = mock_response
-        
+
         # Act
-        response = test_client.get("/api/v1/runs/completed-run/complete")
-        
+        response = test_client.get("/api/v1/backtests/completed-run/complete")
+
         # Assert
         assert response.status_code == 200
         # The caching logic is tested implicitly through the endpoint behavior

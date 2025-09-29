@@ -28,7 +28,7 @@ def test_sse_stream_frames_basic(tmp_path, monkeypatch):
 
     client = TestClient(app)
     buf = ""
-    with client.stream("GET", f"/backtests/{run_id}/stream") as r:
+    with client.stream("GET", f"/api/v1/backtests/{run_id}/stream") as r:
         assert r.status_code == 200
         # Read a few chunks and look for a frame
         for chunk in r.iter_text():

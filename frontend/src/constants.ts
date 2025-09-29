@@ -83,7 +83,7 @@ export const ERROR_MESSAGES = {
 // Route Paths
 export const ROUTES = {
   HOME: '/',
-  RUNS: '/runs',
-  RUN_DETAIL: '/runs/:id',
+  BACKTESTS: '/backtests',
+  BACKTEST_DETAIL: '/backtests/:backtest_id',
   SETTINGS: '/settings',
 } as const

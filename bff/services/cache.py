@@ -12,7 +12,7 @@ from datetime import datetime, timedelta
 import hashlib
 
 from bff.models.chart_data import ChartDataResponse, BarData, ResponseMetadata
-from bff.models.run_data import CompleteRunResponse
+from bff.models.backtest_data import CompleteBacktestResponse
 from bff.app.config import (
     REDIS_ENABLED,
     REDIS_TTL_CHART_DATA,
@@ -309,7 +309,7 @@ class CacheService:
                 "error": str(e),
             }
 
-    def generate_run_cache_key(
+    def generate_backtest_cache_key(
         self,
         run_id: str,
         include_orders: bool = True,
@@ -317,10 +317,10 @@ class CacheService:
         include_metrics: bool = True
     ) -> str:
         """
-        Generate cache key for run data.
+        Generate cache key for backtest data.
 
         Args:
-            run_id: Run identifier
+            run_id: Backtest identifier (preserves field name for cross-layer compat)
             include_orders: Whether orders are included
             include_equity: Whether equity is included
             include_metrics: Whether metrics are included
@@ -331,22 +331,22 @@ class CacheService:
         # Create deterministic cache key
         key_data = f"{run_id}:{include_orders}:{include_equity}:{include_metrics}"
         key_hash = hashlib.md5(key_data.encode()).hexdigest()
-        return f"run:{key_hash}"
+        return f"backtest:{key_hash}"
 
-    async def get_run_data(
+    async def get_backtest_data(
         self,
         cache_key: str,
         correlation_id: Optional[str] = None
-    ) -> Optional[CompleteRunResponse]:
+    ) -> Optional[CompleteBacktestResponse]:
         """
-        Get run data from cache.
+        Get backtest data from cache.
 
         Args:
             cache_key: Cache key
             correlation_id: Request correlation ID
 
         Returns:
-            Optional[CompleteRunResponse]: Cached data or None
+            Optional[CompleteBacktestResponse]: Cached data or None
         """
         if not self.enabled:
             return None
@@ -366,7 +366,7 @@ class CacheService:
 
                 # Deserialize cached data
                 data_dict = json.loads(cached_data)
-                return CompleteRunResponse(**data_dict)
+                return CompleteBacktestResponse(**data_dict)
             else:
                 self.logger.info(
                     "cache.miss",
@@ -388,19 +388,19 @@ class CacheService:
             )
             return None
 
-    async def set_run_data(
+    async def set_backtest_data(
         self,
         cache_key: str,
-        data: CompleteRunResponse,
+        data: CompleteBacktestResponse,
         ttl_seconds: int,
         correlation_id: Optional[str] = None
     ) -> bool:
         """
-        Store run data in cache.
+        Store backtest data in cache.
 
         Args:
             cache_key: Cache key
-            data: Run data to cache
+            data: Backtest data to cache
             ttl_seconds: Time to live in seconds
             correlation_id: Request correlation ID
 

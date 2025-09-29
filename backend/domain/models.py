@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 
 
 class DatasetManifest(BaseModel):
@@ -17,52 +17,43 @@ class Dataset(BaseModel):
     manifest: Optional[DatasetManifest] = None
 
 
-class RunManifest(BaseModel):
-    # Placeholder; free-form for now
+# Canonical models (backtests)
+class BacktestManifest(BaseModel):
+    """Canonical manifest model for a backtest."""
     meta: Dict[str, Any] = Field(default_factory=dict)
 
 
-class RunMetrics(BaseModel):
-    # Minimal placeholder metrics
+class BacktestMetrics(BaseModel):
+    """Canonical metrics model for a backtest."""
     metrics: Dict[str, Any] = Field(default_factory=dict)
 
 
-class Run(BaseModel):
-    run_id: str
+class Backtest(BaseModel):
+    """Canonical Backtest model.
+
+    Note: `run_from` and `run_to` are time window semantics and intentionally keep
+    their established names per project-wide directive.
+    """
+    run_id: str  # identifier retained as `run_id` for cross-layer compatibility
     dataset_id: Optional[str] = None
     strategy_id: str
     status: str
     created_at: str
     duration_ms: Optional[int] = None
-    manifest: Optional[RunManifest] = None
-    metrics: Optional[RunMetrics] = None
+    manifest: Optional[BacktestManifest] = None
+    metrics: Optional[BacktestMetrics] = None
 
 
-class RunSummary(BaseModel):
+class BacktestSummary(BaseModel):
+    """Canonical summary for listing/filtering backtests."""
     run_id: str
     created_at: str
     strategy_id: str
     status: str
     symbol: Optional[str] = None
-    # Standardized field names (must match frontend RunSummarySchema)
+    # Field names standardized; keep `run_from`/`run_to`
     run_from: Optional[str] = None
     run_to: Optional[str] = None
     duration_ms: Optional[int] = None
 
 
-
-# Backward-compatible aliases for terminology migration (runs → backtests)
-class BacktestManifest(RunManifest):
-    pass
-
-
-class BacktestMetrics(RunMetrics):
-    pass
-
-
-class Backtest(Run):
-    pass
-
-
-class BacktestSummary(RunSummary):
-    pass

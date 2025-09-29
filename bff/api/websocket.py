@@ -21,22 +21,22 @@ logger = logging.getLogger("bff.websocket_api")
 connection_manager = WebSocketConnectionManager()
 
 
-@router.websocket("/runs/{run_id}/stream")
-async def websocket_run_stream(
+
+
+
+@router.websocket("/backtests/{backtest_id}/stream")
+async def websocket_backtest_stream(
     websocket: WebSocket,
-    run_id: str = Path(..., description="Run identifier to stream")
+    backtest_id: str = Path(..., description="Backtest identifier to stream")
 ):
     """
-    WebSocket endpoint for real-time run updates.
+    WebSocket endpoint for real-time backtest updates (canonical).
 
-    Provides bidirectional communication for run status, metrics,
-    and order updates. Automatically subscribes to the specified run.
-
-    Args:
-        websocket: WebSocket connection
-        run_id: Run identifier to stream updates for
+    Provides bidirectional communication for backtest status, metrics,
+    and order updates. Automatically subscribes to the specified backtest.
     """
     connection_id = str(uuid.uuid4())
+    run_id = backtest_id
 
     logger.info(
         "websocket.connection_request",
@@ -51,7 +51,7 @@ async def websocket_run_stream(
         # Accept connection
         await connection_manager.connect_client(websocket, connection_id)
 
-        # Auto-subscribe to the run
+        # Auto-subscribe to the backtest
         subscribe_message = {
             "type": "subscribe",
             "run_id": run_id,
@@ -141,21 +141,6 @@ async def websocket_run_stream(
                 "run_id": run_id,
             }
         )
-
-
-
-@router.websocket("/backtests/{backtest_id}/stream")
-async def websocket_backtest_stream(
-    websocket: WebSocket,
-    backtest_id: str = Path(..., description="Backtest identifier to stream")
-):
-    """
-    WebSocket endpoint for real-time backtest updates (canonical).
-
-    Mirrors the run stream handler but uses backtest terminology and path.
-    """
-    # Delegate to the existing handler by reusing the same logic with run_id
-    return await websocket_run_stream(websocket, run_id=backtest_id)
 
 @router.websocket("/stream")
 async def websocket_general_stream(websocket: WebSocket):

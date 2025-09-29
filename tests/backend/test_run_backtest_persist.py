@@ -36,7 +36,7 @@ def test_run_backtest_persists_artifacts_and_catalog(tmp_path, monkeypatch):
     db_path = Path(os.environ["HEWSTON_CATALOG_PATH"])  # set above
     with sqlite3.connect(db_path) as conn:
         conn.row_factory = sqlite3.Row
-        run = conn.execute("SELECT * FROM runs WHERE run_id = ?", (run_id,)).fetchone()
+        run = conn.execute("SELECT * FROM backtests WHERE backtest_id = ?", (run_id,)).fetchone()
         assert run is not None
         assert run["status"] == "DONE"
         # Paths recorded
@@ -47,7 +47,7 @@ def test_run_backtest_persists_artifacts_and_catalog(tmp_path, monkeypatch):
         assert run["run_manifest_path"].endswith("run-manifest.json")
         assert run["duration_ms"] >= 0
 
-        m = conn.execute("SELECT * FROM run_metrics WHERE run_id = ?", (run_id,)).fetchone()
+        m = conn.execute("SELECT * FROM backtest_metrics WHERE backtest_id = ?", (run_id,)).fetchone()
         assert m is not None
         # Minimal metrics fields present
         assert m["total_return"] is not None
