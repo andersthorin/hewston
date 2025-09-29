@@ -103,8 +103,12 @@ Authoritative source for architecture choices is docs/brief.md (Technical Consid
 - Epic 4: API & Catalog — Expose POST/GET /backtests and catalog list/filter/search; run_id scheme and idempotency.
 - Epic 5: Playback UI — Vite+React+TS+Tailwind UI; Runs List and Run Detail with time-compressed playback over WebSocket (SSE fallback); rerun from manifest.
 - Epic 6: Reproducibility & Performance Hardening — Hash checks, determinism validation, performance budgets and logging.
+- Epic 7: Hardening and NFRs — Logging, retention, performance budgets, error handling, and operability hooks.
+- Epic 8: BFF Implementation — Backend-for-Frontend service for enhanced API aggregation and caching.
+- Epic 9: Frontend BFF Integration — Migrate frontend to use BFF service with enhanced data aggregation.
+- Epic 10: Nautilus Trader Full Implementation — Replace stub with real Nautilus Trader engine, multiple strategies, and comprehensive metrics.
 
-Note: Stories live under docs/stories/, and epic documents live under docs/prd/ (files epic-1-*.md through epic-7-*.md).
+Note: Stories live under docs/stories/, and epic documents live under docs/prd/ (files epic-1-*.md through epic-10-*.md).
 
 ## 6. Next Steps
 ### Immediate Actions
