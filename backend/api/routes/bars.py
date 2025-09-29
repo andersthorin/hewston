@@ -201,6 +201,28 @@ async def get_hour(
     paths = _paths_for(symbol, years, tf="1Min")
     if not paths:
         raise HTTPException(status_code=404, detail="No minute parquet files found")
+    # Fast path: use pre-aggregated 1Hour parquet if available
+    hour_paths = _paths_for(symbol, years, tf="1Hour")
+    if hour_paths:
+        try:
+            ts_from = datetime.fromisoformat(from_date + "T00:00:00+00:00")
+            ts_to = datetime.fromisoformat(to_date + "T23:59:59+00:00")
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid from/to format; expected YYYY-MM-DD")
+
+        qh = pl.scan_parquet(hour_paths).filter((pl.col("t") >= pl.lit(ts_from)) & (pl.col("t") <= pl.lit(ts_to)))
+        # Note: pre-aggregated hours are assumed RTH-aligned; rth_only flag is ignored here
+        qh = qh.select(["t", "o", "h", "l", "c", "v"])  # minimal set for chart
+        dfh = qh.collect()
+        if dfh.height == 0:
+            raise HTTPException(status_code=404, detail="No data rows in requested window")
+
+        items = [
+            {"t": _isoz(t), "o": float(o), "h": float(h), "l": float(l), "c": float(c), "v": int(v)}
+            for t, o, h, l, c, v in zip(dfh["t"], dfh["o"], dfh["h"], dfh["l"], dfh["c"], dfh["v"])
+        ]
+        return JSONResponse(content={"symbol": symbol, "bars": items})
+
 
     # Inclusive window [from 00:00:00 .. to 23:59:59]
     try:

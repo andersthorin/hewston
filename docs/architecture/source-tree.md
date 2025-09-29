@@ -25,7 +25,7 @@ backend/
   jobs/derive.py             # Derive 1m bars + TBBO aggregates (Parquet)
   jobs/run_backtest.py       # Execute backtest and write artifacts
 frontend/
-  src/components/            # Presentational components (ChartOHLC, EquityChart, RunsTable, etc.)
+  src/components/            # Presentational components (ChartOHLC, RunsTable, etc.)
   src/views/                 # Route-level views (RunDetail)
   src/containers/            # Data-connected containers (RunsListContainer, RunPlayerContainer)
   src/services/              # API and data services

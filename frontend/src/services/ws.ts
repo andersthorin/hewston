@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { StreamFrameT } from '../schemas/stream'
 import type { WorkerOutMessage } from '../types/streaming'
+import { createWebSocketManager, type BFFWebSocketManager, type WebSocketHealth } from './websocket'
+import { featureFlagService } from './featureFlags'
 
 // Dev logging helper (only logs in Vite dev)
 const devLog = (...args: unknown[]) => {
@@ -18,15 +20,24 @@ export type PlaybackState = {
   playing: boolean
   speed: number
   dropped: number
+  // Enhanced with BFF health information
+  health?: WebSocketHealth
+  connectionSource?: 'bff' | 'backend'
 }
 
 export type Subscription = (f: StreamFrameT) => void
 
 export function useRunPlayback(runId: string) {
-  const [state, setState] = useState<PlaybackState>({ status: 'idle', playing: false, speed: 60, dropped: 0 })
+  const [state, setState] = useState<PlaybackState>({
+    status: 'idle',
+    playing: false,
+    speed: 60,
+    dropped: 0,
+    connectionSource: featureFlagService.isFeatureFlagEnabled('websocket') ? 'bff' : 'backend'
+  })
   const subsRef = useRef<Set<Subscription>>(new Set())
   const workerRef = useRef<Worker | null>(null)
-  const wsRef = useRef<WebSocket | null>(null)
+  const wsManagerRef = useRef<BFFWebSocketManager | null>(null)
   const framesSeenRef = useRef<number>(0)
   const playRetryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -35,8 +46,17 @@ export function useRunPlayback(runId: string) {
     setState((s) => ({ ...s, dropped: f.dropped }))
   }, [])
 
+  const updateHealthInfo = useCallback((health: WebSocketHealth) => {
+    setState((s) => ({
+      ...s,
+      health,
+      connectionSource: health.connectionSource,
+      dropped: (health.droppedFrames ?? s.dropped)
+    }))
+  }, [])
+
   useEffect(() => {
-    // init worker
+    // Initialize worker
     const worker = new Worker(new URL('../workers/streamParser.ts', import.meta.url), { type: 'module' })
     worker.postMessage({ type: 'init', fps: 30 })
     worker.onmessage = (ev: MessageEvent<WorkerOutMessage>) => {
@@ -55,18 +75,27 @@ export function useRunPlayback(runId: string) {
     }
     workerRef.current = worker
 
-    let reconnectAttempts = 0
+    // Initialize BFF-aware WebSocket manager
+    const wsManager = createWebSocketManager(runId, {
+      autoReconnect: true,
+      maxReconnectAttempts: 5,
+      reconnectDelay: 500,
+      maxReconnectDelay: 5000,
+      enableMessageQueue: true,
+      maxQueueSize: 50,
+      connectionTimeout: 10000,
+    })
+    wsManagerRef.current = wsManager
+
     let closed = false
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 
     const startPlayKeepalive = () => {
       if (playRetryTimerRef.current) { clearInterval(playRetryTimerRef.current); playRetryTimerRef.current = null }
       playRetryTimerRef.current = setInterval(() => {
-        const ws = wsRef.current
-        if (!ws || ws.readyState !== WebSocket.OPEN) return
+        if (!wsManager.isReady()) return
         if (framesSeenRef.current > 0) return
         try {
-          ws.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
+          wsManager.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
           devLog('play.sent', { runId, reason: 'keepalive' })
         } catch (error) {
           console.warn('Failed to send keepalive play command:', error)
@@ -74,67 +103,98 @@ export function useRunPlayback(runId: string) {
       }, 1000)
     }
 
+    // Setup WebSocket manager event listeners
+    const unsubscribeOpen = wsManager.addEventListener('open', () => {
+      framesSeenRef.current = 0
+      devLog('ws.open', { runId, source: wsManager.getHealth().connectionSource })
+      setState((s) => ({ ...s, status: 'ws', playing: true }))
+      updateHealthInfo(wsManager.getHealth())
+
+      try {
+        wsManager.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
+        devLog('play.sent', { runId, reason: 'open' })
+      } catch (error) {
+        console.warn('Failed to send initial play command:', error)
+      }
+      startPlayKeepalive()
+    })
+
+    const unsubscribeMessage = wsManager.addEventListener('message', (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data)
+        if (msg.t === 'frame') {
+          devLog('frame.ts', msg.ts)
+          worker.postMessage({ type: 'frame', payload: msg })
+        }
+        // ignore hb and echo
+      } catch (error) {
+        console.warn('Failed to parse WebSocket message:', error)
+      }
+    })
+
+    const unsubscribeClose = wsManager.addEventListener('close', () => {
+      if (playRetryTimerRef.current) {
+        clearInterval(playRetryTimerRef.current)
+        playRetryTimerRef.current = null
+      }
+      setState((s) => ({ ...s, status: 'error', playing: false }))
+      updateHealthInfo(wsManager.getHealth())
+    })
+
+    const unsubscribeError = wsManager.addEventListener('error', (error: Event) => {
+      console.warn('WebSocket error:', error)
+      setState((s) => ({ ...s, status: 'error', playing: false }))
+      updateHealthInfo(wsManager.getHealth())
+    })
+
+    const unsubscribeStateChange = wsManager.addEventListener('stateChange', () => {
+      updateHealthInfo(wsManager.getHealth())
+    })
+
+    const unsubscribeHealthUpdate = wsManager.addEventListener('healthUpdate', (health: WebSocketHealth) => {
+      updateHealthInfo(health)
+    })
+
     const connect = () => {
       if (closed) return
       setState((s) => ({ ...s, status: 'connecting' }))
-      const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-      const wsUrl = `${proto}://${location.host}/backtests/${runId}/ws`
-      const ws = new WebSocket(wsUrl)
-      wsRef.current = ws
 
-      ws.onopen = () => {
-        reconnectAttempts = 0
-        framesSeenRef.current = 0
-        devLog('ws.open', { runId })
-        setState((s) => ({ ...s, status: 'ws', playing: true }))
-        try {
-          ws.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
-          devLog('play.sent', { runId, reason: 'open' })
-        } catch (error) {
-          console.warn('Failed to send initial play command:', error)
-        }
-        startPlayKeepalive()
-      }
-      ws.onmessage = (ev) => {
-        try {
-          const msg = JSON.parse(ev.data)
-          if (msg.t === 'frame') { devLog('frame.ts', msg.ts); worker.postMessage({ type: 'frame', payload: msg }) }
-          // ignore hb and echo
-        } catch (error) {
-          console.warn('Failed to parse WebSocket message:', error)
-        }
-      }
-
-      const scheduleReconnect = () => {
-        if (closed) return
-        if (playRetryTimerRef.current) { clearInterval(playRetryTimerRef.current); playRetryTimerRef.current = null }
-        const delay = Math.min(500 * Math.pow(2, reconnectAttempts++), 5000)
-        devLog('ws.scheduleReconnect', { runId, delay })
-        reconnectTimer = setTimeout(connect, delay)
-      }
-      ws.onerror = () => scheduleReconnect()
-      ws.onclose = () => scheduleReconnect()
+      wsManager.connect().catch(error => {
+        console.warn('WebSocket connection failed:', error)
+        setState((s) => ({ ...s, status: 'error', playing: false }))
+      })
     }
 
     connect()
 
     return () => {
       closed = true
-      if (reconnectTimer) clearTimeout(reconnectTimer)
-      if (playRetryTimerRef.current) { clearInterval(playRetryTimerRef.current); playRetryTimerRef.current = null }
-      const ws = wsRef.current
-      if (ws) {
-        const rs = ws.readyState
-        if (rs === WebSocket.OPEN || rs === WebSocket.CLOSING) {
-          try {
-            ws.close()
-          } catch (error) {
-            console.warn('Failed to close WebSocket:', error)
-          }
-        }
+
+      // Cleanup event listeners
+      unsubscribeOpen()
+      unsubscribeMessage()
+      unsubscribeClose()
+      unsubscribeError()
+      unsubscribeStateChange()
+      unsubscribeHealthUpdate()
+
+      // Cleanup timers
+      if (playRetryTimerRef.current) {
+        clearInterval(playRetryTimerRef.current)
+        playRetryTimerRef.current = null
       }
-      wsRef.current = null
-      worker.terminate(); workerRef.current = null
+
+      // Close WebSocket manager
+      if (wsManagerRef.current) {
+        wsManagerRef.current.close()
+        wsManagerRef.current = null
+      }
+
+      // Terminate worker
+      if (workerRef.current) {
+        workerRef.current.terminate()
+        workerRef.current = null
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runId])
@@ -145,21 +205,48 @@ export function useRunPlayback(runId: string) {
   }, [])
 
   const onPlay = useCallback(() => {
-    wsRef.current?.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
+    wsManagerRef.current?.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
     setState((s) => ({ ...s, playing: true }))
   }, [])
+
   const onPause = useCallback(() => {
-    wsRef.current?.send(JSON.stringify({ t: 'ctrl', cmd: 'pause' }))
+    wsManagerRef.current?.send(JSON.stringify({ t: 'ctrl', cmd: 'pause' }))
     setState((s) => ({ ...s, playing: false }))
   }, [])
+
   const onSpeedChange = useCallback((spd: number) => {
     setState((s) => ({ ...s, speed: spd }))
-    wsRef.current?.send(JSON.stringify({ t: 'ctrl', cmd: 'speed', speed: spd }))
-  }, [])
-  const onSeek = useCallback((isoTs: string) => {
-    wsRef.current?.send(JSON.stringify({ t: 'ctrl', cmd: 'seek', ts: isoTs }))
+    wsManagerRef.current?.send(JSON.stringify({ t: 'ctrl', cmd: 'speed', speed: spd }))
   }, [])
 
-  return { state, subscribe, onPlay, onPause, onSpeedChange, onSeek }
+  const onSeek = useCallback((isoTs: string) => {
+    wsManagerRef.current?.send(JSON.stringify({ t: 'ctrl', cmd: 'seek', ts: isoTs }))
+  }, [])
+
+  // Additional BFF-specific functions
+  const getConnectionHealth = useCallback(() => {
+    return wsManagerRef.current?.getHealth() || null
+  }, [])
+
+  const reconnect = useCallback(() => {
+    return wsManagerRef.current?.reconnect()
+  }, [])
+
+  const ping = useCallback(() => {
+    wsManagerRef.current?.ping()
+  }, [])
+
+  return {
+    state,
+    subscribe,
+    onPlay,
+    onPause,
+    onSpeedChange,
+    onSeek,
+    // Enhanced BFF functions
+    getConnectionHealth,
+    reconnect,
+    ping
+  }
 }
 

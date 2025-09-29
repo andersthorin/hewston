@@ -61,9 +61,9 @@ describe('RunPlayerContainer imperative updates', () => {
     __emit({ t: 'frame', ts: t0, dropped: 0, ohlc: { o: 2, h: 3, l: 1, c: 2.5 }, orders: [], equity: null }) // out-of-order
     __emit({ t: 'frame', ts: t1, dropped: 0, ohlc: null, orders: [], equity: { ts: t1, value: 10 } })
 
-    const [ohlcChart, equityChart] = charts()
+    const [ohlcChart, lineChart] = charts()
     const ohlcSeries = ohlcChart.addCandlestickSeries.mock.results[0].value
-    const equitySeries = equityChart.addLineSeries.mock.results[0].value
+    const equitySeries = lineChart.addLineSeries.mock.results[0].value
 
     expect(ohlcSeries.update).toHaveBeenCalledTimes(1)
     expect(equitySeries.update).toHaveBeenCalledTimes(1)

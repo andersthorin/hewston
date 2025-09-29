@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { listBacktests, type ListRunsResponse, type ListRunsQuery, createBacktest } from '../services/api'
+import { useRunList, useCreateRun } from '../hooks/useRunData'
+import type { ListRunsQuery } from '../services/api'
 import RunsTable from '../components/RunsTable'
 import FiltersBar, { type Filters } from '../components/FiltersBar'
 import { useNavigate } from 'react-router-dom'
@@ -11,6 +11,8 @@ function CreateRunForm({ onCreated, creating, setCreating }: CreateRunFormProps)
   const [strategyId, setStrategyId] = useState('sma_crossover')
   const [fromDate, setFromDate] = useState('2024-10-01')
   const [toDate, setToDate] = useState('2024-10-31')
+
+  const createRunMutation = useCreateRun()
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -23,15 +25,18 @@ function CreateRunForm({ onCreated, creating, setCreating }: CreateRunFormProps)
     try {
       setCreating(true)
       const dataset_id = `${symbol.toUpperCase()}-${year}-1m`
-      const resp = await createBacktest({
-        strategy_id: strategyId,
-        params: { fast: 20, slow: 50 },
-        dataset_id,
-        from: fromDate || undefined,
-        to: toDate || undefined,
-        speed: 60,
-        seed: 42,
-      }, `form-${Date.now()}`)
+      const resp = await createRunMutation.mutateAsync({
+        request: {
+          strategy_id: strategyId,
+          params: { fast: 20, slow: 50 },
+          dataset_id,
+          from: fromDate || undefined,
+          to: toDate || undefined,
+          speed: 60,
+          seed: 42,
+        },
+        idempotencyKey: `form-${Date.now()}`
+      })
       onCreated(resp.run_id)
     } catch (e) {
       alert((e as Error).message)
@@ -67,16 +72,15 @@ export function RunsListContainer() {
     [filters, limit, offset],
   )
 
-  const { data, isLoading, isError, error, refetch } = useQuery<ListRunsResponse, Error>({
-    queryKey: ['backtests', query],
-    queryFn: () => listBacktests(query),
-  })
+  // Use BFF-aware hook for listing runs
+  const { data, isLoading, isError, error, refetch } = useRunList(query)
+  const createRunMutation = useCreateRun()
 
   async function handleCreateSample() {
     try {
       setCreating(true)
-      const resp = await createBacktest(
-        {
+      const resp = await createRunMutation.mutateAsync({
+        request: {
           strategy_id: 'sma_crossover',
           params: { fast: 20, slow: 50 },
           symbol: 'AAPL',
@@ -84,8 +88,8 @@ export function RunsListContainer() {
           speed: 60,
           seed: 42,
         },
-        `sample-${Date.now()}`,
-      )
+        idempotencyKey: `sample-${Date.now()}`
+      })
       navigate(`/runs/${resp.run_id}`)
     } catch (e) {
       // simple alert for now

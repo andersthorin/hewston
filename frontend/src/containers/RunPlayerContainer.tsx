@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { fetchHour, type HourResponse } from '../services/bars'
+import { useHourChartData } from '../hooks/useChartData'
 
 import { useRunPlayback } from '../services/ws'
 import PlaybackControls from '../components/PlaybackControls'
@@ -25,16 +24,17 @@ export function RunPlayerContainer({ run_id, dataset_id, run_from, run_to }: Run
   // Derive symbol from dataset_id if available (format: SYMBOL-YEAR-1m)
   const symbol = (dataset_id?.split('-')[0] || '').toUpperCase() || undefined
 
-  // Fetch hourly bars for the dataset year (RTH aligned)
+  // Fetch hourly bars aligned to the actual run window when available (fallback to dataset year)
   const year = dataset_id?.split('-')[1]
-  const from = year ? `${year}-01-01` : undefined
-  const to = year ? `${year}-12-31` : undefined
-  const { data: hourResp, isError: isHourErr, isLoading: isHourLoading } = useQuery<HourResponse, Error>({
-    queryKey: ['hour', symbol, year],
-    queryFn: () => fetchHour(symbol!, from!, to!, true),
-    enabled: !!symbol && !!year,
-    staleTime: 5 * 60 * 1000,
-  })
+  const from = (run_from ?? undefined) || (year ? `${year}-01-01` : undefined)
+  const to = (run_to ?? undefined) || (year ? `${year}-12-31` : undefined)
+  const { data: hourResp, isError: isHourErr, isLoading: isHourLoading } = useHourChartData(
+    symbol,
+    from,
+    to,
+    true, // rth_only
+    !!symbol && !!from && !!to
+  )
 
   const { state, onPlay, onPause, subscribe } = useRunPlayback(run_id)
 

@@ -68,21 +68,12 @@ export interface CandlestickChartAPI {
   setBarSpacing: (px: number) => void
 }
 
-export interface EquityChartAPI {
-  reset: (initial: LineData[]) => void
-  update: (dp: LineData) => void
-  scrollToLatest: () => void
-  setVisibleRange: (from: Time, to: Time) => void
-}
 
 // Chart props interfaces
 export interface ChartOHLCProps {
   formatTime?: (t: Time, locale?: string) => string
 }
 
-export interface EquityChartProps {
-  formatTime?: (t: Time, locale?: string) => string
-}
 
 // Mock interfaces for testing (using Vitest)
 export interface MockChart {
