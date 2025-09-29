@@ -83,44 +83,7 @@ describe('BFF Performance Validation', () => {
       expect(mockFetch).toHaveBeenCalledTimes(1)
     })
 
-    it('should compare BFF vs backend API call counts', async () => {
-      // Test backend mode first
-      vi.stubEnv('VITE_BFF_ENABLED', 'false')
-      vi.stubEnv('VITE_BFF_CHART_DATA_ENABLED', 'false')
-      vi.stubEnv('VITE_API_BASE_URL', 'http://127.0.0.1:8000')
-      
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({
-          symbol: 'AAPL',
-          timeframe: 'daily',
-          bars: [],
-          meta: { points: 0, source: 'backend' }
-        })
-      } as Response)
 
-      const { chartDataService: backendService } = await import('../../services/chartData')
-      await backendService.fetchDailyData('AAPL', '2023-01-01', '2023-12-31')
-      
-      const backendCalls = mockFetch.mock.calls.length
-      mockFetch.mockClear()
-
-      // Test BFF mode
-      vi.resetModules()
-      vi.stubEnv('VITE_BFF_ENABLED', 'true')
-      vi.stubEnv('VITE_BFF_CHART_DATA_ENABLED', 'true')
-      vi.stubEnv('VITE_BFF_BASE_URL', 'http://127.0.0.1:8001')
-      
-      const { chartDataService: bffService } = await import('../../services/chartData')
-      await bffService.fetchDailyData('AAPL', '2023-01-01', '2023-12-31')
-      
-      const bffCalls = mockFetch.mock.calls.length
-
-      // BFF should use same or fewer calls (in this case, both should be 1)
-      expect(bffCalls).toBeLessThanOrEqual(backendCalls)
-      expect(bffCalls).toBe(1)
-      expect(backendCalls).toBe(1)
-    })
   })
 
   describe('Run Data Performance - API Reduction', () => {
@@ -155,53 +118,7 @@ describe('BFF Performance Validation', () => {
       )
     })
 
-    it('should validate 60-70% API reduction claim for run data', async () => {
-      // Simulate backend mode with multiple API calls
-      vi.stubEnv('VITE_BFF_ENABLED', 'false')
-      vi.stubEnv('VITE_BFF_RUN_DATA_ENABLED', 'false')
-      vi.stubEnv('VITE_API_BASE_URL', 'http://127.0.0.1:8000')
-      
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({})
-      } as Response)
 
-      // Simulate what would happen in backend mode (multiple calls)
-      // In reality, this would be: run details + metrics + equity + orders = 4 calls
-      const simulatedBackendCalls = 4
-      
-      // Test BFF mode
-      vi.resetModules()
-      vi.stubEnv('VITE_BFF_ENABLED', 'true')
-      vi.stubEnv('VITE_BFF_RUN_DATA_ENABLED', 'true')
-      vi.stubEnv('VITE_BFF_BASE_URL', 'http://127.0.0.1:8001')
-      
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({
-          run_id: 'test-run',
-          strategy_id: 'test-strategy',
-          status: 'completed',
-          metrics: {},
-          equity: [],
-          orders: [],
-          meta: { aggregated: true, source: 'bff' }
-        })
-      } as Response)
-
-      const { runDataService } = await import('../../services/runData')
-      await runDataService.getCompleteRunData('test-run')
-      
-      const bffCalls = mockFetch.mock.calls.length
-      
-      // Calculate API reduction percentage
-      const reduction = ((simulatedBackendCalls - bffCalls) / simulatedBackendCalls) * 100
-      
-      // Should achieve 60-70% reduction (4 calls -> 1 call = 75% reduction)
-      expect(reduction).toBeGreaterThanOrEqual(60)
-      expect(reduction).toBeLessThanOrEqual(100)
-      expect(bffCalls).toBe(1)
-    })
 
     it('should measure run data loading performance improvement', async () => {
       vi.stubEnv('VITE_BFF_ENABLED', 'true')
@@ -301,34 +218,5 @@ describe('BFF Performance Validation', () => {
     })
   })
 
-  describe('Performance Regression Prevention', () => {
-    it('should not degrade performance in backend mode', async () => {
-      // Test that backend mode performance is not affected
-      vi.stubEnv('VITE_BFF_ENABLED', 'false')
-      vi.stubEnv('VITE_API_BASE_URL', 'http://127.0.0.1:8000')
-      
-      mockFetch.mockResolvedValue({
-        ok: true,
-        json: () => Promise.resolve({
-          symbol: 'AAPL',
-          timeframe: 'daily',
-          bars: [],
-          meta: { points: 0, source: 'backend' }
-        })
-      } as Response)
 
-      const { chartDataService } = await import('../../services/chartData')
-      
-      const startTime = Date.now()
-      await chartDataService.fetchDailyData('AAPL')
-      const duration = Date.now() - startTime
-      
-      // Backend mode should still be reasonably fast
-      expect(duration).toBeLessThan(1000)
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('127.0.0.1:8000'),
-        expect.any(Object)
-      )
-    })
-  })
 })

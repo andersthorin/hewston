@@ -37,11 +37,12 @@ class FeatureFlagService {
    */
   private loadConfiguration(): FeatureFlagConfiguration {
     return {
-      bffEnabled: this.getEnvBoolean('VITE_BFF_ENABLED', false),
-      chartDataEnabled: this.getEnvBoolean('VITE_BFF_CHART_DATA_ENABLED', false),
-      runDataEnabled: this.getEnvBoolean('VITE_BFF_RUN_DATA_ENABLED', false),
-      websocketEnabled: this.getEnvBoolean('VITE_BFF_WEBSOCKET_ENABLED', false),
-      fallbackToBackend: true, // Always allow fallback for safety
+      bffEnabled: this.getEnvBoolean('VITE_BFF_ENABLED', true),
+      chartDataEnabled: this.getEnvBoolean('VITE_BFF_CHART_DATA_ENABLED', true),
+      runDataEnabled: this.getEnvBoolean('VITE_BFF_RUN_DATA_ENABLED', true),
+      websocketEnabled: this.getEnvBoolean('VITE_BFF_WEBSOCKET_ENABLED', true),
+      // Fallback is disabled by default and env-gated for emergencies only
+      fallbackToBackend: this.getEnvBoolean('VITE_BFF_FALLBACK_ENABLED', false),
     }
   }
 

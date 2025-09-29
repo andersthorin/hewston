@@ -1,23 +1,15 @@
 /**
  * BFF Chart Data Service - Unified chart data fetching with feature flag support.
  * 
- * This service provides a unified interface for fetching chart data that can
- * route to either BFF aggregated endpoints or direct backend endpoints based
- * on feature flag configuration.
+ * This service provides a unified interface for fetching chart data via the BFF
+ * aggregated endpoints exclusively. Direct backend access from the frontend is
+ * deprecated and disabled by default.
  */
 
 import { z } from 'zod'
 import { apiGetWithFlags } from '../utils/api'
 import { featureFlagService } from './featureFlags'
-import { 
-  fetchDaily, 
-  fetchMinute, 
-  fetchMinuteDecimated, 
-  fetchHour,
-  type DailyResponse,
-  type MinuteResponse,
-  type HourResponse 
-} from './bars'
+
 
 /**
  * BFF Chart Data Response Schema - Unified response format from BFF.
@@ -129,64 +121,7 @@ export class ChartDataService {
     return BFFChartDataResponseSchema.parse(out)
   }
 
-  /**
-   * Fetch chart data from direct backend endpoints (fallback).
-   */
-  private async fetchFromBackend(request: ChartDataRequest): Promise<BFFChartDataResponse> {
-    const { symbol, timeframe, from, to, target, rth_only = true } = request
 
-    let backendResponse: DailyResponse | MinuteResponse | HourResponse
-    let bars: any[]
-
-    switch (timeframe) {
-      case 'daily':
-        backendResponse = await fetchDaily(symbol, from, to)
-        bars = backendResponse.bars
-        break
-      
-      case 'minute':
-        if (target && target < 50000) {
-          // Use decimated endpoint for large datasets
-          backendResponse = await fetchMinuteDecimated(symbol, from!, to!, target, rth_only)
-        } else {
-          backendResponse = await fetchMinute(symbol, from!, to!, rth_only)
-        }
-        bars = backendResponse.bars
-        break
-      
-      case 'hour':
-        backendResponse = await fetchHour(symbol, from!, to!, rth_only)
-        bars = backendResponse.bars
-        break
-      
-      default:
-        throw new Error(`Unsupported timeframe: ${timeframe}`)
-    }
-
-    // Transform backend response to BFF format
-    return {
-      symbol: backendResponse.symbol,
-      timeframe,
-      bars: bars.map(bar => ({
-        t: bar.t,
-        o: bar.o,
-        h: bar.h,
-        l: bar.l,
-        c: bar.c,
-        v: bar.v || 0,
-        n: (bar as any).n || 0,
-      })),
-      meta: {
-        from,
-        to,
-        stride_minutes: (backendResponse as any).meta?.stride_minutes,
-        points: bars.length,
-        decimated: target !== undefined && target < 50000,
-        cache_hit: false,
-        source: 'backend',
-      },
-    }
-  }
 
   /**
    * Fetch daily chart data.

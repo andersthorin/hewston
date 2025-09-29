@@ -9,15 +9,10 @@
 import { z } from 'zod'
 import { apiGetWithFlags, apiPostWithFlags } from '../utils/api'
 import { featureFlagService } from './featureFlags'
-import { 
-  listBacktests,
-  getRunDetail,
-  createBacktest,
-  type ListRunsResponse,
-  type RunDetail,
-  type CreateRunRequest,
-  type CreateRunResponse,
-  type ListRunsQuery 
+import type {
+  CreateRunRequest,
+  CreateRunResponse,
+  ListRunsQuery
 } from './api'
 
 /**
@@ -116,26 +111,16 @@ export class RunDataService {
    * List runs with automatic BFF/backend routing based on feature flags.
    */
   public async listRuns(query: ListRunsQuery = {}): Promise<BFFRunListResponse> {
-    const useBFF = featureFlagService.isFeatureFlagEnabled('runData')
-    
-    if (useBFF) {
-      return await this.listRunsFromBFF(query)
-    } else {
-      return await this.listRunsFromBackend(query)
-    }
+    // BFF-only routing
+    return await this.listRunsFromBFF(query)
   }
 
   /**
    * Get complete run data with automatic BFF/backend routing.
    */
   public async getCompleteRunData(run_id: string): Promise<BFFAggregatedRunResponse> {
-    const useBFF = featureFlagService.isFeatureFlagEnabled('runData')
-    
-    if (useBFF) {
-      return await this.getCompleteRunFromBFF(run_id)
-    } else {
-      return await this.getCompleteRunFromBackend(run_id)
-    }
+    // BFF-only routing
+    return await this.getCompleteRunFromBFF(run_id)
   }
 
   /**
@@ -145,13 +130,8 @@ export class RunDataService {
     request: CreateRunRequest,
     idempotencyKey?: string
   ): Promise<CreateRunResponse> {
-    const useBFF = featureFlagService.isFeatureFlagEnabled('runData')
-    
-    if (useBFF) {
-      return await this.createRunViaBFF(request, idempotencyKey)
-    } else {
-      return await createBacktest(request, idempotencyKey)
-    }
+    // BFF-only routing
+    return await this.createRunViaBFF(request, idempotencyKey)
   }
 
   /**
@@ -198,52 +178,7 @@ export class RunDataService {
     )
   }
 
-  /**
-   * List runs from direct backend (fallback).
-   */
-  private async listRunsFromBackend(query: ListRunsQuery): Promise<BFFRunListResponse> {
-    const backendResponse = await listBacktests(query)
-    
-    // Transform backend response to BFF format
-    return {
-      items: backendResponse.items.map(item => ({
-        ...item,
-        total_return: null,
-        sharpe_ratio: null,
-        max_drawdown: null,
-      })),
-      total: backendResponse.total,
-      limit: backendResponse.limit,
-      offset: backendResponse.offset,
-      meta: {
-        cache_hit: false,
-        source: 'backend',
-      },
-    }
-  }
 
-  /**
-   * Get complete run data from direct backend (fallback).
-   */
-  private async getCompleteRunFromBackend(run_id: string): Promise<BFFAggregatedRunResponse> {
-    // For backend fallback, we only get basic run details
-    // Additional data (metrics, equity, orders) would require separate calls
-    const runDetail = await getRunDetail(run_id)
-    
-    // Transform backend response to BFF format
-    return {
-      ...runDetail,
-      metrics: null, // Would need separate API call
-      equity: null,  // Would need separate API call
-      orders: null,  // Would need separate API call
-      meta: {
-        aggregated: false,
-        cache_hit: false,
-        source: 'backend',
-        components_loaded: ['run'], // Only basic run data loaded
-      },
-    }
-  }
 
   /**
    * Get run data loading performance metrics.
@@ -266,7 +201,7 @@ export class RunDataService {
    * Check if run data is using BFF aggregation.
    */
   public isUsingAggregation(): boolean {
-    return featureFlagService.isFeatureFlagEnabled('runData')
+    return true
   }
 }
 

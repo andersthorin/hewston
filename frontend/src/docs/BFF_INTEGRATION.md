@@ -18,11 +18,13 @@ The BFF integration provides a unified data layer that can route API calls to ei
 The feature flag system (`frontend/src/services/featureFlags.ts`) controls BFF vs backend routing:
 
 ```typescript
-// Environment variables control BFF usage
-VITE_BFF_ENABLED=false              // Master toggle
-VITE_BFF_CHART_DATA_ENABLED=false   // Chart data endpoints
-VITE_BFF_RUN_DATA_ENABLED=false     // Run data endpoints  
-VITE_BFF_WEBSOCKET_ENABLED=false    // WebSocket endpoints
+// Environment variables control BFF usage (defaults: BFF-only)
+VITE_BFF_ENABLED=true               // Master toggle (default)
+VITE_BFF_CHART_DATA_ENABLED=true    // Chart data endpoints (default)
+VITE_BFF_RUN_DATA_ENABLED=true      // Run data endpoints  (default)
+VITE_BFF_WEBSOCKET_ENABLED=true     // WebSocket endpoints (default)
+// Emergency-only fallback (disabled by default)
+VITE_BFF_FALLBACK_ENABLED=false
 ```
 
 ### API Router
@@ -40,7 +42,7 @@ Note: If you pass '/chart-data', the API router will remap it to '/api/v1/chart-
 
 #### Chart Data Service (`frontend/src/services/chartData.ts`)
 
-Unified interface for chart data that routes to BFF or backend:
+Unified interface for chart data via the BFF exclusively:
 
 ```typescript
 // Single service handles both BFF and backend
@@ -78,8 +80,7 @@ const { data } = useDailyChartData('AAPL', from, to)
 const { data } = useMinuteChartData('AAPL', from, to, target)
 const { data } = useHourChartData('AAPL', from, to)
 
-// Legacy compatibility hooks (same interface)
-const { data } = useDailyData('AAPL', from, to)  // Still works!
+// Legacy direct-backend hooks are deprecated and removed from examples
 ```
 
 #### Run Data Hooks (`frontend/src/hooks/useRunData.ts`)
@@ -92,9 +93,7 @@ const { data } = useRunList(query)
 const { data } = useCompleteRunData(run_id)  // Aggregated data
 const createRun = useCreateRun()
 
-// Legacy compatibility hooks
-const { data } = useBacktestList(query)      // Still works!
-const { data } = useRunDetail(run_id)        // Still works!
+// Legacy direct-backend hooks are deprecated and removed from examples
 
 // BFF-specific hooks for aggregated data
 const { data: metrics } = useRunMetrics(run_id)
@@ -121,15 +120,9 @@ VITE_BFF_RUN_DATA_ENABLED=true
 
 Components automatically use BFF when feature flags are enabled. No code changes required for basic migration.
 
-#### Before (Direct Backend)
+#### Component Example (BFF)
 ```typescript
-// Component automatically uses backend
-const { data } = useQuery(['hour', symbol], () => fetchHour(symbol, from, to))
-```
-
-#### After (BFF-Aware)
-```typescript
-// Same component automatically uses BFF when flags enabled
+// Uses BFF exclusively
 const { data } = useHourChartData(symbol, from, to)
 ```
 
@@ -168,7 +161,7 @@ When `VITE_FEATURE_FLAG_DEBUG=true`:
 // Check feature flag status
 __FF_STATUS__()
 
-// View current endpoint mappings  
+// View current endpoint mappings
 __FF_ENDPOINTS__()
 
 // View feature flag state
@@ -195,26 +188,22 @@ console.log('API call reduction:', runMetrics.aggregationBenefit)
 
 ### Unit Tests
 
-Tests validate both BFF and backend modes:
+Tests validate BFF mode by default. Direct backend mode is deprecated for the product UI. An ops-only, env-gated fallback can be tested separately.
 
 ```typescript
 // Test BFF mode
 mockFeatureFlagService.isFeatureFlagEnabled.mockReturnValue(true)
-const { result } = renderHook(() => useDailyChartData('AAPL'))
-
-// Test backend mode  
-mockFeatureFlagService.isFeatureFlagEnabled.mockReturnValue(false)
 const { result } = renderHook(() => useDailyChartData('AAPL'))
 ```
 
 ### Integration Testing
 
 ```bash
-# Test with BFF enabled
+# Test with BFF enabled (default)
 VITE_BFF_ENABLED=true npm test
 
-# Test with BFF disabled  
-VITE_BFF_ENABLED=false npm test
+# Optional: test env-gated fallback behavior
+VITE_BFF_FALLBACK_ENABLED=true npm test -- -t "fallback"
 ```
 
 ## Performance Benefits
@@ -236,19 +225,21 @@ VITE_BFF_ENABLED=false npm test
 
 ## Error Handling
 
-### Graceful Fallback
+### Emergency Fallback (env-gated)
 
-```typescript
-// Automatic fallback to backend when BFF fails
-const data = await apiRouter.routeAPICall('chartData', '/bars/daily', {
-  allowFallback: true  // Default: true
-})
-```
+Fallback to backend is disabled by default and only available behind the environment flag `VITE_BFF_FALLBACK_ENABLED=true`. Use only for operational emergencies; not a normal code path.
+## Migration Notes
+
+- Direct backend access from the frontend (e.g., `/bars`, `/backtests`) is deprecated.
+- Frontend must use canonical BFF endpoints under `/api/v1/*`.
+- Ops-only emergency fallback can be temporarily enabled with `VITE_BFF_FALLBACK_ENABLED=true`.
+- Remove any remaining references to backend endpoints in new code; the API router will not fallback unless explicitly allowed and env-gated.
+
 
 ### Error Types
 
 1. **BFF Errors**: Wrapped with additional context
-2. **Backend Errors**: Passed through unchanged  
+2. **Backend Errors**: Passed through unchanged
 3. **Network Errors**: Handled consistently
 
 ## Troubleshooting
