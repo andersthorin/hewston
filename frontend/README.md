@@ -6,7 +6,7 @@ This is the web interface for Hewston, providing interactive visualization of ba
 
 ## 🚀 Features
 
-- **Interactive Charts**: TradingView Lightweight Charts for candlestick and equity visualization
+- **Interactive Charts**: TradingView Lightweight Charts for candlestick visualization
 - **Real-Time Streaming**: WebSocket integration for live backtest playback
 - **Type-Safe API**: Full TypeScript coverage with Zod validation
 - **Modern UI**: TailwindCSS with responsive design
@@ -55,7 +55,6 @@ The app will be available at http://127.0.0.1:5173
 src/
 ├── components/          # Presentational components
 │   ├── ChartOHLC.tsx   # Candlestick chart with imperative API
-│   ├── EquityChart.tsx # Equity curve visualization
 │   ├── RunsTable.tsx   # Backtest runs table
 │   ├── FiltersBar.tsx  # Filtering controls
 │   └── PlaybackControls.tsx # Play/pause/speed controls
@@ -146,18 +145,18 @@ chartRef.current?.updateCandles(candleData);
 chartRef.current?.updateOrders(orderData);
 ```
 
-### Equity Chart
-```typescript
-<EquityChart
-  height={300}
-  onReady={(api) => {
-    equityRef.current = api;
-  }}
-/>
 
-// Update equity curve
-equityRef.current?.updateEquity(equityPoints);
-```
+
+
+
+
+
+
+
+
+
+
+
 
 ## 🧪 Testing
 

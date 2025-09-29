@@ -95,10 +95,6 @@
 - **Features**: TradingView Lightweight Charts integration, imperative API for performance
 - **API**: `updateCandles()`, `updateOrders()`, `setVisibleRange()`, `scrollToTime()`
 
-#### EquityChart
-- **Props**: `{ height?: number, onReady?: (api: EquityChartAPI) => void }`
-- **Features**: Equity curve visualization with imperative updates
-- **API**: `updateEquity()`, `setVisibleRange()`, `scrollToTime()`
 
 ### Containers & Views (Data Layer)
 
@@ -181,11 +177,6 @@ CandlestickChartAPI: {
   scrollToTime: (time: string) => void
 }
 
-EquityChartAPI: {
-  updateEquity: (points: EquityPoint[]) => void
-  setVisibleRange: (range: TimeRange) => void
-  scrollToTime: (time: string) => void
-}
 ```
 
 ### File Structure (Current Implementation)
@@ -193,7 +184,6 @@ EquityChartAPI: {
 frontend/src/
 ├── components/           # Presentational components
 │   ├── ChartOHLC.tsx    # Candlestick chart with imperative API
-│   ├── EquityChart.tsx  # Equity curve chart
 │   ├── FiltersBar.tsx   # Run filtering UI
 │   ├── PlaybackControls.tsx # Playback control buttons
 │   └── RunsTable.tsx    # Runs list table

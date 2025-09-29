@@ -53,7 +53,7 @@ This document defines user experience goals, information architecture, flows, wi
   - Header: run_id, status pill, “Rerun from manifest”
   - Meta: symbol, date range, strategy/params, seed, created_at
   - Controls: play/pause, seek, speed select (30/60/120)
-  - Charts: OHLC (Lightweight Charts); overlays toggles (orders, fills); equity chart
+  - Charts: OHLC (Lightweight Charts); overlays toggles (orders, fills)
   - Indicators: dropped counter; connection status (WS / SSE fallback)
   - States: loading, RUN_NOT_FOUND, waiting, playing, paused, end
 
@@ -64,7 +64,7 @@ This document defines user experience goals, information architecture, flows, wi
   - Input (text/date/select; default/focus/error)
   - Table (simple/sortable; loading skeleton/empty)
   - Badge/Pill (status: QUEUED/RUNNING/DONE/ERROR)
-  - Chart wrappers: OHLCChart, EquityChart (props‑driven, presentational)
+  - Chart wrappers: OHLCChart (props‑driven, presentational)
   - Playback Controls: PlayPauseButton, SpeedSelect, SeekBar (states by stream)
 
 ## Branding & Style Guide (pragmatic defaults)
@@ -84,9 +84,9 @@ This document defines user experience goals, information architecture, flows, wi
 ## Responsiveness Strategy
 - Breakpoints: Mobile 0–639; Tablet 640–1023; Desktop 1024–1439; Wide 1440+
 - Adaptation
-  - Layout: single‑column (mobile); stacked charts (tablet); side‑by‑side OHLC+equity (desktop)
+  - Layout: single‑column (mobile); stacked chart (tablet); primary chart focused on desktop
   - Navigation: minimal; overflow menu on mobile
-  - Priority: controls → chart → overlays/equity; collapse metadata under header on small screens
+  - Priority: controls → chart → overlays; collapse metadata under header on small screens
 
 ## Animation & Micro‑interactions
 - Principles: informative; never block; honor prefers‑reduced‑motion
