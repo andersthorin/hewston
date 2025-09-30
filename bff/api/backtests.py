@@ -431,7 +431,7 @@ async def get_complete_backtest_data(
             }
         )
 
-        # Transform to frontend contract while keeping backward-compatible fields
+        # Transform to frontend contract expected by frontend (flat, strict keys)
         metrics_dict = None
         if cached_response.metrics is not None:
             md = cached_response.metrics.model_dump()
@@ -445,14 +445,12 @@ async def get_complete_backtest_data(
         if cached_response.orders is not None:
             orders_list = [
                 {
-                    "order_id": getattr(o, "order_id", None) or getattr(o, "id", None),
-                    "timestamp": o.ts,
-                    "symbol": getattr(o, "symbol", None),
-                    "side": o.side,
-                    "quantity": o.quantity,
-                    "price": o.price,
-                    "order_type": o.order_type,
-                    "status": o.status,
+                    "ts": o.ts,
+                    "side": (getattr(o, "side", "") or "").lower(),
+                    "quantity": int(getattr(o, "quantity", 0) or 0),
+                    "price": float(getattr(o, "price", 0.0) or 0.0),
+                    "order_type": getattr(o, "order_type", None),
+                    "status": getattr(o, "status", None),
                 }
                 for o in cached_response.orders
             ]
@@ -468,28 +466,24 @@ async def get_complete_backtest_data(
         dataset_id_val = getattr(cached_response.run, "dataset_id", None)
 
         frontend_payload = {
-            "run": {
-                "run_id": cached_response.run.run_id,
-                "strategy_id": cached_response.run.strategy_id,
-                "status": cached_response.run.status,
-                "symbol": cached_response.run.symbol,
-                "params": cached_response.run.params or {},
-                "run_from": run_from_val,
-                "run_to": run_to_val,
-                "dataset_id": dataset_id_val,
-            },
+            "backtest_id": cached_response.run.run_id,
+            "dataset_id": dataset_id_val,
+            "strategy_id": cached_response.run.strategy_id,
+            "status": cached_response.run.status,
+            "error_message": getattr(cached_response.run, "error_message", None),
+            "duration_ms": getattr(cached_response.run, "duration_ms", None),
+            "params": cached_response.run.params or {},
+            "run_from": run_from_val,
+            "run_to": run_to_val,
             "metrics": metrics_dict,
             "equity": equity_list,
             "orders": orders_list,
-            "metadata": {
+            "meta": {
+                "aggregated": True,
                 "load_time_ms": cached_response.metadata.load_time_ms,
                 "cache_hit": cached_response.metadata.cache_hit,
-                "backend_calls": cached_response.metadata.backend_calls,
-                "data_sources": cached_response.metadata.data_sources,
-                "partial_data": cached_response.metadata.partial_data,
-                "failed_sources": cached_response.metadata.failed_sources,
-                "orders_count": cached_response.metadata.orders_count,
-                "equity_points": cached_response.metadata.equity_points,
+                "source": "bff",
+                "components_loaded": cached_response.metadata.data_sources,
             },
         }
         return JSONResponse(status_code=200, content=frontend_payload)
@@ -503,12 +497,21 @@ async def get_complete_backtest_data(
             correlation_id=correlation_id
         )
 
-        # Cache the response if run is in a terminal state
+        # Cache the response with smarter TTLs
         TERMINAL_STATUSES = {"DONE", "COMPLETED", "ERROR", "FAILED"}
         status_val = str(getattr(response.run, "status", "")).upper()
+        requested_metrics = include_metrics
+        requested_equity = include_equity
+        requested_orders = include_orders
+        missing_component = (
+            (requested_metrics and response.metrics is None) or
+            (requested_equity and response.equity is None) or
+            (requested_orders and response.orders is None)
+        )
+
         if status_val in TERMINAL_STATUSES:
-            # Use longer TTL for completed/terminal runs
-            ttl = 3600  # 1 hour for completed runs
+            # Only long-cache when all requested components are present
+            ttl = 3600 if not missing_component else 15
             await cache_service.set_backtest_data(
                 cache_key,
                 response,
@@ -517,7 +520,7 @@ async def get_complete_backtest_data(
             )
         elif status_val == "RUNNING":
             # Short TTL for running runs
-            ttl = 60  # 1 minute for running runs
+            ttl = 60
             await cache_service.set_backtest_data(
                 cache_key,
                 response,
@@ -538,7 +541,7 @@ async def get_complete_backtest_data(
             }
         )
 
-        # Transform to frontend contract while keeping backward-compatible fields
+        # Transform to frontend contract expected by frontend (flat, strict keys)
         metrics_dict = None
         if response.metrics is not None:
             md = response.metrics.model_dump()
@@ -552,14 +555,12 @@ async def get_complete_backtest_data(
         if response.orders is not None:
             orders_list = [
                 {
-                    "order_id": getattr(o, "order_id", None) or getattr(o, "id", None),
-                    "timestamp": o.ts,
-                    "symbol": getattr(o, "symbol", None),
-                    "side": o.side,
-                    "quantity": o.quantity,
-                    "price": o.price,
-                    "order_type": o.order_type,
-                    "status": o.status,
+                    "ts": o.ts,
+                    "side": (getattr(o, "side", "") or "").lower(),
+                    "quantity": int(getattr(o, "quantity", 0) or 0),
+                    "price": float(getattr(o, "price", 0.0) or 0.0),
+                    "order_type": getattr(o, "order_type", None),
+                    "status": getattr(o, "status", None),
                 }
                 for o in response.orders
             ]
@@ -575,28 +576,24 @@ async def get_complete_backtest_data(
         dataset_id_val = getattr(response.run, "dataset_id", None)
 
         frontend_payload = {
-            "run": {
-                "run_id": response.run.run_id,
-                "strategy_id": response.run.strategy_id,
-                "status": response.run.status,
-                "symbol": response.run.symbol,
-                "params": response.run.params or {},
-                "run_from": run_from_val,
-                "run_to": run_to_val,
-                "dataset_id": dataset_id_val,
-            },
+            "backtest_id": response.run.run_id,
+            "dataset_id": dataset_id_val,
+            "strategy_id": response.run.strategy_id,
+            "status": response.run.status,
+            "error_message": getattr(response.run, "error_message", None),
+            "duration_ms": getattr(response.run, "duration_ms", None),
+            "params": response.run.params or {},
+            "run_from": run_from_val,
+            "run_to": run_to_val,
             "metrics": metrics_dict,
             "equity": equity_list,
             "orders": orders_list,
-            "metadata": {
+            "meta": {
+                "aggregated": True,
                 "load_time_ms": response.metadata.load_time_ms,
                 "cache_hit": response.metadata.cache_hit,
-                "backend_calls": response.metadata.backend_calls,
-                "data_sources": response.metadata.data_sources,
-                "partial_data": response.metadata.partial_data,
-                "failed_sources": response.metadata.failed_sources,
-                "orders_count": response.metadata.orders_count,
-                "equity_points": response.metadata.equity_points,
+                "source": "bff",
+                "components_loaded": response.metadata.data_sources,
             },
         }
         return JSONResponse(status_code=200, content=frontend_payload)

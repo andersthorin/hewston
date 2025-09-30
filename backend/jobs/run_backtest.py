@@ -62,13 +62,15 @@ def run_backtest_and_persist(
             idempotency_key=None,
         )
 
-    # Prepare paths
+    # Prepare paths (absolute)
     out_dir = get_backtests_dir(run_id)
-    equity_path = out_dir / "equity.parquet"
-    orders_path = out_dir / "orders.parquet"
-    fills_path = out_dir / "fills.parquet"
-    metrics_path = out_dir / "metrics.json"
-    manifest_path = out_dir / "run-manifest.json"
+    out_dir_abs = out_dir.resolve()
+    ensure_dir(out_dir_abs)
+    equity_path = (out_dir_abs / "equity.parquet")
+    orders_path = (out_dir_abs / "orders.parquet")
+    fills_path = (out_dir_abs / "fills.parquet")
+    metrics_path = (out_dir_abs / "metrics.json")
+    manifest_path = (out_dir_abs / "run-manifest.json")
 
     # Move to RUNNING
     cat.set_backtest_status(run_id, status="RUNNING")

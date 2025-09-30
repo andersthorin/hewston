@@ -106,11 +106,14 @@ class NautilusBacktestRunner:
         # Ensure data routes to venue client by default
         try:
             from nautilus_trader.model.identifiers import ClientId  # type: ignore
-            engine.set_default_market_data_client(ClientId("XNAS"))
+            # Route both market data and trading to the venue client (e.g., XNAS)
+            engine.set_default_market_data_client(ClientId(venue))
+            engine.set_default_trading_client(ClientId(venue))
         except Exception:
+            # Older Nautilus versions may not expose set_default_trading_client
             pass
 
-        engine.add_venue(Venue("XNAS"), OmsType.HEDGING, AccountType.CASH, [Money.from_str("10000 USD")])
+        engine.add_venue(Venue(venue), OmsType.HEDGING, AccountType.CASH, [Money.from_str("10000 USD")])
         # Ensure instrument is registered before adding bars
         instr = Equity.from_dict({
             "id": instrument_id,

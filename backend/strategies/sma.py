@@ -136,7 +136,17 @@ try:  # pragma: no cover - exercised in integration
                     self._units -= qty
                     self._cash += px * qty
                     self._in_position = self._units > 0
-                self.fills.append({"ts_utc": ts, "order_id": getattr(event.order, 'client_order_id', None), "qty": qty, "price": px, "fill_id": getattr(event, 'fill_id', None), "slippage": 0.0, "fee": 0.0})
+                # Record fill with explicit side for metrics
+                self.fills.append({
+                    "ts_utc": ts,
+                    "side": "BUY" if side == OrderSide.BUY else "SELL",
+                    "order_id": getattr(event.order, 'client_order_id', None),
+                    "qty": qty,
+                    "price": px,
+                    "fill_id": getattr(event, 'fill_id', None),
+                    "slippage": 0.0,
+                    "fee": 0.0,
+                })
             except Exception:
                 pass
 

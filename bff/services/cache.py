@@ -328,8 +328,10 @@ class CacheService:
         Returns:
             str: Cache key
         """
+        # Version bump to invalidate stale cached shapes and partial responses
+        CACHE_VERSION = "v2"
         # Create deterministic cache key
-        key_data = f"{run_id}:{include_orders}:{include_equity}:{include_metrics}"
+        key_data = f"{CACHE_VERSION}:{run_id}:{include_orders}:{include_equity}:{include_metrics}"
         key_hash = hashlib.md5(key_data.encode()).hexdigest()
         return f"backtest:{key_hash}"
 

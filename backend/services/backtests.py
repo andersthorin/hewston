@@ -236,7 +236,8 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
 
     run_id = uuid4().hex
     created_at = datetime.now(timezone.utc).isoformat()
-    manifest_path = f"data/backtests/{run_id}/run-manifest.json"
+    from backend.utils.paths import get_backtests_dir
+    manifest_path = str((get_backtests_dir(run_id) / "run-manifest.json").resolve())
 
     try:
         catalog.create_backtest(
