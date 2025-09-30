@@ -87,17 +87,21 @@ class SqliteCatalog(CatalogPort):
         """Create DB from official DDL if missing; fallback to minimal DDL.
         Does nothing if the file already exists to avoid schema divergence.
         """
-        if os.path.exists(self.db_path):
-            return
+        # Check BEFORE calling _connect() which creates the file
+        db_exists = os.path.exists(self.db_path)
+
         # Try to apply repository DDL
         repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
         ddl_path = os.path.join(repo_root, "scripts", "catalog_init.sql")
+
         with self._connect() as conn:
-            if os.path.isfile(ddl_path):
-                with open(ddl_path, "r") as f:
-                    conn.executescript(f.read())
-            else:
-                conn.executescript(DDL)
+            if not db_exists:
+                # Fresh database - initialize schema
+                if os.path.isfile(ddl_path):
+                    with open(ddl_path, "r") as f:
+                        conn.executescript(f.read())
+                else:
+                    conn.executescript(DDL)
 
 
 
@@ -325,7 +329,7 @@ class SqliteCatalog(CatalogPort):
         self,
         *,
         run_id: str,
-        dataset_id: str,
+        dataset_id: str | None,  # Allow None - FK constraint allows NULL
         strategy_id: str,
         params_json: str,
         seed: int,
@@ -399,14 +403,22 @@ class SqliteCatalog(CatalogPort):
         from datetime import datetime, timezone
 
         computed_at = datetime.now(timezone.utc).isoformat()
-        # Minimal set: total_return and max_drawdown; others NULL
+
+        # Extract metrics (map win_rate to hit_rate for DB schema compatibility)
         total_return = metrics.get("total_return")
         max_drawdown = metrics.get("max_drawdown")
+        hit_rate = metrics.get("win_rate")  # win_rate in code, hit_rate in DB
+
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO backtest_metrics (backtest_id, total_return, max_drawdown, computed_at) VALUES (?, ?, ?, ?) "
-                "ON CONFLICT(backtest_id) DO UPDATE SET total_return=excluded.total_return, max_drawdown=excluded.max_drawdown, computed_at=excluded.computed_at",
-                (run_id, total_return, max_drawdown, computed_at),
+                "INSERT INTO backtest_metrics (backtest_id, total_return, max_drawdown, hit_rate, computed_at) "
+                "VALUES (?, ?, ?, ?, ?) "
+                "ON CONFLICT(backtest_id) DO UPDATE SET "
+                "total_return=excluded.total_return, "
+                "max_drawdown=excluded.max_drawdown, "
+                "hit_rate=excluded.hit_rate, "
+                "computed_at=excluded.computed_at",
+                (run_id, total_return, max_drawdown, hit_rate, computed_at),
             )
 
 

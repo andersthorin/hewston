@@ -161,28 +161,35 @@ class NautilusBacktestRunner:
         return self._format_results(results)
 ```
 
-### 4. Enhanced Metrics System
+### 4. Metrics Extraction from Nautilus
 
-**Purpose**: Comprehensive trading analytics with extensible architecture
+**Purpose**: Extract performance metrics from Nautilus engine state
+
+**Implementation**: Metrics are extracted directly from Nautilus's internal state after backtest execution, with fallback calculations for metrics not exposed by Nautilus.
 
 ```python
-class MetricsCalculator:
-    """Interface for calculating trading metrics."""
+class NautilusBacktestRunner:
+    def _extract_metrics_from_engine(
+        self,
+        engine: BacktestEngine,
+        equity: List[Dict[str, Any]],
+        fills: List[Dict[str, Any]],
+    ) -> Dict[str, float]:
+        """Extract performance metrics from Nautilus engine and strategy data.
 
-    def calculate_metrics(self, backtest_result: BacktestResult) -> Dict[str, Any]:
-        """Calculate metrics from Nautilus backtest results."""
-        raise NotImplementedError
-
-class StandardMetricsCalculator(MetricsCalculator):
-    """Standard trading metrics implementation (MVP)."""
-
-    def calculate_metrics(self, backtest_result: BacktestResult) -> Dict[str, Any]:
-        # MVP metrics; extend with max_drawdown/sharpe later via pluggable calculators
+        Uses Nautilus's internal portfolio state when available, falls back to
+        calculating from equity curve and fills for metrics Nautilus doesn't expose.
+        """
+        # Try to get metrics from Nautilus's portfolio/account state
+        # Fallback to equity curve and fills analysis
         return {
-            "total_return": self._calculate_total_return(backtest_result),
-            "win_rate": self._calculate_win_rate(backtest_result),
+            "total_return": ...,  # From Nautilus portfolio or equity curve
+            "max_drawdown": ...,  # Calculated from equity curve
+            "win_rate": ...,      # Calculated from fills
         }
 ```
+
+**Note**: This approach eliminates custom metric calculation logic and relies on Nautilus's battle-tested analytics where possible.
 
 ## Interface Compatibility
 

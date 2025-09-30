@@ -9,6 +9,7 @@ export type MetricsSummaryProps = {
     profit_factor: number
     total_trades: number
   }>
+  equity?: Array<{ ts: string; value: number }> | null
   loading?: boolean
 }
 
@@ -39,6 +40,15 @@ function formatInt(v: number | null | undefined): string {
   }
 }
 
+function formatCurrency(v: number | null | undefined): string {
+  if (v === null || v === undefined || Number.isNaN(v)) return '—'
+  try {
+    return `$${Number(v).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  } catch {
+    return '—'
+  }
+}
+
 const metricDefs: Array<{
   key: keyof NonNullable<MetricsSummaryProps['metrics']>
   label: string
@@ -53,11 +63,25 @@ const metricDefs: Array<{
   { key: 'total_trades', label: 'Trades', formatter: formatInt, title: 'Total executed trades' },
 ]
 
-export default function MetricsSummary({ metrics, loading }: MetricsSummaryProps) {
+function getCurrentEquity(equity: Array<{ ts: string; value: number }> | null | undefined): number | undefined {
+  if (!equity || equity.length === 0) return undefined
+  return equity[equity.length - 1]?.value
+}
+
+export default function MetricsSummary({ metrics, equity, loading }: MetricsSummaryProps) {
+  const currentEquity = loading ? null : getCurrentEquity(equity)
+
   return (
     <section aria-label="Performance metrics" className="rounded border border-slate-200 bg-white">
       <div className="px-3 py-2 border-b border-slate-200 text-slate-700 font-semibold">Performance</div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 p-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 p-3">
+        {/* Current Equity - first position */}
+        <div className="flex flex-col gap-1" title="Current portfolio value from Nautilus">
+          <div className="text-xs text-slate-500">Current equity</div>
+          <div className="text-base font-medium tabular-nums">{formatCurrency(currentEquity)}</div>
+        </div>
+
+        {/* Other metrics */}
         {metricDefs.map((def) => {
           const raw = metrics ? (metrics as any)[def.key] : undefined
           const val = loading ? null : (typeof raw === 'number' ? raw : undefined)

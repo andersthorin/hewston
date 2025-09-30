@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from pathlib import Path
@@ -15,6 +16,13 @@ from backend.utils.datetime import utc_now
 from backend.utils.git import get_git_commit_hash
 from backend.utils.paths import get_base_data_dir, get_backtests_dir, ensure_dir
 
+# Configure logging for backtest execution
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
 
 def _write_parquet(records: list[dict], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -24,7 +32,7 @@ def _write_parquet(records: list[dict], path: Path) -> None:
 
 def run_backtest_and_persist(
     *,
-    dataset_id: str,
+    dataset_id: str | None = None,  # Optional - not needed for warehouse-based backtests
     strategy_id: str = "sma_crossover",
     params: Dict[str, Any] | None = None,
     seed: int = 42,
@@ -34,9 +42,15 @@ def run_backtest_and_persist(
     from_date: str | None = None,
     to_date: str | None = None,
 ) -> dict:
+    logger = logging.getLogger("backtest.job")
     params = params or {}
     slippage_fees = slippage_fees or {}
     cat = get_catalog()
+
+    logger.info(
+        f"Starting backtest: dataset={dataset_id}, strategy={strategy_id}, "
+        f"params={params}, from={from_date}, to={to_date}"
+    )
 
     created_at_iso = utc_now().isoformat()
     code_hash = get_git_commit_hash() or "unknown"
@@ -80,20 +94,34 @@ def run_backtest_and_persist(
 
     t0 = time.perf_counter()
     try:
+        logger.info("Initializing Nautilus backtest runner...")
         runner = NautilusBacktestRunner()
+
+        logger.info("Running backtest...")
         result = runner.run(
             dataset_id=dataset_id, strategy_id=strategy_id, params=params, seed=seed,
             from_date=from_date, to_date=to_date,
         )
         duration_ms = int((time.perf_counter() - t0) * 1000)
 
+        # Log result summary
+        logger.info(
+            f"Backtest completed in {duration_ms}ms: "
+            f"{len(result.get('orders', []))} orders, "
+            f"{len(result.get('fills', []))} fills, "
+            f"{len(result.get('equity', []))} equity points"
+        )
+        logger.info(f"Metrics: {result.get('metrics', {})}")
+
         # Write artifacts
+        logger.info("Writing artifacts to disk...")
         _write_parquet(result.get("equity", []), equity_path)
         _write_parquet(result.get("orders", []), orders_path)
         _write_parquet(result.get("fills", []), fills_path)
         metrics = result.get("metrics", {})
         ensure_dir(out_dir)
         metrics_path.write_text(json.dumps(metrics, indent=2))
+        logger.info(f"Artifacts written to {out_dir}")
 
         # Write manifest
         manifest = {

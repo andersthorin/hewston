@@ -51,7 +51,11 @@ export default function BacktestDetailView() {
 
       {!isErrorStatus && (
         <>
-          <MetricsSummary metrics={(data as any)?.metrics ?? undefined} loading={isLoading} />
+          <MetricsSummary
+            metrics={(data as any)?.metrics ?? undefined}
+            equity={(data as any)?.equity ?? undefined}
+            loading={isLoading}
+          />
           <RunPlayerContainer
             backtest_id={backtest_id}
             dataset_id={data?.dataset_id || undefined}

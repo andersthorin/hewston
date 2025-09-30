@@ -42,8 +42,6 @@ try:  # pragma: no cover - exercised in integration
             self._fast: Optional[SimpleMovingAverage] = None
             self._slow: Optional[SimpleMovingAverage] = None
             self._in_position: bool = False
-            self._cash: float = 10_000.0
-            self._units: int = 0
 
             self.orders: list[dict[str, Any]] = []
             self.fills: list[dict[str, Any]] = []
@@ -95,8 +93,29 @@ try:  # pragma: no cover - exercised in integration
                 except Exception:
                     in_rth = True
 
-            # Track equity
-            equity_val = self._cash + self._units * px
+            # Track equity from Nautilus portfolio (REQUIRED - no fallbacks)
+            import logging
+            logger = logging.getLogger("strategy.equity")
+
+            try:
+                portfolio = self.portfolio
+                venue = self.instrument_id.venue  # Get venue from instrument (e.g., XNAS)
+                account = portfolio.account(venue)  # Pass venue to get the account
+
+                # Get total account value using calculated_balance which includes positions
+                # This is the correct way to get total equity (cash + unrealized PnL)
+                from nautilus_trader.model.currencies import USD
+                equity_money = account.balance_total(USD)
+                equity_val = float(equity_money.as_double())
+                logger.debug(f"Equity from Nautilus balance_total(USD): ${equity_val:.2f}")
+
+            except Exception as e:
+                logger.error(f"❌ CRITICAL: Failed to get equity from Nautilus portfolio: {type(e).__name__}: {e}")
+                logger.error(f"   Portfolio type: {type(self.portfolio) if hasattr(self, 'portfolio') else 'N/A'}")
+                logger.error(f"   Venue: {venue if 'venue' in locals() else 'N/A'}")
+                logger.error(f"   Account type: {type(account) if 'account' in locals() else 'N/A'}")
+                raise RuntimeError(f"Cannot track equity without Nautilus portfolio access: {e}") from e
+
             self.equity.append({"ts_utc": ts, "value": equity_val})
 
             if not in_rth:
@@ -121,50 +140,93 @@ try:  # pragma: no cover - exercised in integration
             if self.eod_flat and self._in_position and mins is not None and mins == (15*60 + 59):
                 self._place(OrderSide.SELL, px, ts)
 
+        # Generic event handler to catch ALL events for debugging
+        def on_event(self, event) -> None:  # pragma: no cover
+            import logging
+            logger = logging.getLogger("strategy.events")
+
+            event_type = type(event).__name__
+
+            # Log all order-related events
+            if 'Order' in event_type:
+                logger.info(f"EVENT: {event_type} - {event}")
+
+            # Call parent to ensure normal processing continues
+            super().on_event(event)
+
         # Keep artifacts in sync when fills occur (best-effort; details may vary by engine)
         def on_order_filled(self, event) -> None:  # pragma: no cover
+            import logging
+            logger = logging.getLogger("strategy.fills")
+
+            logger.info(f"🎯 on_order_filled CALLED! Event: {event}")
+
             try:
-                side = event.order.side  # BUY/SELL
-                px = float(event.fill.avg_px.as_double()) if hasattr(event.fill.avg_px, 'as_double') else float(event.fill.avg_px)
-                qty = int(event.fill.qty)
+                # OrderFilled event has order_side directly, not event.order.side
+                side = event.order_side  # BUY/SELL enum
+                px = float(event.last_px.as_double()) if hasattr(event, 'last_px') else float(event.avg_px.as_double())
+                qty = int(event.last_qty) if hasattr(event, 'last_qty') else int(event.quantity)
                 ts = getattr(event, 'ts_event', None)
+
+                # Update position tracking (simple flag for strategy logic)
                 if side == OrderSide.BUY:
-                    self._units += qty
-                    self._cash -= px * qty
                     self._in_position = True
-                else:
-                    self._units -= qty
-                    self._cash += px * qty
-                    self._in_position = self._units > 0
+                # Note: We rely on Nautilus for actual position/cash tracking
+
                 # Record fill with explicit side for metrics
-                self.fills.append({
+                fill_data = {
                     "ts_utc": ts,
                     "side": "BUY" if side == OrderSide.BUY else "SELL",
-                    "order_id": getattr(event.order, 'client_order_id', None),
+                    "order_id": str(event.client_order_id),
                     "qty": qty,
                     "price": px,
-                    "fill_id": getattr(event, 'fill_id', None),
+                    "fill_id": str(getattr(event, 'trade_id', 'unknown')),
                     "slippage": 0.0,
                     "fee": 0.0,
-                })
-            except Exception:
-                pass
+                }
+                self.fills.append(fill_data)
+
+                logger.info(
+                    f"✅ FILL RECORDED: {fill_data['side']} {qty} @ ${px:.2f}, total_fills={len(self.fills)}"
+                )
+
+            except Exception as e:
+                logger.error(f"❌ ERROR in on_order_filled: {type(e).__name__}: {e}")
+                import traceback
+                logger.error(traceback.format_exc())
 
         # Helper to submit a market order and record an order artifact
         def _place(self, side: OrderSide, px: float, ts) -> None:
+            import logging
+            logger = logging.getLogger("strategy.orders")
+
             from nautilus_trader.model.objects import Quantity
             qty_int = int(self.qty)
             qty = Quantity.from_int(qty_int)
-            order = self.order_factory.market(self.instrument_id, side, qty, time_in_force=TimeInForce.IOC)
+            # Changed from IOC to GTC - IOC orders may not trigger on_order_filled in backtest
+            order = self.order_factory.market(self.instrument_id, side, qty, time_in_force=TimeInForce.GTC)
             self.submit_order(order)
             oid = f"naut-{self._oid_seq}"
             self._oid_seq += 1
-            self.orders.append({"ts_utc": ts, "side": "BUY" if side == OrderSide.BUY else "SELL", "qty": qty_int, "price": px, "order_id": oid, "type": "MKT", "time_in_force": "IOC"})
-            # Optimistically update our state; on_order_filled will reconcile after
-            if side == OrderSide.BUY:
-                self._in_position = True
-            else:
-                self._in_position = False
+
+            order_data = {
+                "ts_utc": ts,
+                "side": "BUY" if side == OrderSide.BUY else "SELL",
+                "qty": qty_int,
+                "price": px,
+                "order_id": oid,
+                "type": "MKT",
+                "time_in_force": "GTC"
+            }
+            self.orders.append(order_data)
+
+            logger.info(
+                f"ORDER SUBMITTED: {order_data['side']} {qty_int} @ ${px:.2f}, "
+                f"order_id={oid}, nautilus_order_id={order.client_order_id}"
+            )
+
+            # Note: Do NOT optimistically update state here
+            # Wait for on_order_filled to update based on actual execution
 
 except Exception:  # pragma: no cover - fallback placeholder when Nautilus not installed
 

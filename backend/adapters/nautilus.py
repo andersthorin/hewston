@@ -42,9 +42,7 @@ class NautilusBacktestRunner:
         Raises ImportError if nautilus-trader is not installed.
         """
         # Lazy imports; fail fast if not available
-        # Using a synthetic dataset for validation; ParquetDataAdapter is not used here
         from backend.strategies.strategy_factory import StrategyFactory, StrategyRegistry
-        from backend.metrics.standard import StandardMetricsCalculator
         try:
             from nautilus_trader.backtest.engine import BacktestEngine  # type: ignore
             from nautilus_trader.model.identifiers import Venue  # type: ignore
@@ -154,15 +152,150 @@ class NautilusBacktestRunner:
         # Run
         engine.run()
 
-        # Collect artifacts
-        # Collect artifacts from real engine run
+        # Collect artifacts from strategy's custom tracking
+        import logging
+        logger = logging.getLogger("nautilus.runner")
+
         orders: List[Dict[str, Any]] = getattr(strategy, "orders", [])
         fills: List[Dict[str, Any]] = getattr(strategy, "fills", [])
         equity: List[Dict[str, Any]] = getattr(strategy, "equity", [])
 
+        logger.info(
+            f"Collected artifacts: {len(orders)} orders, {len(fills)} fills, "
+            f"{len(equity)} equity points"
+        )
 
-        metrics = StandardMetricsCalculator().calculate_metrics(equity=equity, fills=fills)
+        # Extract metrics from Nautilus engine state
+        metrics = self._extract_metrics_from_engine(engine, equity, fills)
+
         return {"orders": orders, "fills": fills, "equity": equity, "metrics": metrics}
+
+    def _extract_metrics_from_engine(
+        self,
+        engine: Any,
+        equity: List[Dict[str, Any]],
+        fills: List[Dict[str, Any]],
+    ) -> Dict[str, float]:
+        """Extract performance metrics from Nautilus engine - NO FALLBACKS.
+
+        If Nautilus data is unavailable, this will raise an error so we can fix the integration.
+        """
+        import logging
+        logger = logging.getLogger("nautilus.metrics")
+
+        metrics: Dict[str, float] = {}
+        starting_balance = 10000.0  # Default from strategy
+
+        # Get metrics from Nautilus's portfolio/account state (REQUIRED)
+        try:
+            portfolio = engine.portfolio  # Direct access, not engine.trader.portfolio
+
+            # Get the venue from the first instrument (we only have one in backtests)
+            from nautilus_trader.model.identifiers import Venue
+            instruments = engine.cache.instruments()
+            if not instruments:
+                logger.error("❌ CRITICAL: No instruments in cache")
+                raise RuntimeError("No instruments in cache")
+
+            venue = list(instruments)[0].id.venue
+            account = portfolio.account(venue)
+
+            if not account:
+                logger.error(f"❌ CRITICAL: No account found for venue {venue}")
+                raise RuntimeError(f"No account for venue {venue}")
+
+            # Get total account value using balance_total with USD currency
+            from nautilus_trader.model.currencies import USD
+            equity_money = account.balance_total(USD)
+            ending_balance = float(equity_money.as_double())
+            metrics["total_return"] = (ending_balance - starting_balance) / starting_balance
+
+            logger.info(
+                f"✓ Extracted metrics from Nautilus portfolio: "
+                f"start=${starting_balance:.2f}, end=${ending_balance:.2f}, "
+                f"return={metrics['total_return']:.4f}"
+            )
+
+        except AttributeError as e:
+            logger.error(f"❌ CRITICAL: Cannot access Nautilus portfolio attributes: {e}")
+            logger.error(f"   Engine type: {type(engine)}")
+            logger.error(f"   Has portfolio: {hasattr(engine, 'portfolio')}")
+            raise RuntimeError(f"Failed to extract metrics from Nautilus - portfolio API broken: {e}") from e
+
+        except Exception as e:
+            logger.error(f"❌ CRITICAL: Unexpected error extracting Nautilus metrics: {type(e).__name__}: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
+            raise RuntimeError(f"Failed to extract metrics from Nautilus: {e}") from e
+
+        # Calculate max drawdown from equity curve
+        metrics["max_drawdown"] = self._calculate_max_drawdown(equity)
+
+        # Calculate win rate from fills
+        metrics["win_rate"] = self._calculate_win_rate(fills)
+
+        logger.info(
+            f"Final metrics: total_return={metrics['total_return']:.4f}, "
+            f"max_drawdown={metrics['max_drawdown']:.4f}, "
+            f"win_rate={metrics['win_rate']:.4f}, "
+            f"fills_count={len(fills)}"
+        )
+
+        return metrics
+
+    def _calculate_max_drawdown(self, equity: List[Dict[str, Any]]) -> float:
+        """Calculate maximum drawdown from equity curve."""
+        if not equity:
+            return 0.0
+
+        peak = None
+        min_drawdown = 0.0
+
+        for pt in equity:
+            try:
+                v = float(pt.get("value", 0.0) or 0.0)
+            except Exception:
+                continue
+
+            if peak is None or v > peak:
+                peak = v
+
+            if peak and peak > 0:
+                dd = (v - peak) / peak  # <= 0
+                if dd < min_drawdown:
+                    min_drawdown = dd
+
+        return float(min_drawdown)
+
+    def _calculate_win_rate(self, fills: List[Dict[str, Any]]) -> float:
+        """Calculate win rate from fills by pairing entry/exit trades."""
+        if not fills:
+            return 0.0
+
+        wins = 0
+        total = 0
+        pos = 0
+        entry_price = 0.0
+
+        for f in fills:
+            side = f.get("side") or f.get("Side") or None
+            try:
+                px = float(f.get("price", 0.0))
+                qty = float(f.get("qty", 0.0))
+            except (ValueError, TypeError):
+                continue
+
+            if side == "BUY" and pos == 0:
+                pos = 1
+                entry_price = px
+            elif side == "SELL" and pos == 1:
+                pos = 0
+                pnl = (px - entry_price) * qty
+                total += 1
+                if pnl > 0:
+                    wins += 1
+
+        return (wins / total) if total else 0.0
 
 
 
