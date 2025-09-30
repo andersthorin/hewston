@@ -1,0 +1,21 @@
+{
+  "run_id": "17f969c4e0224b1a9b3f32b35aca2de2",
+  "dataset_id": "TSLA-2024-1m",
+  "strategy_id": "sma_crossover",
+  "params": {},
+  "seed": 42,
+  "slippage_fees": {},
+  "speed": 60,
+  "run_from": "2024-10-11",
+  "run_to": "2024-10-31",
+  "code_hash": "a628ef4be23b67aca3df293c9141e079df4f440f",
+  "env_lock": null,
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-09-30T07:51:54.082839+00:00",
+  "status": "ERROR",
+  "error": {
+    "error_type": "SystemExit",
+    "error_message": "bars parquet missing for dataset: TSLA-2024-1m"
+  }
+}

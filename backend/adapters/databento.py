@@ -30,7 +30,7 @@ def ensure_dataset(symbol: str, year: int, *, force: bool = False) -> str:
     raw_dir = base / "raw" / "databento" / symbol / str(year)
     derived_dir = base / "derived" / "bars" / symbol / str(year)
     raw_files = [str(raw_dir / "TRADES.dbn.zst"), str(raw_dir / "TBBO.dbn.zst")]
-    bars_files = [str(derived_dir / "bars_1m.parquet"), str(derived_dir / "tbbo_1m.parquet")]
+    bars_files = [str(derived_dir / "bars_1Min.parquet"), str(derived_dir / "tbbo_1m.parquet")]
 
     # Compute total size bytes
     size_bytes = 0

@@ -15,6 +15,7 @@ export const BFFAggregatedBacktestResponseSchema = z.object({
   dataset_id: z.string().optional().nullable(),
   strategy_id: z.string(),
   status: z.string(),
+  error_message: z.string().optional().nullable(),
   code_hash: z.string().optional().nullable(),
   seed: z.number().optional().nullable(),
   speed: z.number().optional().nullable(),
@@ -129,6 +130,7 @@ export class BacktestDataService {
       r.duration_ms = r.duration_ms ?? run.duration_ms ?? r.durationMs
       r.params = r.params ?? run.params
       r.dataset_id = r.dataset_id ?? run.dataset_id
+      r.error_message = r.error_message ?? run.error_message
     }
     return BFFAggregatedBacktestResponseSchema.parse(response)
   }

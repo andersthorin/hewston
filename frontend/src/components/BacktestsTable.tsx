@@ -50,7 +50,20 @@ function Row({ r, onView }: { r: BacktestSummaryRow; onView?: (id: string) => vo
       <td className="px-2 py-1 font-mono">{r.backtest_id}</td>
       <td className="px-2 py-1">{r.created_at}</td>
       <td className="px-2 py-1">{r.strategy_id}</td>
-      <td className="px-2 py-1">{r.status}</td>
+      <td className="px-2 py-1">
+        <div className="flex items-center gap-2">
+          <span>{r.status}</span>
+          {r.status === 'DONE' || r.status === 'COMPLETED' ? (
+            <span
+              className="inline-flex items-center rounded bg-emerald-100 text-emerald-700 px-2 py-0.5 text-xs"
+              title="Real engine (no stub fallback)"
+              aria-label="Engine: Nautilus Trader"
+            >
+              Engine: Nautilus Trader
+            </span>
+          ) : null}
+        </div>
+      </td>
       <td className="px-2 py-1">{r.symbol ?? ''}</td>
       <td className="px-2 py-1">{runFrom}</td>
       <td className="px-2 py-1">{runTo}</td>

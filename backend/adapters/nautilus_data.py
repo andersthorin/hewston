@@ -23,18 +23,27 @@ def _get_dataset_row(dataset_id: str) -> Optional[dict]:
 
 
 def _resolve_bars_path(row: dict) -> Optional[Path]:
-    import json
+    import json, os
 
+    # 1) Preferred: explicit path(s) in catalog row
     try:
         files = json.loads(row.get("bars_parquet_json", "[]"))
-        # Strict: only accept explicit bars_1Min.parquet entries
         for p in files:
             p_str = str(p)
             if p_str.endswith("bars_1Min.parquet"):
                 path = Path(p_str)
                 if path.exists():
                     return path
-        return None
+    except Exception:
+        pass
+
+    # 2) Deterministic fallback for default layout: $HEWSTON_DATA_DIR/derived/bars/{SYMBOL}/{YEAR}/bars_1Min.parquet
+    try:
+        dsid = str(row.get("dataset_id", ""))
+        sym, year, _ = dsid.split("-", 2)
+        root = Path(os.environ.get("HEWSTON_DATA_DIR", "data"))
+        p = root / "derived" / "bars" / sym.upper() / year / "bars_1Min.parquet"
+        return p if p.exists() else None
     except Exception:
         return None
 
@@ -113,6 +122,10 @@ class ParquetDataAdapter:
         # Pandas DataFrame with tz-aware UTC index named 'timestamp'
         pdf = bars_df.rename({"ts": "timestamp", "o": "open", "h": "high", "l": "low", "c": "close", "v": "volume"}).to_pandas()
         pdf.set_index("timestamp", inplace=True)
+        # Restrict to required OHLCV columns to avoid object dtypes reaching the wrangler
+        pdf = pdf[["open", "high", "low", "close", "volume"]]
+        # Ensure numeric dtypes (float64/double)
+        pdf = pdf.astype({"open": "float64", "high": "float64", "low": "float64", "close": "float64", "volume": "float64"})
 
         # Build instrument and bar type (1-minute MID, EXTERNAL)
         instr_id = InstrumentId.from_str(instrument_id)
@@ -141,7 +154,11 @@ class ParquetDataAdapter:
         return bars
 
     def create_data_engine(self, bars) -> "DataEngine":  # type: ignore[name-defined]
-        from nautilus_trader.backtest.data_engine import DataEngine  # type: ignore
+        # Support both legacy and current Nautilus import paths
+        try:
+            from nautilus_trader.data.engine import DataEngine  # type: ignore
+        except Exception:  # pragma: no cover
+            from nautilus_trader.backtest.data_engine import DataEngine  # type: ignore
 
         engine = DataEngine()
         engine.add_data(bars)

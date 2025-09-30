@@ -156,7 +156,7 @@ def _create_stub_data(symbol: str, year: int, force: bool) -> Dict[str, object]:
     """
     base = get_base_data_dir()
     derived_dir = base / "derived" / "bars" / symbol / str(year)
-    bars_path = derived_dir / "bars_1m.parquet"
+    bars_path = derived_dir / "bars_1Min.parquet"
     tbbo_out_path = derived_dir / "tbbo_1m.parquet"
     manifest_path = derived_dir / "bars_manifest.json"
 
@@ -174,7 +174,7 @@ def _create_stub_data(symbol: str, year: int, force: bool) -> Dict[str, object]:
 
     input_hashes = {}
     output_hashes = {
-        "bars_1m.parquet": _sha256(bars_path),
+        "bars_1Min.parquet": _sha256(bars_path),
         "tbbo_1m.parquet": _sha256(tbbo_out_path),
     }
 
