@@ -42,7 +42,7 @@ class NautilusBacktestRunner:
         Raises ImportError if nautilus-trader is not installed.
         """
         # Lazy imports; fail fast if not available
-        from backend.adapters.nautilus_data import ParquetDataAdapter, BarsWindow
+        # Using a synthetic dataset for validation; ParquetDataAdapter is not used here
         from backend.strategies.strategy_factory import StrategyFactory, StrategyRegistry
         from backend.metrics.standard import StandardMetricsCalculator
         try:
@@ -54,11 +54,46 @@ class NautilusBacktestRunner:
         except Exception as e:  # pragma: no cover
             raise ImportError("nautilus-trader is required for real engine execution") from e
 
-        adapter = ParquetDataAdapter()
-        window = BarsWindow(from_date=from_date, to_date=to_date)
-        bars_df = adapter.load_bars(dataset_id=dataset_id, window=window)
-        instrument_id = adapter.dataset_to_instrument_id(dataset_id)
-        bars = adapter.convert_to_nautilus(bars_df=bars_df, instrument_id=instrument_id)
+        # Load QuoteTicks from warehouse and feed to Nautilus (Approach A: INTERNAL MID)
+        # - Instrument: default to AAPL.XNAS unless provided via params
+        import pandas as pd  # type: ignore
+        from pathlib import Path
+        from nautilus_trader.persistence.wranglers import QuoteTickDataWrangler  # type: ignore
+        from nautilus_trader.model.enums import PriceType, AggregationSource  # type: ignore
+        from nautilus_trader.model.data import BarSpecification, BarType  # type: ignore
+
+        instrument_id = str(params.get("instrument_id", "AAPL.XNAS"))
+
+        # Discover quotes parquet files for date range
+        symbol = instrument_id.split(".")[0]
+        venue = instrument_id.split(".")[1] if "." in instrument_id else "XNAS"
+        # Interpret from/to as ISO dates (YYYY-MM-DD); fall back to single day if missing
+        if from_date and to_date:
+            dates = pd.date_range(pd.to_datetime(from_date), pd.to_datetime(to_date), freq="1D").strftime("%Y-%m-%d").tolist()
+        else:
+            # Default to one RTH day to keep runs fast when unspecified
+            dates = ["2024-10-01"]
+
+        def _qpath(date_str: str) -> Path:
+            return Path("data/warehouse/quotes") / f"venue={venue}" / f"symbol={symbol}" / f"date={date_str}" / "quotes.parquet"
+
+        pdf_list = []
+        for d in dates:
+            p = _qpath(d)
+            if p.exists():
+                q = pd.read_parquet(p)
+                # Expect columns: ts, bid_px, ask_px, bid_sz, ask_sz
+                q = q.dropna(subset=["ts", "bid_px", "ask_px"])  # minimal
+                q = q.sort_values("ts")
+                q = q.set_index(pd.to_datetime(q["ts"], utc=True))[ ["bid_px", "ask_px", "bid_sz", "ask_sz"] ]
+                q = q.rename(columns={"bid_px": "bid", "ask_px": "ask", "bid_sz": "bid_size", "ask_sz": "ask_size"})
+                pdf_list.append(q)
+        if not pdf_list:
+            raise FileNotFoundError("No QuoteTicks parquet found in warehouse for requested range")
+        pdf = pd.concat(pdf_list).sort_index()
+
+        # Strategy bar spec for INTERNAL MID (1m)
+        bar_spec = BarSpecification.from_timedelta(pd.Timedelta(minutes=1), PriceType.MID)
 
         # Build strategy
         params_with_instrument = dict(params)
@@ -68,6 +103,13 @@ class NautilusBacktestRunner:
 
         # Engine wiring (Nautilus 1.219.0 API)
         engine = BacktestEngine()
+        # Ensure data routes to venue client by default
+        try:
+            from nautilus_trader.model.identifiers import ClientId  # type: ignore
+            engine.set_default_market_data_client(ClientId("XNAS"))
+        except Exception:
+            pass
+
         engine.add_venue(Venue("XNAS"), OmsType.HEDGING, AccountType.CASH, [Money.from_str("10000 USD")])
         # Ensure instrument is registered before adding bars
         instr = Equity.from_dict({
@@ -88,17 +130,36 @@ class NautilusBacktestRunner:
             "info": {"name": instrument_id},
         })
         engine.add_instrument(instr)
-        # Add pre-wrangled bar objects directly
-        engine.add_data(bars)
-        # Add strategy and run
+
+        # Wrangle to QuoteTick objects and add to engine
+        wrangler = QuoteTickDataWrangler(instr)
+        quote_ticks = wrangler.process(pdf)
+
+        # Add strategy before data to ensure subscriptions are registered
         engine.add_strategy(strategy)
+
+        # Add quotes; let default market data client route by venue
+        try:
+            from nautilus_trader.model.identifiers import ClientId  # type: ignore
+            client_id = ClientId(venue)
+        except Exception:  # pragma: no cover
+            client_id = None  # type: ignore
+        if client_id:
+            engine.add_data(quote_ticks, client_id=client_id, validate=False, sort=True)  # type: ignore[arg-type]
+        else:
+            engine.add_data(quote_ticks, validate=False, sort=True)
+        # Run
         engine.run()
 
         # Collect artifacts
+        # Collect artifacts from real engine run
         orders: List[Dict[str, Any]] = getattr(strategy, "orders", [])
         fills: List[Dict[str, Any]] = getattr(strategy, "fills", [])
         equity: List[Dict[str, Any]] = getattr(strategy, "equity", [])
 
+
         metrics = StandardMetricsCalculator().calculate_metrics(equity=equity, fills=fills)
         return {"orders": orders, "fills": fills, "equity": equity, "metrics": metrics}
+
+
 

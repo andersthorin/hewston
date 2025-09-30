@@ -12,10 +12,10 @@ These baselines are cross-cutting constraints that unblock parallel work in data
 - interval: 1m (one-minute bars)
 - timezone: America/New_York (persistence in UTC; UI renders NY time)
 
-## Bars Schema (Derived per symbol-year)
+## Bars Schema (Warehouse MID bars)
 - Source: Databento DBN — TRADES + TBBO
 - Output format: Parquet
-- Partitioning: data/derived/bars/{SYMBOL}/{YEAR}/
+- Partitioning: data/warehouse/{quotes, trades_agg/{1min,1h}, bars/mid_{1min,1h}} partitioned by venue/symbol/date
 - Columns (authoritative):
   - ts_utc (timestamp[us, UTC]) — bar open time
   - open (float64)
@@ -84,9 +84,11 @@ RunManifest (snapshot at backtest execution)
 ```
 
 ## Filesystem Layout (authoritative paths)
-- Raw DBN cache: data/raw/databento/{SYMBOL}/{YEAR}/{product}.dbn
-- Derived bars: data/derived/bars/{SYMBOL}/{YEAR}/1m.parquet
-- Bars manifest: data/derived/bars/{SYMBOL}/{YEAR}/manifest.json
+- Raw DBN cache: data/raw/databento/{...}/xnas-itch-YYYYMMDD.{tbbo|trades}.dbn.zst
+- Warehouse:
+  - data/warehouse/quotes/venue=XNAS/symbol=SYM/date=YYYY-MM-DD/quotes.parquet
+  - data/warehouse/trades_agg/{1min,1h}/venue=XNAS/symbol=SYM/date=YYYY-MM-DD/agg.parquet
+  - data/warehouse/bars/mid_{1min,1h}/venue=XNAS/symbol=SYM/date=YYYY-MM-DD/bars.parquet
 - Run artifacts: data/backtests/{run_id}/
   - equity.parquet, orders.parquet, fills.parquet, metrics.json, run-manifest.json
 

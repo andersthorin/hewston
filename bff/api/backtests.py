@@ -5,7 +5,7 @@ Provides unified backtest data aggregation endpoints that combine multiple
 backend calls into optimized responses for frontend consumption.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Path
+from fastapi import APIRouter, Depends, HTTPException, Query, Path, Request
 from fastapi.responses import JSONResponse
 import httpx
 import logging
@@ -34,7 +34,7 @@ async def get_correlation_id_from_state(request) -> str:
 
 @router.post("/backtests")
 async def create_backtest_via_bff(
-    request: Any,
+    request: Request,
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
 ):
     """
@@ -76,25 +76,16 @@ async def create_backtest_via_bff(
         if isinstance(incoming.get("dataset_id"), str) and incoming.get("dataset_id"):
             mapped["dataset_id"] = incoming["dataset_id"]
 
-        # If caller provided symbol without dataset_id, backend expects (symbol, year)
-        # Derive year from run_from (or run_to) to avoid backend stub IDs
-        if symbol and "dataset_id" not in mapped and not incoming.get("year"):
-            year_src = (run_from or run_to or "").strip()
-            # Accept ISO date formats like YYYY-MM-DD or full timestamps
-            if len(year_src) >= 4 and year_src[:4].isdigit():
-                try:
-                    mapped["year"] = int(year_src[:4])
-                except Exception:
-                    pass
 
-        # Defaults for removed fields: params, speed, seed
-        if isinstance(incoming.get("params"), dict):
-            mapped["params"] = incoming["params"]
-        else:
-            if strategy_id == "sma_crossover":
-                mapped["params"] = {"fast": 20, "slow": 50}
-            else:
-                mapped["params"] = {}
+        # Map params and inject instrument_id from symbol if not provided
+        params = incoming.get("params") if isinstance(incoming.get("params"), dict) else None
+        if params is None:
+            params = {"fast": 20, "slow": 50} if strategy_id == "sma_crossover" else {}
+        if symbol and "instrument_id" not in params:
+            params["instrument_id"] = f"{symbol}.XNAS"
+        mapped["params"] = params
+
+        # Defaults for speed, seed, optional slippage_fees
         mapped["speed"] = int(incoming.get("speed") or 60)
         mapped["seed"] = int(incoming.get("seed") or 42)
         if isinstance(incoming.get("slippage_fees"), dict):
@@ -512,9 +503,11 @@ async def get_complete_backtest_data(
             correlation_id=correlation_id
         )
 
-        # Cache the response if run is completed
-        if response.run.status in ["COMPLETED", "FAILED"]:
-            # Use longer TTL for completed runs
+        # Cache the response if run is in a terminal state
+        TERMINAL_STATUSES = {"DONE", "COMPLETED", "ERROR", "FAILED"}
+        status_val = str(getattr(response.run, "status", "")).upper()
+        if status_val in TERMINAL_STATUSES:
+            # Use longer TTL for completed/terminal runs
             ttl = 3600  # 1 hour for completed runs
             await cache_service.set_backtest_data(
                 cache_key,
@@ -522,7 +515,7 @@ async def get_complete_backtest_data(
                 ttl,
                 correlation_id
             )
-        elif response.run.status == "RUNNING":
+        elif status_val == "RUNNING":
             # Short TTL for running runs
             ttl = 60  # 1 minute for running runs
             await cache_service.set_backtest_data(

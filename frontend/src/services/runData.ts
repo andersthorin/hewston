@@ -7,7 +7,7 @@
 import { z } from 'zod'
 import { apiGetWithFlags, apiPostWithFlags } from '../utils/api'
 import { featureFlagService } from './featureFlags'
-import type { CreateRunRequest, CreateRunResponse, ListRunsQuery } from './api'
+import type { CreateBacktestRequest, CreateBacktestResponse, BacktestListQuery } from './api'
 
 // Complete backtest data in a single response (BFF aggregated)
 export const BFFAggregatedBacktestResponseSchema = z.object({
@@ -89,7 +89,7 @@ export const BFFBacktestListResponseSchema = z.object({
 export type BFFBacktestListResponse = z.infer<typeof BFFBacktestListResponseSchema>
 
 export class BacktestDataService {
-  public async listBacktests(query: ListRunsQuery = {}): Promise<BFFBacktestListResponse> {
+  public async listBacktests(query: BacktestListQuery = {}): Promise<BFFBacktestListResponse> {
     const params = new URLSearchParams()
     for (const [k, v] of Object.entries(query)) {
       if (v !== undefined && v !== null && v !== '') params.set(k, String(v))
@@ -136,9 +136,9 @@ export class BacktestDataService {
   }
 
   public async createBacktest(
-    request: CreateRunRequest,
+    request: CreateBacktestRequest,
     idempotencyKey?: string
-  ): Promise<CreateRunResponse & { backtest_id?: string }> {
+  ): Promise<CreateBacktestResponse & { backtest_id?: string }> {
     return await apiPostWithFlags('/backtests', 'runData', request, { idempotencyKey })
   }
 

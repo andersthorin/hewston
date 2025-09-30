@@ -33,6 +33,13 @@ RTH_ONLY ?=
 
 SEED ?= 42
 
+# Backfill/materialize defaults
+DATE ?=
+START ?=
+END ?=
+VENUE ?= XNAS
+WORKERS ?= 4
+
 # -------- Meta --------
 .PHONY: help
 help:
@@ -44,10 +51,9 @@ help:
 	@echo "  start-frontend  Start Vite dev server"
 	@echo "  stop            Stop backend, BFF, and frontend dev servers"
 	@echo "  restart         Restart all services (stop→start)"
-	@echo "  derive-bars     Derive 1m bars from local DBN (SYMBOLS=... FROM=YYYY-MM-DD TO=YYYY-MM-DD FORCE=1)"
-	@echo "  derive-daily    Derive 1d bars (daily OHLCV) from local DBN (SYMBOLS=... FROM=YYYY-MM-DD TO=YYYY-MM-DD FORCE=1)"
-	@echo "  derive-daily-fast Derive 1d OHLCV from existing 1m parquet (fast path)"
-	@echo "  data            Ingest Databento DBN and derive 1m bars (SYMBOL, YEAR)"
+	@echo "  materialize-day   Build Quotes+Trades → MID bars for one day (SYMBOL=... DATE=YYYY-MM-DD VENUE=XNAS)"
+	@echo "  backfill-warehouse Backfill warehouse over a date range (START=... END=... SYMBOLS='AAPL MSFT ...' VENUE=XNAS WORKERS=4)"
+	@echo "  data            Ingest Databento DBN assets (SYMBOL, YEAR)"
 	@echo "  backtest        Run baseline backtest and write artifacts"
 	@echo "  db-init         Initialize SQLite catalog (see docs/architecture.md)"
 	@echo "  db-apply        Apply SQLite schema to $(CATALOG_DB)"
@@ -132,67 +138,35 @@ backtest:
 			--speed $(SPEED) --seed $(SEED) || \
 		  (echo "[backtest] missing backend jobs; implement backend/jobs/cli.py" && false)
 
-.PHONY: derive-bars
-derive-bars:
-	@echo "[derive-bars] SYMBOLS=$(SYMBOLS) FROM=$(FROM) TO=$(TO) FORCE=$(FORCE)" && \
-	HEWSTON_DATA_DIR="$(HEWSTON_DATA_DIR)" SYMBOLS="$(SYMBOLS)" FROM="$(FROM)" TO="$(TO)" FORCE="$(FORCE)" TF="$(TF)" FORMAT="$(FORMAT)" FILL_GAPS="$(FILL_GAPS)" RTH_ONLY="$(RTH_ONLY)" PYTHONWARNINGS=ignore \
-	  python3 -W ignore:::urllib3.exceptions.NotOpenSSLWarning scripts/derive_bars_runner.py
-.PHONY: derive-daily
-derive-daily:
-	@echo "[derive-daily] SYMBOLS=$(SYMBOLS) FROM=$(FROM) TO=$(TO) FORCE=$(FORCE)" && \
-	HEWSTON_DATA_DIR="$(HEWSTON_DATA_DIR)" SYMBOLS="$(SYMBOLS)" FROM="$(FROM)" TO="$(TO)" FORCE="$(FORCE)" TF="1Day" FORMAT="$(FORMAT)" FILL_GAPS="0" RTH_ONLY="1" PYTHONWARNINGS=ignore \
-	  python3 -W ignore:::urllib3.exceptions.NotOpenSSLWarning scripts/derive_bars_runner.py
 
-.PHONY: derive-daily-fast
-derive-daily-fast:
-	@echo "[derive-daily-fast] SYMBOLS=$(SYMBOLS) FROM=$(FROM) TO=$(TO) FORCE=$(FORCE)" && \
-	HEWSTON_DATA_DIR="$(HEWSTON_DATA_DIR)" SYMBOLS="$(SYMBOLS)" FROM="$(FROM)" TO="$(TO)" FORCE="$(FORCE)" FORMAT="parquet" RTH_ONLY="1" FILL_GAPS="0" \
-	  python3 scripts/derive_daily_from_minute.py
+.PHONY: materialize-day
+materialize-day:
+		@if [ -z "$(SYMBOL)" ] || [ -z "$(DATE)" ]; then echo "[materialize-day] require SYMBOL and DATE=YYYY-MM-DD"; exit 2; fi; \
+		IID=""; \
+		case "$(SYMBOL)" in \
+		  AAPL) IID=38 ;; \
+		  MSFT) IID=10888 ;; \
+		  GOOGL) IID=7152 ;; \
+		  TSLA) IID=16244 ;; \
+		  NVDA) IID=11667 ;; \
+		  *) echo "[materialize-day] unknown SYMBOL $(SYMBOL)"; exit 2 ;; \
+		esac; \
+		YMD=$$(echo "$(DATE)" | tr -d -); \
+		TBBO="data/raw/databento/tbbo/xnas-itch-$${YMD}.tbbo.dbn.zst"; \
+		TRDB="data/raw/databento/trades/xnas-itch-$${YMD}.trades.dbn.zst"; \
+		if [ ! -f "$$TBBO" ] || [ ! -f "$$TRDB" ]; then echo "[materialize-day] missing raw files: tbbo=$$TBBO exists=$$(test -f $$TBBO && echo yes || echo no) trades=$$TRDB exists=$$(test -f $$TRDB && echo yes || echo no)"; exit 3; fi; \
+		echo "[run] quotes_ingest $(SYMBOL) $(DATE) IID=$$IID VENUE=$(VENUE)"; \
+		$(PYTHON) backend/jobs/quotes_ingest.py "$$TBBO" --instrument-id "$$IID" --symbol "$(SYMBOL)" --venue "$(VENUE)" && \
+		echo "[run] trades_aggregate $(SYMBOL) $(DATE) IID=$$IID VENUE=$(VENUE)"; \
+		$(PYTHON) backend/jobs/trades_aggregate.py "$$TRDB" --instrument-id "$$IID" --symbol "$(SYMBOL)" --venue "$(VENUE)" && \
+		echo "[run] materialize_bars $(SYMBOL) $(DATE) VENUE=$(VENUE)"; \
+		$(PYTHON) backend/jobs/materialize_bars.py --symbol "$(SYMBOL)" --date "$(DATE)" --venue "$(VENUE)"
 
-
-.PHONY: derive-bars-legacy
-derive-bars-legacy:
-	@echo "[derive-bars] SYMBOLS=$(SYMBOLS) FROM=$(FROM) TO=$(TO) FORCE=$(FORCE)" && \
-	SYMS_LIST=$$(python3 - <<'PY'
-	import os,json
-	sy=os.environ.get('SYMBOLS','ALL')
-	if sy and sy.strip().upper()!='ALL':
-	  syms=[s.strip() for s in sy.replace(',', ' ').split() if s.strip()]
-	else:
-	  import pathlib
-	  base=pathlib.Path(os.environ.get('HEWSTON_DATA_DIR','data'))/'raw'/'databento'
-	  p=base/'trades'/'symbology.json'
-	  if not p.exists():
-	    p=base/'tbbo'/'symbology.json'
-	  syms=[]
-	  try:
-	    d=json.loads(p.read_text())
-	    syms=list(d.get('result',{}).keys())
-	  except Exception:
-	    pass
-	print(' '.join(syms))
-	PY
-	) && \
-	YEARS_LIST=$$(python3 - <<'PY'
-	import os,re,glob,pathlib
-	fr=os.environ.get('FROM',''); to=os.environ.get('TO','')
-	ys=set()
-	if fr and to:
-	  y1=int(fr[:4]); y2=int(to[:4]); ys.update(range(y1,y2+1))
-	else:
-	  base=pathlib.Path(os.environ.get('HEWSTON_DATA_DIR','data'))/'raw'/'databento'/'trades'
-	  for p in glob.glob(str(base/'*.trades.dbn.zst')):
-	    m=re.search(r'-(\d{8})\.trades\.dbn', p)
-	    if m: ys.add(int(m.group(1)[:4]))
-	print(' '.join(str(y) for y in sorted(ys)))
-	PY
-	) && \
-	for s in $$SYMS_LIST; do \
-	  for y in $$YEARS_LIST; do \
-	    echo "[derive] $$s $$y FROM=$(FROM) TO=$(TO)"; \
-	    $(PYTHON) -m backend.jobs.cli derive-bars --symbol $$s --year $$y $(if $(FROM),--from $(FROM),) $(if $(TO),--to $(TO),) $(if $(FORCE),--force,); \
-	  done; \
-	done
+.PHONY: backfill-warehouse
+backfill-warehouse:
+		@SYMS=$$( if [ "$(SYMBOLS)" = "ALL" ]; then echo "AAPL MSFT GOOGL TSLA NVDA"; else echo "$(SYMBOLS)"; fi ); \
+		echo "[backfill] $$SYMS $(START)..$(END) VENUE=$(VENUE) WORKERS=$(WORKERS)"; \
+		$(PYTHON) scripts/backfill_warehouse.py --start "$(START)" --end "$(END)" --symbols $$SYMS --venue "$(VENUE)" --max-workers "$(WORKERS)"
 
 # -------- Catalog --------
 .PHONY: db-init

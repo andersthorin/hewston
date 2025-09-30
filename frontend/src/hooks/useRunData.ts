@@ -18,8 +18,17 @@ export function useBacktestList(
     queryKey: ['backtests', 'list', query, useBFF ? 'bff' : 'backend'],
     queryFn: () => backtestDataService.listBacktests(query),
     enabled,
-    staleTime: 30 * 1000,
+    staleTime: 10 * 1000,
     gcTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: true,
+    refetchInterval: (q) => {
+      const items = (q.state.data as any)?.items || []
+      const hasActive = Array.isArray(items) && items.some((it: any) => {
+        const s = String(it?.status || '').toUpperCase()
+        return s !== 'DONE' && s !== 'COMPLETED' && s !== 'ERROR' && s !== 'FAILED'
+      })
+      return hasActive ? 2000 : false
+    },
   })
 }
 
@@ -32,8 +41,14 @@ export function useBacktestDetail(
     queryKey: ['backtests', 'complete', backtest_id, useBFF ? 'bff' : 'backend'],
     queryFn: () => backtestDataService.getCompleteBacktest(backtest_id!),
     enabled: enabled && !!backtest_id,
-    staleTime: 2 * 60 * 1000,
+    staleTime: 5 * 1000,
     gcTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: true,
+    refetchInterval: (q) => {
+      const s = String((q.state.data as any)?.status || '').toUpperCase()
+      const terminal = s === 'DONE' || s === 'COMPLETED' || s === 'ERROR' || s === 'FAILED'
+      return terminal ? false : 1000
+    },
   })
 }
 

@@ -41,14 +41,7 @@ def get_raw_databento_dir(symbol: Optional[str] = None, year: Optional[int] = No
     return base
 
 
-def get_derived_bars_dir(symbol: Optional[str] = None, year: Optional[int] = None) -> Path:
-    """Get the derived bars directory, optionally for a specific symbol/year."""
-    base = get_base_data_dir() / "derived" / "bars"
-    if symbol and year:
-        return base / symbol / str(year)
-    elif symbol:
-        return base / symbol
-    return base
+
 
 
 def get_backtests_dir(run_id: Optional[str] = None) -> Path:

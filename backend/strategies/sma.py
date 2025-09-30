@@ -10,7 +10,7 @@ try:  # pragma: no cover - exercised in integration
     from nautilus_trader.trading.strategy import Strategy  # type: ignore
     from nautilus_trader.indicators.average.sma import SimpleMovingAverage  # type: ignore
     from nautilus_trader.model.data import BarType, BarSpecification  # type: ignore
-    from nautilus_trader.model.identifiers import InstrumentId  # type: ignore
+    from nautilus_trader.model.identifiers import InstrumentId, ClientId  # type: ignore
     from nautilus_trader.model.enums import PriceType, AggregationSource, OrderSide, TimeInForce  # type: ignore
 
     class SMAStrategy(Strategy):  # type: ignore[misc]
@@ -51,9 +51,13 @@ try:  # pragma: no cover - exercised in integration
             self._oid_seq: int = 0
 
         def on_load(self) -> None:  # noqa: D401
-            # Subscribe to 1m MID bars for the instrument
+            # Defer subscriptions to on_start per Nautilus guidance
+            pass
+
+        def on_start(self) -> None:  # noqa: D401
+            # Subscribe to 1m MID bars aggregated INTERNALLY from QuoteTicks
             spec = BarSpecification.from_timedelta(timedelta(minutes=1), PriceType.MID)
-            self._bar_type = BarType(self.instrument_id, spec, AggregationSource.EXTERNAL)
+            self._bar_type = BarType(self.instrument_id, spec, AggregationSource.INTERNAL)
 
             # Register indicators
             self._fast = SimpleMovingAverage(self.fast_period)
@@ -61,7 +65,7 @@ try:  # pragma: no cover - exercised in integration
             self.register_indicator_for_bars(self._bar_type, self._fast)
             self.register_indicator_for_bars(self._bar_type, self._slow)
 
-            # Subscribe
+            # Subscribe to bars (let client be inferred from instrument venue)
             self.subscribe_bars(self._bar_type)
 
         def on_bar(self, bar) -> None:
@@ -138,12 +142,14 @@ try:  # pragma: no cover - exercised in integration
 
         # Helper to submit a market order and record an order artifact
         def _place(self, side: OrderSide, px: float, ts) -> None:
-            qty = self.qty
+            from nautilus_trader.model.objects import Quantity
+            qty_int = int(self.qty)
+            qty = Quantity.from_int(qty_int)
             order = self.order_factory.market(self.instrument_id, side, qty, time_in_force=TimeInForce.IOC)
             self.submit_order(order)
             oid = f"naut-{self._oid_seq}"
             self._oid_seq += 1
-            self.orders.append({"ts_utc": ts, "side": "BUY" if side == OrderSide.BUY else "SELL", "qty": qty, "price": px, "order_id": oid, "type": "MKT", "time_in_force": "IOC"})
+            self.orders.append({"ts_utc": ts, "side": "BUY" if side == OrderSide.BUY else "SELL", "qty": qty_int, "price": px, "order_id": oid, "type": "MKT", "time_in_force": "IOC"})
             # Optimistically update our state; on_order_filled will reconcile after
             if side == OrderSide.BUY:
                 self._in_position = True

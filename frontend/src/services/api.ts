@@ -89,7 +89,6 @@ export type CreateBacktestRequest = {
   params?: Record<string, unknown>
   dataset_id?: string
   symbol?: string
-  year?: number
   from?: string
   to?: string
   speed?: number

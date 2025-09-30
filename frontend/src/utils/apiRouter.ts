@@ -38,13 +38,7 @@ class APIClientRouter {
     try {
       return await this.makeRequest<T>(evaluation, endpoint, requestOptions, timeout)
     } catch (error) {
-      // Attempt fallback if enabled, env-gated, and we were using BFF
-      const envFallback = import.meta.env.VITE_BFF_FALLBACK_ENABLED === 'true'
-      if (allowFallback && envFallback && evaluation.source === 'bff') {
-        console.warn(`BFF request failed for ${endpoint}, falling back to backend:`, error)
-        return await this.handleFallback<T>(endpointGroup, endpoint, requestOptions, timeout)
-      }
-      // Fallback disabled; rethrow original error
+      // No backend fallback: propagate BFF error immediately
       throw error
     }
   };
@@ -60,37 +54,7 @@ class APIClientRouter {
   /**
    * Handle fallback to backend when BFF fails.
    */
-  handleFallback = async <T,>(
-    endpointGroup: EndpointGroup,
-    endpoint: string,
-    requestOptions: RequestInit,
-    timeout: number
-  ): Promise<T> => {
-    // Force backend evaluation
-    const backendUrl = this.getBackendUrl(endpointGroup)
-    const fallbackEvaluation: FeatureFlagEvaluation = {
-      enabled: false,
-      endpointUrl: backendUrl,
-      source: 'backend'
-    }
 
-    // Map the logical endpoint to the backend shape for fallback
-    let fallbackEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
-    if (endpointGroup === 'chartData') {
-      // chart-data -> bars
-      if (fallbackEndpoint.startsWith('chart-data')) {
-        fallbackEndpoint = fallbackEndpoint.replace(/^chart-data/, 'bars')
-      }
-    } else if (endpointGroup === 'runData') {
-      // backtests stream fallback: map /stream -> /ws on backend
-      if (/^backtests\/.+\/stream(\?|$)/.test(fallbackEndpoint)) {
-        fallbackEndpoint = fallbackEndpoint.replace(/\/stream(\?|$)/, '/ws$1')
-      }
-    }
-
-    this.logEndpointRouting(fallbackEndpoint, 'backend', endpointGroup, true)
-    return await this.makeRequest<T>(fallbackEvaluation, fallbackEndpoint, requestOptions, timeout)
-  };
 
   /**
    * Make the actual HTTP request.

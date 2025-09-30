@@ -1,30 +1,29 @@
-# Epic 3 — Data Ingest and Derive
+# Epic 3 — Data Ingest and Warehouse Materialization
 
 Goal
-- Ingest Databento DBN (TRADES + TBBO) and derive deterministic 1‑minute bars + TBBO aggregates (Parquet), recording manifests and catalog rows.
+- Ingest Databento DBN (TRADES + TBBO) and materialize deterministic MID bars {1min,1h} + Trades aggregates into a canonical warehouse (Parquet).
 
 Why (Value)
 - Produces reproducible data inputs and deterministic bars for backtests; caches locally for speed.
 
 Scope (In)
-- Typer CLI `make data` → backend.jobs.cli `data` command
-- adapters/databento.py: ensure_dataset(symbol, from_date, to_date)
-- jobs/ingest.py: fetch DBN and cache paths
-- jobs/derive.py: derive 1m OHLCV + minute TBBO aggregates with Polars/Arrow
-- Write Dataset + DatasetManifest; compute input/output hashes; upsert into SQLite
+- Makefile targets: materialize-day, backfill-warehouse
+- backend/jobs/quotes_ingest.py: TBBO DBN → QuoteTicks (Parquet)
+- backend/jobs/trades_aggregate.py: Trades DBN → {1min,1h} aggregates (Parquet)
+- backend/jobs/materialize_bars.py: QuoteTicks + Trades aggregates → MID bars {1min,1h} (Parquet)
+- Warehouse replaces Dataset/DatasetManifest; no catalog upsert
 
 Out of Scope
 - Running backtests or computing metrics
 
 Deliverables
-- jobs/cli.py, jobs/ingest.py, jobs/derive.py
-- adapters/databento.py (MarketDataPort impl)
-- Parquet artifacts under data/derived; raw cache under data/raw
+- backend/jobs/quotes_ingest.py, backend/jobs/trades_aggregate.py, backend/jobs/materialize_bars.py
+- Parquet artifacts under data/warehouse; raw cache under data/raw
 
 Acceptance Criteria
-- `make data SYMBOL=AAPL YEAR=2023` completes successfully
-- Dataset row exists in catalog with paths and READY status
-- Bars manifest includes calendar_version, tz, input/output hashes
+- `make materialize-day SYMBOL=AAPL DATE=2024-10-01 VENUE=XNAS` completes successfully
+- Warehouse outputs exist at expected paths under data/warehouse (quotes, trades_agg, bars)
+- 1m RTH bars count near 390 for regular RTH days; 1h bars present
 
 Dependencies
 - Epic 2 (Catalog Adapter and Models)

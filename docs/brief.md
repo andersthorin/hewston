@@ -42,11 +42,12 @@ This document is being created collaboratively in interactive mode. No prior res
 - System overview: Python backend (FastAPI) orchestrates Nautilus Trader backtests on pre‑fetched Databento data; Vite/TypeScript frontend renders time‑compressed playback with TradingView Lightweight Charts.
 - Data layer:
   - Source: Databento TRADES + TBBO for selected symbols and date ranges (multi‑year supported).
-  - Ingestion job: `make data` downloads/caches raw DBN, derives 1m OHLCV + minute TBBO aggregates (bid_mean, ask_mean, spread_mean) using NASDAQ market calendar; TZ=America/New_York; stores Parquet + dataset manifest.
+  - Warehouse pipeline: `make materialize-day` (single day) and `make backfill-warehouse` (range) run quotes_ingest → trades_aggregate → materialize_bars; TZ=America/New_York session rules; outputs Parquet (no manifest).
   - Layout:
-    data/raw/databento/{SYMBOL}/{YEAR}/{product}.dbn
-    data/derived/bars/{SYMBOL}/{YEAR}/1m.parquet
-    data/derived/bars/{SYMBOL}/{YEAR}/manifest.json
+    data/raw/databento/{...}/xnas-itch-YYYYMMDD.{tbbo|trades}.dbn.zst
+    data/warehouse/quotes/venue=XNAS/symbol=SYM/date=YYYY-MM-DD/quotes.parquet
+    data/warehouse/trades_agg/{1min,1h}/venue=XNAS/symbol=SYM/date=YYYY-MM-DD/agg.parquet
+    data/warehouse/bars/mid_{1min,1h}/venue=XNAS/symbol=SYM/date=YYYY-MM-DD/bars.parquet
 - Backtest runner:
   - Inputs: StrategyConfig (id, params, seed), dataset id, interval='1m', date range.
   - Constraint (MVP): single‑symbol per run.
@@ -180,9 +181,9 @@ This document is being created collaboratively in interactive mode. No prior res
 
 ### Architecture Considerations
 - Repository structure (proposed):
-  - backend/app (FastAPI), backend/api (routes/schemas), backend/jobs (ingest/backtest), backend/adapters (databento→bars, bars→nautilus)
+  - backend/app (FastAPI), backend/api (routes/schemas), backend/jobs (ingest/materialize/backtest), backend/adapters (warehouse→nautilus)
   - frontend/src (charts, views, api client, workers)
-  - data/raw/databento, data/derived/bars, data/backtests (artifacts by run_id)
+  - data/raw/databento, data/warehouse, data/backtests (artifacts by run_id)
   - Frontend structure:
     - frontend/src/components/presentational (pure UI; props in, no side effects)
     - frontend/src/containers (compose data + presentational components)

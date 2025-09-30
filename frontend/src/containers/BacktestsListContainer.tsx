@@ -85,7 +85,6 @@ export function BacktestsListContainer() {
           strategy_id: 'sma_crossover',
           params: { fast: 20, slow: 50 },
           symbol: 'AAPL',
-          year: 2023,
           speed: 60,
           seed: 42,
         },

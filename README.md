@@ -55,9 +55,9 @@ make setup
 make db-apply
 ```
 
-### 3. Build Baseline Dataset (AAPL 2023)
+### 3. Materialize Warehouse (single day)
 ```bash
-make data SYMBOL=AAPL YEAR=2023
+make materialize-day SYMBOL=AAPL DATE=2024-10-01 VENUE=XNAS
 ```
 
 ### 4. Run Baseline Backtest
@@ -98,7 +98,7 @@ hewston/
 ├── scripts/                # Database schemas and utilities
 └── data/                   # Local data storage
     ├── raw/databento/      # Cached market data
-    ├── derived/bars/       # Processed OHLCV data
+    ├── warehouse/          # Quotes, trades aggregates, and materialized MID bars
     └── backtests/          # Run artifacts and results
 ```
 
@@ -157,7 +157,7 @@ make clean                  # Remove caches and temp files
 
 ### Data Pipeline
 1. **Ingest**: Download TRADES/TBBO data from Databento
-2. **Derive**: Process into 1-minute OHLCV bars with TBBO aggregates
+2. **Materialize (warehouse)**: QuoteTicks + Trades aggregates → MID bars {1min,1h}
 3. **Backtest**: Execute strategy with Nautilus Trader
 4. **Stream**: Real-time playback of results via WebSocket
 

@@ -371,13 +371,13 @@ backend/
   ports/backtest_runner.py   # BacktestRunnerPort (interface)
   ports/catalog.py           # CatalogPort (interface)
   ports/streamer.py          # StreamerPort (interface)
-  adapters/databento.py      # MarketDataPort impl (DBN ingest + derive bars)
+
   adapters/nautilus.py       # BacktestRunnerPort impl (Nautilus Trader)
   adapters/sqlite_catalog.py # CatalogPort impl (SQLite)
   adapters/streams.py        # StreamerPort impl (frames → WS/SSE)
   jobs/cli.py                # Typer app with commands: data, backtest
   jobs/ingest.py             # Ingest TRADES+TBBO (DBN) to cache
-  jobs/derive.py             # Derive 1m bars + TBBO aggregates
+
   jobs/run_backtest.py       # Execute backtest and write artifacts
 frontend/
   src/components/            # Presentational only (charts, tables, UI widgets)
@@ -395,7 +395,6 @@ Backend ports (interfaces)
 ```python
 class MarketDataPort:
     def ensure_dataset(self, symbol: str, from_date: str, to_date: str) -> str: ...  # returns dataset_id
-    def derive_bars(self, dataset_id: str) -> None: ...
 
 class BacktestRunnerPort:
     def run(self, *, dataset_id: str, strategy_id: str, params: dict, seed: int,
@@ -415,7 +414,6 @@ class StreamerPort:
 ```
 
 Adapters
-- adapters/databento.py implements MarketDataPort (uses Databento SDK; Polars/PyArrow for bars)
 - adapters/nautilus.py implements BacktestRunnerPort (invokes Nautilus; writes artifacts)
 - adapters/sqlite_catalog.py implements CatalogPort (tables from Catalog Schema)
 - adapters/streams.py implements StreamerPort (server-side decimation; WS/SSE emitters)

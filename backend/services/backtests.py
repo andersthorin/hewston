@@ -163,34 +163,25 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
 
     dataset_id = body.get("dataset_id")
     symbol = body.get("symbol")
-    year = body.get("year")
 
     if not dataset_id:
-        # Require either dataset_id or (symbol + year); attempt to derive year from dates when possible
-        if symbol is not None and year is None:
-            # Try to derive year from 'from' then 'to'
-            source = from_date or to_date
-            if isinstance(source, str) and len(source) >= 4 and source[:4].isdigit():
-                try:
-                    year = int(source[:4])
-                except Exception:
-                    year = None
-        if symbol is None or year is None:
-            return {"error": {"code": "BAD_REQUEST", "message": "Missing required parameter: dataset_id or (symbol + year)"}}, 400
-        # Defer dataset materialization to the background worker; compute canonical id now
-        dataset_id = f"{symbol}-{int(year)}-1m"
+        # New warehouse flow: dataset_id no longer encodes a year. Require symbol if dataset_id missing.
+        if not symbol:
+            return {"error": {"code": "BAD_REQUEST", "message": "Missing required parameter: dataset_id or symbol"}}, 400
+        # Use a canonical warehouse dataset identifier (symbol + warehouse + interval)
+        dataset_id = f"{symbol}-warehouse-1m"
 
     catalog = get_catalog()
 
     # Ensure a placeholder dataset row exists to satisfy FK; background worker will materialize data
-    if dataset_id and (symbol and year):
+    if dataset_id and symbol:
         try:
             from datetime import datetime, timezone as _tz
             catalog.upsert_dataset({
                 "dataset_id": dataset_id,
                 "symbol": symbol,
-                "from_date": f"{int(year)}-01-01",
-                "to_date": f"{int(year)}-12-31",
+                "from_date": from_date,
+                "to_date": to_date,
                 "products": [],
                 "raw_dbn": [],
                 "bars_parquet": [],
@@ -200,7 +191,7 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
                 "status": "BUILDING",
             })
         except Exception:
-            # Best-effort; if this fails, create_run will fail FK and bubble up
+            # Best-effort; if this fails, create_backtest will fail FK and bubble up
             pass
 
     # Compute deterministic input hash

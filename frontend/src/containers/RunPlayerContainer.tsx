@@ -21,13 +21,12 @@ const devLog = (...args: unknown[]) => {
 export type RunPlayerContainerProps = { backtest_id: string; dataset_id?: string; run_from?: string; run_to?: string }
 
 export function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPlayerContainerProps) {
-  // Derive symbol from dataset_id if available (format: SYMBOL-YEAR-1m)
+  // Derive symbol from dataset_id if available (format: SYMBOL-*-1m)
   const symbol = (dataset_id?.split('-')[0] || '').toUpperCase() || undefined
 
-  // Fetch hourly bars aligned to the actual run window when available (fallback to dataset year)
-  const year = dataset_id?.split('-')[1]
-  const from = (run_from ?? undefined) || (year ? `${year}-01-01` : undefined)
-  const to = (run_to ?? undefined) || (year ? `${year}-12-31` : undefined)
+  // Use actual run window only; do not infer from dataset_id
+  const from = run_from ?? undefined
+  const to = run_to ?? undefined
   const { data: hourResp, isError: isHourErr, isLoading: isHourLoading } = useHourChartData(
     symbol,
     from,

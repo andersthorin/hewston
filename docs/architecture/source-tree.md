@@ -16,13 +16,14 @@ backend/
   ports/backtest_runner.py   # BacktestRunnerPort (interface)
   ports/catalog.py           # CatalogPort (interface)
   ports/streamer.py          # StreamerPort (interface)
-  adapters/databento.py      # MarketDataPort impl (DBN ingest + derive bars)
+
   adapters/nautilus.py       # BacktestRunnerPort impl (Nautilus)
   adapters/sqlite_catalog.py # CatalogPort impl (SQLite)
   adapters/streams.py        # StreamerPort impl (emit frames → WS/SSE)
   jobs/cli.py                # Typer CLI: data, backtest
-  jobs/ingest.py             # Ingest TRADES+TBBO → raw cache
-  jobs/derive.py             # Derive 1m bars + TBBO aggregates (Parquet)
+  jobs/quotes_ingest.py      # TBBO DBN → QuoteTicks (Parquet)
+  jobs/trades_aggregate.py   # Trades DBN → {1min,1h} aggregates (Parquet)
+  jobs/materialize_bars.py   # QuoteTicks + Trades aggregates → MID bars {1min,1h}
   jobs/run_backtest.py       # Execute backtest and write artifacts
 frontend/
   src/components/            # Presentational components (ChartOHLC, Backtests table, etc.)
@@ -44,13 +45,15 @@ scripts/
   catalog_init.sql           # SQLite schema (see docs/architecture.md)
  data/
   raw/databento/...          # Cached DBN (TRADES/TBBO)
-  derived/bars/...           # 1m OHLCV + TBBO aggregates (Parquet) + manifest
+  warehouse/quotes/...       # QuoteTicks (Parquet) partitioned by venue/symbol/date
+  warehouse/trades_agg/...   # {1min,1h} Trades aggregates (Parquet)
+  warehouse/bars/...         # MID bars {1min,1h} (Parquet)
   backtests/{run_id}/...     # metrics.json, equity.parquet, orders.parquet, fills.parquet, run-manifest.json
 ```
 
 ## Boundaries & Contracts
 - Ports/Adapters (hexagonal-lite):
-  - MarketDataPort: ensure_dataset(symbol, from_date, to_date) -> dataset_id; derive_bars(dataset_id)
+  - MarketDataPort: ensure_dataset(symbol, from_date, to_date) -> dataset_id
   - BacktestRunnerPort: run(dataset_id, strategy_id, params, seed, slippage_fees, run_id)
   - CatalogPort: upsert_dataset/get_dataset; create_run/get_run/list_runs; set_run_status
   - StreamerPort: async frames(run_id, speed); control(run_id, cmd, **kwargs)
@@ -73,8 +76,9 @@ scripts/
 - start: run backend + frontend dev servers (if present)
 - start-backend: uvicorn app
 - start-frontend: vite dev
-- data: ingest Databento DBN + derive bars (SYMBOL, YEAR)
-- backtest: submit baseline run (FROM/TO/STRATEGY/FAST/SLOW/SPEED/SEED)
+- data: ingest Databento DBN assets (SYMBOL, YEAR)
+- materialize-day: Quotes+Trades → MID bars for one day
+- backfill-warehouse: Backfill warehouse over a date range
 - db-apply: apply scripts/catalog_init.sql to data/catalog.sqlite
 
 ## Cross-References
