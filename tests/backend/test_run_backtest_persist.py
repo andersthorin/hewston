@@ -7,7 +7,7 @@ from backend.adapters.databento import ensure_dataset
 from backend.jobs.run_backtest import run_backtest_and_persist
 
 
-def test_run_backtest_persists_artifacts_and_catalog(tmp_path, monkeypatch):
+def test_run_backtest_error_no_stub_artifacts(tmp_path, monkeypatch):
     monkeypatch.setenv("HEWSTON_DATA_DIR", str(tmp_path))
     monkeypatch.setenv("HEWSTON_CATALOG_PATH", str(tmp_path / "catalog.sqlite"))
     monkeypatch.setenv("DATABENTO_API_KEY", "test-key")
@@ -25,11 +25,14 @@ def test_run_backtest_persists_artifacts_and_catalog(tmp_path, monkeypatch):
 
     run_id = out["run_id"]
     bdir = Path(tmp_path) / "backtests" / run_id
-    # Artifacts exist
-    assert (bdir / "metrics.json").exists()
-    assert (bdir / "equity.parquet").exists()
-    assert (bdir / "orders.parquet").exists()
-    assert (bdir / "fills.parquet").exists()
+
+    # With strict real-engine only behavior, and no bars_1Min.parquet (ensure_dataset creates bars_1m),
+    # the job should mark ERROR and not write artifacts.
+    assert out.get("status") == "ERROR"
+    assert not (bdir / "metrics.json").exists()
+    assert not (bdir / "equity.parquet").exists()
+    assert not (bdir / "orders.parquet").exists()
+    assert not (bdir / "fills.parquet").exists()
     assert (bdir / "run-manifest.json").exists()
 
     # Catalog rows
@@ -38,18 +41,12 @@ def test_run_backtest_persists_artifacts_and_catalog(tmp_path, monkeypatch):
         conn.row_factory = sqlite3.Row
         run = conn.execute("SELECT * FROM backtests WHERE backtest_id = ?", (run_id,)).fetchone()
         assert run is not None
-        assert run["status"] == "DONE"
-        # Paths recorded
-        assert run["metrics_path"].endswith("metrics.json")
-        assert run["equity_path"].endswith("equity.parquet")
-        assert run["orders_path"].endswith("orders.parquet")
-        assert run["fills_path"].endswith("fills.parquet")
+        assert run["status"] == "ERROR"
+        # No artifact paths should be set
+        assert run["metrics_path"] is None
+        assert run["equity_path"] is None
+        assert run["orders_path"] is None
+        assert run["fills_path"] is None
         assert run["run_manifest_path"].endswith("run-manifest.json")
         assert run["duration_ms"] >= 0
-
-        m = conn.execute("SELECT * FROM backtest_metrics WHERE backtest_id = ?", (run_id,)).fetchone()
-        assert m is not None
-        # Minimal metrics fields present
-        assert m["total_return"] is not None
-        assert m["max_drawdown"] is not None
 

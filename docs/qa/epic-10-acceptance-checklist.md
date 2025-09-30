@@ -78,7 +78,7 @@ Replace the current stub Nautilus adapter with a full Nautilus Trader integratio
 Preconditions:
 - 1-year, 1-minute OHLCV bars exist for the chosen dataset (e.g., AAPL) in the catalog
 - Environment: Apple Silicon dev box (M1/M2), Python 3.11
-- Feature flag: `HEWSTON_USE_NAUTILUS_STUB=false` to use real Nautilus engine
+- Requirement: nautilus-trader must be installed; no stub fallback. Failing to import Nautilus results in ERROR with a clear message
 
 Steps:
 1. Prepare data (ensure bars are present for the symbol and date window)
@@ -108,7 +108,7 @@ Steps:
 ## Risk Mitigation Verification
 
 ### Integration Risk Controls
-- [ ] **R10.1**: Feature flag or environment variable allows rollback to stub implementation
+- [ ] **R10.1**: No stub rollback; failures are surfaced clearly to API/UI and must be fixed
 - [ ] **R10.2**: Comprehensive integration tests prevent breaking existing functionality
 - [ ] **R10.3**: No DB migration required for MVP; future migrations must be backward compatible
 

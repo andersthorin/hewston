@@ -30,7 +30,7 @@ BacktestRunnerPort → NautilusBacktestRunner (real) → Nautilus BacktestEngine
 
 ## Version and Dependency Targets
 
-- Nautilus Trader: 0.10.x (aligns with project tech stack)
+- Nautilus Trader: 1.219.0 (pinned; Apple Silicon wheels available)
 - Python: 3.11
 - Apple Silicon (M1/M2) support: prefer prebuilt wheels; avoid compiling heavy deps on dev laptops
 - Package manager: uv/pip with pinned lockfile; CI validates reproducible installs
@@ -242,7 +242,7 @@ class BacktestRunnerPort(Protocol):
 ```
 Parquet Files → ParquetDataAdapter → Nautilus Bar Objects → DataEngine
 ```
-- `HEWSTON_USE_NAUTILUS_STUB`: When true, force stub runner; when false or unset, use real Nautilus. Useful for quick local smoke tests and CI.
+- No stub fallback: Runs require nautilus-trader. If Nautilus cannot run, the backtest fails with a clear error (no synthetic artifacts).
 - Single-symbol MVP: run one instrument per backtest; multi-asset support deferred.
 
 
@@ -266,7 +266,7 @@ Backtest Results → Format Conversion → Parquet Files + JSON → File System
 ### Environment Variables
 - `NAUTILUS_LOG_LEVEL`: Control Nautilus logging verbosity
 - `NAUTILUS_CACHE_DIR`: Directory for Nautilus cache files
-- `HEWSTON_USE_NAUTILUS_STUB`: Rollback flag to use stub implementation
+- No stub fallback flag: the system does not support stub execution anymore
 
 ### Strategy Configuration
 ```yaml

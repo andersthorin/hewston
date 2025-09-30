@@ -109,6 +109,7 @@ def run_backtest_and_persist(
             "calendar_version": "NAZDAQ-v1",
             "tz": "America/New_York",
             "created_at": created_at_iso,
+            "status": "DONE",
         }
         manifest_path.write_text(json.dumps(manifest, indent=2))
 
@@ -126,6 +127,7 @@ def run_backtest_and_persist(
 
         return {
             "run_id": run_id,
+            "status": "DONE",
             "duration_ms": duration_ms,
             "paths": {
                 "metrics": str(metrics_path),
@@ -136,59 +138,50 @@ def run_backtest_and_persist(
             },
         }
     except BaseException as e:
-        # Catch BaseException to handle SystemExit raised by adapters (e.g., missing dataset)
+        # Fail hard: mark as ERROR, write manifest with error, do not write artifacts
         duration_ms = int((time.perf_counter() - t0) * 1000)
-        # Best-effort stub outputs to keep API contract for tests/dev
+        ensure_dir(out_dir)
+        error_payload = {
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+        }
+        manifest = {
+            "run_id": run_id,
+            "dataset_id": dataset_id,
+            "strategy_id": strategy_id,
+            "params": params,
+            "seed": seed,
+            "slippage_fees": slippage_fees,
+            "speed": speed,
+            "run_from": from_date,
+            "run_to": to_date,
+            "code_hash": code_hash,
+            "env_lock": None,
+            "calendar_version": "NAZDAQ-v1",
+            "tz": "America/New_York",
+            "created_at": created_at_iso,
+            "status": "ERROR",
+            "error": error_payload,
+        }
         try:
-            ensure_dir(out_dir)
-            _write_parquet([], equity_path)
-            _write_parquet([], orders_path)
-            _write_parquet([], fills_path)
-            metrics = {"total_return": 0.0, "max_drawdown": 0.0}
-            metrics_path.write_text(json.dumps(metrics, indent=2))
-            manifest = {
-                "run_id": run_id,
-                "dataset_id": dataset_id,
-                "strategy_id": strategy_id,
-                "params": params,
-                "seed": seed,
-                "slippage_fees": slippage_fees,
-                "speed": speed,
-                "run_from": from_date,
-                "run_to": to_date,
-                "code_hash": code_hash,
-                "env_lock": None,
-                "calendar_version": "NAZDAQ-v1",
-                "tz": "America/New_York",
-                "created_at": created_at_iso,
-            }
             manifest_path.write_text(json.dumps(manifest, indent=2))
         except Exception:
             pass
-        # Mark as DONE to satisfy integration contract in constrained environments
+
+        # Update DB row to ERROR; do not set artifact paths
         cat.set_backtest_status(
             run_id,
-            status="DONE",
+            status="ERROR",
             duration_ms=duration_ms,
-            metrics_path=str(metrics_path),
-            equity_path=str(equity_path),
-            orders_path=str(orders_path),
-            fills_path=str(fills_path),
         )
-        try:
-            cat.upsert_backtest_metrics(run_id, metrics)
-        except Exception:
-            pass
+
         return {
             "run_id": run_id,
+            "status": "ERROR",
             "duration_ms": duration_ms,
+            "error": error_payload,
             "paths": {
-                "metrics": str(metrics_path),
-                "equity": str(equity_path),
-                "orders": str(orders_path),
-                "fills": str(fills_path),
                 "manifest": str(manifest_path),
             },
-            "warning": f"runner failed: {type(e).__name__}: {str(e)[:120]}",
         }
 

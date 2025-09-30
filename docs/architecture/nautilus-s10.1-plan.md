@@ -1,6 +1,6 @@
 # S10.1 Implementation Plan — Core Nautilus Engine Integration (MVP)
 
-Epic: E10 — Nautilus Trader Full Implementation  
+Epic: E10 — Nautilus Trader Full Implementation
 Scope: Replace stub with real Nautilus backtesting; SMA strategy; PnL + win rate metrics
 
 ## Objectives
@@ -51,7 +51,7 @@ Scope: Replace stub with real Nautilus backtesting; SMA strategy; PnL + win rate
   - Collect orders, fills, equity, native performance
   - Compute metrics (total_return, win_rate)
   - Format artifacts to existing schemas
-- Respect `HEWSTON_USE_NAUTILUS_STUB` feature flag for fallback
+- No stub fallback: always execute the real Nautilus engine; fail fast on errors
 
 5. Slippage & Fees (MVP)
 - Params: `slippage_bps=1`, `fee_bps=1` (configurable)
@@ -86,7 +86,7 @@ Scope: Replace stub with real Nautilus backtesting; SMA strategy; PnL + win rate
 - Validate no large Python loops over bars; use vector ops where possible pre-wrangler
 
 ## Rollback Plan
-- Set `HEWSTON_USE_NAUTILUS_STUB=true` to revert to stub without code changes
+- No rollback via stub: errors surface to the API/UI; fix environment or data to proceed
 
 ## Work Breakdown (suggested tasks)
 - A) Adapter + Instrument/BarType (4–6h)
@@ -94,6 +94,8 @@ Scope: Replace stub with real Nautilus backtesting; SMA strategy; PnL + win rate
 - C) Runner integration + artifacts formatting (6–8h)
 - D) Metrics + tests (4–6h)
 - E) Perf pass + polish (2–4h)
+
+- Dependencies: pin `nautilus-trader==1.219.0`; ensure `pandas` and `pyarrow` present
 
 ## Risks
 - Nautilus wheels on Apple Silicon — prefer pinned version with wheels
