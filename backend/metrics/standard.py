@@ -29,9 +29,27 @@ class StandardMetricsCalculator(MetricsCalculator):
 
         total_return = 0.0
         if equity:
-            start = equity[0].get("value", 0.0) or 0.0
-            end = equity[-1].get("value", 0.0) or 0.0
+            start = float(equity[0].get("value", 0.0) or 0.0)
+            end = float(equity[-1].get("value", 0.0) or 0.0)
             total_return = (end - start) / start if start else 0.0
+
+        # Max drawdown (as negative fraction, e.g., -0.08 for -8%) from equity curve
+        max_drawdown = 0.0
+        if equity:
+            peak = None  # type: float | None
+            min_drawdown = 0.0
+            for pt in equity:
+                try:
+                    v = float(pt.get("value", 0.0) or 0.0)
+                except Exception:
+                    v = 0.0
+                if peak is None or v > peak:
+                    peak = v
+                if peak and peak > 0:
+                    dd = (v - peak) / peak  # <= 0
+                    if dd < min_drawdown:
+                        min_drawdown = dd
+            max_drawdown = float(min_drawdown)
 
         # Simple trade pairing for win rate: detect entry/exit from fills side
         wins = 0
@@ -53,5 +71,9 @@ class StandardMetricsCalculator(MetricsCalculator):
                     wins += 1
         win_rate = (wins / total) if total else 0.0
 
-        return {"total_return": float(total_return), "win_rate": float(win_rate)}
+        return {
+            "total_return": float(total_return),
+            "win_rate": float(win_rate),
+            "max_drawdown": float(max_drawdown),
+        }
 

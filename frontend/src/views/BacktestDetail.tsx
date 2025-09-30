@@ -1,6 +1,7 @@
 import { useParams } from 'react-router-dom'
 import { useBacktestDetail } from '../hooks/useRunData'
 import RunPlayerContainer from '../containers/RunPlayerContainer'
+import MetricsSummary from '../components/MetricsSummary'
 
 export default function BacktestDetailView() {
   const params = useParams()
@@ -49,12 +50,15 @@ export default function BacktestDetailView() {
       ) : null}
 
       {!isErrorStatus && (
-        <RunPlayerContainer
-          backtest_id={backtest_id}
-          dataset_id={data?.dataset_id || undefined}
-          run_from={data?.run_from ?? undefined}
-          run_to={data?.run_to ?? undefined}
-        />
+        <>
+          <MetricsSummary metrics={(data as any)?.metrics ?? undefined} loading={isLoading} />
+          <RunPlayerContainer
+            backtest_id={backtest_id}
+            dataset_id={data?.dataset_id || undefined}
+            run_from={data?.run_from ?? undefined}
+            run_to={data?.run_to ?? undefined}
+          />
+        </>
       )}
     </div>
   )
