@@ -1,0 +1,31 @@
+schema: 1
+epic: 11
+story: "11.3"
+story_title: "Symbol Focus + Portfolio Aggregates (v1)"
+decision: PASS
+status_reason: |
+  UI-focused change with limited backend coupling in v1. Symbol focus selector,
+  chart scoped to focused symbol, and portfolio aggregates alongside running metrics.
+  Requires integration tests for focus switching and marker scoping. Handles
+  single-symbol runs gracefully.
+reviewer: "Quinn (Test Architect)"
+updated: 2025-10-01
+expires: 2025-12-01
+quality_score: 0.88
+conditions:
+  - Implement symbol selector wired to Playback Clock/consumers
+  - Scope markers/orders by focused symbol when symbol present
+  - Integration tests for focus switching; fallbacks for single-symbol
+risks:
+  - "Large symbol sets — avoid heavy per-symbol visuals in v1"
+  - "Potential confusion if orders lack symbol — ensure payloads carry symbol where possible"
+nfr:
+  performance:
+    no_jank_on_focus_switch: true
+  reliability:
+    one_frame_sync_tolerance: true
+references:
+  - docs/prd/epic-11-streaming-metrics-and-synchronized-playback.md
+  - docs/architecture/epic-11-frontend-architecture.md
+  - docs/qa/epic-11-acceptance-checklist.md
+

@@ -1,0 +1,36 @@
+schema: 1
+epic: 11
+story: "11.1"
+story_title: "Central Playback Clock, Timeline & Controls (v1)"
+decision: PASS
+status_reason: |
+  Architecture and PRD alignment verified. Finished-run replay only.
+  Store design (Context + useSyncExternalStore) and selector-based subscriptions
+  mitigate re-render risk at ~30 FPS. Timeline scrubber with markers feasible.
+  Conditions: implement store contract as documented; add store/selector unit tests
+  and integration tests for one-frame sync; provide basic keyboard/ARIA for scrubber
+  if bandwidth allows.
+reviewer: "Quinn (Test Architect)"
+updated: 2025-10-01
+expires: 2025-12-01
+quality_score: 0.9
+conditions:
+  - Implement store contract and imperative chart updates
+  - Add unit tests for store transitions and selector stability
+  - Integration tests: play/pause/seek sync within one frame
+  - Timeline scrubber keyboard/ARIA support (should-fix)
+top_issues:
+  - "Potential over-rendering at 30 FPS if components subscribe broadly"
+  - "Marker density may cause jank without compact rendering"
+nfr:
+  performance:
+    fps_target: 30
+    latency_ms: 150
+    dropped_frames_pct: 1
+  reliability:
+    deterministic_replay: true
+references:
+  - docs/prd/epic-11-streaming-metrics-and-synchronized-playback.md
+  - docs/architecture/epic-11-frontend-architecture.md
+  - docs/qa/epic-11-acceptance-checklist.md
+

@@ -1,0 +1,32 @@
+schema: 1
+epic: 11
+story: "11.2"
+story_title: "Backend Frame Metrics (Nautilus) & Metrics Panel Integration (v1)"
+decision: CONCERNS
+status_reason: |
+  Gate held pending implementation and validation of backend per-frame metrics emission.
+  Must precompute metrics from finished-run artifacts using Nautilus-compatible paths,
+  attach to each streamed frame, and update WS/SSE serializers. Require unit and
+  integration tests for MDD monotonicity, determinism across replays, and schema presence.
+reviewer: "Quinn (Test Architect)"
+updated: 2025-10-01
+expires: 2025-12-01
+quality_score: 0.75
+blocking_conditions:
+  - Precompute metrics arrays and attach to frames (produce_frames)
+  - WS/SSE include metrics object and equity object form
+  - Tests: unit (metrics), integration (WS/SSE), determinism
+  - FE renders metrics and handles absence gracefully
+risks:
+  - "Metric accuracy/performance during precompute"
+  - "Schema drift between backend and FE"
+nfr:
+  reliability:
+    deterministic_replay: true
+  performance:
+    frame_loop_overhead: "~O(1) after precompute"
+references:
+  - docs/architecture/epic-11-backend-metrics-emission.md
+  - docs/api-reference.md
+  - docs/qa/epic-11-acceptance-checklist.md
+
