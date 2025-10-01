@@ -28,15 +28,15 @@ Decision: TBD (pending elicitation)
 ### High Level Overview
 - Style: Monolith backend with background CLI jobs; monorepo (backend/, frontend/, data/, scripts/, Makefile).
 - Service architecture:
-  - FastAPI app exposes REST endpoints: create/list/get runs; WS endpoint for playback; SSE fallback endpoint.
-  - Typer CLI jobs: `make data` (ingest+derive), `make backtest` (submit runs).
-  - Nautilus adapter consumes 1m bars; outputs artifacts per run.
+  - FastAPI app exposes REST endpoints: create/list/get backtests; WS endpoint for playback; SSE fallback endpoint.
+  - Typer CLI jobs: `make data` (ingest+derive), `make backtest` (submit backtests).
+  - Nautilus adapter consumes 1m bars; outputs artifacts per backtest.
 - Primary data flow:
   1) Ingest TRADES+TBBO DBN → cache raw
   2) Derive deterministic 1m bars + TBBO aggregates (Parquet) under pinned calendar/TZ
-  3) Backtest runs against derived bars via Nautilus adapter
+  3) Backtests run against derived bars via Nautilus adapter
   4) Persist artifacts (metrics/equity/orders/fills + run manifest)
-  5) API lists/gets runs; WS streams time-compressed playback frames to frontend (SSE available as fallback)
+  5) API lists/gets backtests; WS streams time-compressed playback frames to frontend (SSE available as fallback)
 - Decisions & rationale:
   - WebSocket (primary) enables in-band control (play/pause/seek/speed), lower overhead at higher frame rates; SSE retained as simple fallback.
   - Monolith + local FS for MVP simplicity/determinism; easy to evolve later.
@@ -50,7 +50,7 @@ graph TD
   FE -- WS --> API
   API -- WS --> FE
   subgraph Backend
-    API --> CAT[Runs Catalog (SQLite/JSON)]
+    API --> CAT[Backtests Catalog (SQLite/JSON)]
     API --> ART[Artifacts (Parquet/JSON on FS)]
     JOB1[Typer: make data] --> RAW[Raw DBN Cache]
     JOB1 --> DER[Derived 1m Bars + TBBO (Parquet)]
@@ -213,17 +213,17 @@ Assumptions
   - 200 OK    { run_id, status: "EXISTS" } when idempotent key matches prior
   - 400/409/422 on validation/conflict
 
-2) GET /backtests — list/filter runs
+2) GET /backtests — list/filter backtests
 - Query: symbol?, from?, to?, strategy_id?, limit=50, offset=0, order="-created_at"
-- 200 OK: `{ items: Run[], total: int, limit, offset }`
+- 200 OK: `{ items: Backtest[], total: int, limit, offset }`
 
-3) GET /backtests/{id} — get run metadata and artifact refs
-- 200 OK: Run (includes artifact paths/urls, manifest ref)
+3) GET /backtests/{id} — get backtest metadata and artifact refs
+- 200 OK: Backtest (includes artifact paths/urls, manifest ref)
 - 404 if not found
 
 4) GET /backtests/{id}/stream?speed=60 — SSE fallback stream
 - Content-Type: text/event-stream; event: "frame"
-- 200 stream of frames until end/cancel; 404 if run not found
+- 200 stream of frames until end/cancel; 404 if backtest not found
 
 5) GET /healthz — liveness
 - 200 OK `{ status: "ok" }`
@@ -371,13 +371,13 @@ backend/
   ports/backtest_runner.py   # BacktestRunnerPort (interface)
   ports/catalog.py           # CatalogPort (interface)
   ports/streamer.py          # StreamerPort (interface)
-  adapters/databento.py      # MarketDataPort impl (DBN ingest + derive bars)
+
   adapters/nautilus.py       # BacktestRunnerPort impl (Nautilus Trader)
   adapters/sqlite_catalog.py # CatalogPort impl (SQLite)
   adapters/streams.py        # StreamerPort impl (frames → WS/SSE)
   jobs/cli.py                # Typer app with commands: data, backtest
   jobs/ingest.py             # Ingest TRADES+TBBO (DBN) to cache
-  jobs/derive.py             # Derive 1m bars + TBBO aggregates
+
   jobs/run_backtest.py       # Execute backtest and write artifacts
 frontend/
   src/components/            # Presentational only (charts, tables, UI widgets)
@@ -395,7 +395,6 @@ Backend ports (interfaces)
 ```python
 class MarketDataPort:
     def ensure_dataset(self, symbol: str, from_date: str, to_date: str) -> str: ...  # returns dataset_id
-    def derive_bars(self, dataset_id: str) -> None: ...
 
 class BacktestRunnerPort:
     def run(self, *, dataset_id: str, strategy_id: str, params: dict, seed: int,
@@ -415,7 +414,6 @@ class StreamerPort:
 ```
 
 Adapters
-- adapters/databento.py implements MarketDataPort (uses Databento SDK; Polars/PyArrow for bars)
 - adapters/nautilus.py implements BacktestRunnerPort (invokes Nautilus; writes artifacts)
 - adapters/sqlite_catalog.py implements CatalogPort (tables from Catalog Schema)
 - adapters/streams.py implements StreamerPort (server-side decimation; WS/SSE emitters)

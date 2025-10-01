@@ -11,9 +11,9 @@ def _insert_run(db_path: Path, run_id: str, created_at: str) -> None:
     with sqlite3.connect(db_path) as conn:
         conn.execute(
             """
-            INSERT INTO runs (run_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
-                              code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
-                              fills_path, run_manifest_path, input_hash, idempotency_key)
+            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
+                                  code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
+                                  fills_path, run_manifest_path, input_hash, idempotency_key)
             VALUES (?, 'ds', 'sma', '{}', 42, '{}', 60, 'x', ?, 'DONE', 10, NULL, NULL, NULL, NULL, 'm', NULL, NULL)
             """,
             (run_id, created_at),
@@ -63,7 +63,7 @@ def test_retention_dry_run_and_apply(tmp_path, monkeypatch, capsys):
     assert (tmp_path / "backtests" / "r3").exists()
     # DB rows gone for r1,r2; r3 remains
     with sqlite3.connect(dbp) as conn:
-        rows = conn.execute("SELECT run_id FROM runs").fetchall()
+        rows = conn.execute("SELECT backtest_id FROM backtests").fetchall()
         have = {r[0] for r in rows}
         assert "r3" in have and not {"r1", "r2"} & have
 

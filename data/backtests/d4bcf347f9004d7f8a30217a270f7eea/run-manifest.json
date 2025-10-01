@@ -1,0 +1,21 @@
+{
+  "run_id": "d4bcf347f9004d7f8a30217a270f7eea",
+  "dataset_id": "GOOGL-2024-1m",
+  "strategy_id": "sma_crossover",
+  "params": {},
+  "seed": 42,
+  "slippage_fees": {},
+  "speed": 60,
+  "run_from": "2024-10-02",
+  "run_to": "2024-10-30",
+  "code_hash": "0722b725ebba82bf3faebd9b1cf9a07d6e082734",
+  "env_lock": null,
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-09-30T06:58:15.494123+00:00",
+  "status": "ERROR",
+  "error": {
+    "error_type": "SystemExit",
+    "error_message": "bars parquet missing for dataset: GOOGL-2024-1m"
+  }
+}

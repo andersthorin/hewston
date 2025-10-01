@@ -6,45 +6,69 @@ to avoid duplication across the backend codebase.
 """
 
 from datetime import datetime, timezone
-from typing import Tuple, Union
+from typing import Tuple, Union, Optional
 
 import pandas as pd
 
 
-def utc_now() -> str:
-    """Get current UTC timestamp as ISO string."""
-    return datetime.now(timezone.utc).isoformat()
+def utc_now() -> datetime:
+    """Get current UTC timestamp as a timezone-aware datetime object."""
+    return datetime.now(timezone.utc)
 
 
-def normalize_timestamp(ts_val: Union[str, datetime, pd.Timestamp]) -> Tuple[int, str]:
+def _to_datetime_utc(val: Union[str, int, float, datetime, pd.Timestamp]) -> datetime:
+    """Convert supported inputs to a timezone-aware UTC datetime."""
+    if isinstance(val, datetime):
+        # If naive, assume UTC
+        return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+    if isinstance(val, pd.Timestamp):
+        return val.tz_convert("UTC").to_pydatetime() if val.tzinfo else val.tz_localize("UTC").to_pydatetime()
+    if isinstance(val, (int, float)):
+        return datetime.fromtimestamp(float(val), tz=timezone.utc)
+    if isinstance(val, str):
+        # Preserve exact 'Z' formatting when input uses it by returning the string later
+        return pd.to_datetime(val, utc=True).to_pydatetime()
+    raise TypeError("Unsupported timestamp type")
+
+
+def normalize_timestamp(ts_val: Union[str, int, float, datetime, pd.Timestamp]) -> Tuple[int, str]:
     """
     Normalize a timestamp value to (epoch_seconds, iso_string).
-    
-    Returns:
-        Tuple of (epoch_seconds_int, iso_string_z) for robust joining and client parsing.
+    - For datetime/Timestamp: iso_string == dt.isoformat()
+    - For epoch int/float: iso_string == ISO with microseconds when present
+    - For string '...Z': iso_string preserved as provided
     """
-    try:
-        dt = pd.to_datetime(ts_val, utc=True)
-        # epoch seconds as int for join keys
-        epoch = int(dt.timestamp())
-        # ISO 8601 Z string for client
-        iso = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-        return epoch, iso
-    except Exception:
-        # Fallback: try string manipulation
-        s = str(ts_val)
-        s2 = s.replace(" UTC", "Z").replace(" ", "T").replace("+00:00", "Z")
+    if ts_val is None:
+        raise TypeError("timestamp value is None")
+
+    if isinstance(ts_val, str):
+        # Accept only ISO-like strings
         try:
-            dt = pd.to_datetime(s2, utc=True)
-            return int(dt.timestamp()), dt.strftime("%Y-%m-%dT%H:%M:%SZ")
-        except Exception:
-            # Best effort: fallback to original string, epoch 0
-            return 0, s
+            dt = _to_datetime_utc(ts_val)
+        except Exception as e:
+            raise ValueError("invalid timestamp string") from e
+        epoch = int(dt.timestamp())
+        # Preserve 'Z' if user provided it exactly
+        if ts_val.endswith("Z"):
+            return epoch, ts_val
+        return epoch, dt.isoformat()
+
+    # datetime / pandas / epoch numbers
+    dt = _to_datetime_utc(ts_val)
+    epoch = int(dt.timestamp())
+    return epoch, dt.isoformat()
 
 
-def format_iso_timestamp(dt: datetime) -> str:
-    """Format datetime as ISO 8601 string with Z suffix."""
-    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+def format_iso_timestamp(val: Union[datetime, pd.Timestamp, str, int, float]) -> str:
+    """Format various inputs to ISO 8601 string.
+    - datetime / pandas.Timestamp: dt.isoformat()
+    - str: returned as-is
+    - epoch (int/float): converted to UTC datetime then .isoformat()
+    """
+    if isinstance(val, str):
+        return val
+    dt = _to_datetime_utc(val)  # may raise for unsupported types
+    return dt.isoformat()
 
 
 def parse_iso_timestamp(iso_string: str) -> datetime:

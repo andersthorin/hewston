@@ -36,7 +36,10 @@ The API router (`frontend/src/utils/apiRouter.ts`) provides conditional endpoint
 const response = await apiGetWithFlags('/api/v1/chart-data', 'chartData')
 ```
 
-Note: If you pass '/chart-data', the API router will remap it to '/api/v1/chart-data' when targeting the BFF. Prefer using the canonical path in new code.
+Note: The API router maps frontend paths to canonical BFF paths. For example:
+- '/chart-data' → '/api/v1/chart-data'
+- '/backtests/:id' → '/api/v1/backtests/:id/complete' (canonical alias)
+- '/backtests/:id/ws' → '/api/v1/backtests/:id/stream' (canonical backtests stream)
 
 ### Service Layer
 
@@ -54,13 +57,13 @@ const data = await chartDataService.fetchDailyData('AAPL', '2023-01-01', '2023-1
 - Data decimation handled server-side
 - Caching and performance optimization
 
-#### Run Data Service (`frontend/src/services/runData.ts`)
+#### Backtest Data Service (`frontend/src/services/runData.ts`)
 
-Unified interface for run data with aggregation support:
+Canonical interface for backtest data with BFF aggregation:
 
 ```typescript
-// Gets complete run data in single request (BFF) vs multiple requests (backend)
-const completeRun = await runDataService.getCompleteRunData('run-123')
+// Gets complete backtest data in a single request via BFF alias
+const complete = await backtestDataService.getCompleteBacktest('bt-123')
 ```
 
 **BFF Benefits:**
@@ -83,22 +86,20 @@ const { data } = useHourChartData('AAPL', from, to)
 // Legacy direct-backend hooks are deprecated and removed from examples
 ```
 
-#### Run Data Hooks (`frontend/src/hooks/useRunData.ts`)
+#### Backtest Data Hooks (`frontend/src/hooks/useRunData.ts`)
 
 BFF-aware hooks with aggregation support:
 
 ```typescript
-// New BFF-aware hooks
-const { data } = useRunList(query)
-const { data } = useCompleteRunData(run_id)  // Aggregated data
-const createRun = useCreateRun()
+// Canonical backtest hooks
+const { data } = useBacktestList(query)
+const { data } = useBacktestDetail(backtest_id)
+const createBacktest = useCreateBacktest()
 
-// Legacy direct-backend hooks are deprecated and removed from examples
-
-// BFF-specific hooks for aggregated data
-const { data: metrics } = useRunMetrics(run_id)
-const { data: equity } = useRunEquity(run_id)
-const { data: orders } = useRunOrders(run_id)
+// Aggregated subselectors
+const { data: metrics } = useBacktestMetrics(backtest_id)
+const { data: equity } = useBacktestEquity(backtest_id)
+const { data: orders } = useBacktestOrders(backtest_id)
 ```
 
 ## Migration Guide
@@ -297,7 +298,7 @@ const { alerts, hasAlerts } = useWebSocketPerformanceMonitor(runId, {
 ### WebSocket Endpoints
 
 - **Backend**: `ws://127.0.0.1:8000/backtests/{id}/ws`
-- **BFF**: `ws://127.0.0.1:8001/api/v1/runs/{id}/stream`
+- **BFF**: `ws://127.0.0.1:8001/api/v1/backtests/{id}/stream`
 
 ### Enhanced Features
 

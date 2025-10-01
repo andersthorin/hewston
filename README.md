@@ -55,9 +55,9 @@ make setup
 make db-apply
 ```
 
-### 3. Build Baseline Dataset (AAPL 2023)
+### 3. Materialize Warehouse (single day)
 ```bash
-make data SYMBOL=AAPL YEAR=2023
+make materialize-day SYMBOL=AAPL DATE=2024-10-01 VENUE=XNAS
 ```
 
 ### 4. Run Baseline Backtest
@@ -98,7 +98,7 @@ hewston/
 ├── scripts/                # Database schemas and utilities
 └── data/                   # Local data storage
     ├── raw/databento/      # Cached market data
-    ├── derived/bars/       # Processed OHLCV data
+    ├── warehouse/          # Quotes, trades aggregates, and materialized MID bars
     └── backtests/          # Run artifacts and results
 ```
 
@@ -157,17 +157,17 @@ make clean                  # Remove caches and temp files
 
 ### Data Pipeline
 1. **Ingest**: Download TRADES/TBBO data from Databento
-2. **Derive**: Process into 1-minute OHLCV bars with TBBO aggregates
+2. **Materialize (warehouse)**: QuoteTicks + Trades aggregates → MID bars {1min,1h}
 3. **Backtest**: Execute strategy with Nautilus Trader
 4. **Stream**: Real-time playback of results via WebSocket
 
 ## 🧪 Example Usage
 
-### Create and View a Backtest Run
+### Create and View a Backtest
 
-1. **Create a run via API**:
+1. **Create a backtest via API**:
 ```bash
-curl -X POST http://127.0.0.1:8000/backtests \
+curl -X POST http://127.0.0.1:8000/api/v1/backtests \
   -H "Content-Type: application/json" \
   -d '{
     "symbol": "AAPL",
@@ -181,8 +181,8 @@ curl -X POST http://127.0.0.1:8000/backtests \
 ```
 
 2. **View results in browser**:
-   - Navigate to http://127.0.0.1:5173/runs
-   - Click on your run to see detailed playback
+   - Navigate to http://127.0.0.1:5173/backtests
+   - Click on your backtest to see detailed playback
    - Use playback controls to visualize the strategy execution
 
 ### WebSocket Streaming Example

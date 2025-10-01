@@ -1,0 +1,24 @@
+{
+  "run_id": "test_final",
+  "dataset_id": "AAPL-2024-1m",
+  "strategy_id": "sma_crossover",
+  "params": {
+    "fast_period": 10,
+    "slow_period": 20
+  },
+  "seed": 42,
+  "slippage_fees": {},
+  "speed": 1.0,
+  "run_from": "2024-10-01",
+  "run_to": "2024-10-31",
+  "code_hash": "011272c98cca1f186dc7c2c52d9f4d1c675ba17e",
+  "env_lock": null,
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-09-30T20:31:42.342418+00:00",
+  "status": "ERROR",
+  "error": {
+    "error_type": "RuntimeError",
+    "error_message": "Failed to extract metrics from Nautilus - portfolio API broken: 'Trader' object has no attribute 'portfolio'"
+  }
+}

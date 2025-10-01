@@ -33,28 +33,6 @@ async def get_backend_proxy_client(
 
 # Backtests API Proxy Routes
 
-@router.post("/backtests")
-async def proxy_create_backtest(
-    request: Request,
-    backend_client: BackendClient = Depends(get_backend_proxy_client),
-    correlation_id: str = Depends(get_correlation_id),
-):
-    """
-    Proxy POST /backtests to backend.
-    
-    Creates a new backtest run with the same API contract as the backend.
-    """
-    # Get request body
-    body = await request.body()
-    
-    # Forward request to backend
-    return await backend_client.proxy_request(
-        method="POST",
-        path="/backtests",
-        headers=dict(request.headers),
-        body=body,
-        correlation_id=correlation_id,
-    )
 
 
 @router.get("/backtests")

@@ -16,30 +16,7 @@ def _base_dir() -> Path:
     return Path(os.getenv("HEWSTON_DATA_DIR", "data")).resolve()
 
 
-def _years_in_range(symbol: str, from_date: Optional[str], to_date: Optional[str]) -> List[int]:
-    base = _base_dir() / "derived" / "bars" / symbol
-    ys: List[int] = []
-    if base.exists():
-        for p in base.iterdir():
-            if p.is_dir():
-                try:
-                    ys.append(int(p.name))
-                except Exception:
-                    pass
-    ys = sorted(ys)
-    if from_date:
-        y1 = int(from_date[:4])
-        ys = [y for y in ys if y >= y1]
-    if to_date:
-        y2 = int(to_date[:4])
-        ys = [y for y in ys if y <= y2]
-    return ys
 
-
-def _paths_for(symbol: str, years: List[int], tf: str) -> List[str]:
-    base = _base_dir() / "derived" / "bars" / symbol
-    fname = f"bars_{tf}.parquet"
-    return [str(base / str(y) / fname) for y in years if (base / str(y) / fname).exists()]
 
 
 def _isoz(ts: datetime | str | None) -> Optional[str]:
@@ -62,34 +39,69 @@ async def get_daily(
     from_date: Optional[str] = Query(None, alias="from"),
     to_date: Optional[str] = Query(None, alias="to"),
 ):
-    years = _years_in_range(symbol, from_date, to_date)
-    if not years:
-        raise HTTPException(status_code=404, detail="No data for symbol/year range")
-    paths = _paths_for(symbol, years, tf="1Day")
-    if not paths:
-        raise HTTPException(status_code=404, detail="No daily parquet files found")
+    # Build list of warehouse paths (prefer 1h pre-aggregated; fall back to 1min)
+    try:
+        ts_from = datetime.fromisoformat((from_date or "1970-01-01") + "T00:00:00+00:00")
+        ts_to = datetime.fromisoformat((to_date or "2100-01-01") + "T23:59:59+00:00")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid from/to format; expected YYYY-MM-DD")
 
-    # Filter range with predicate pushdown
-    q = pl.scan_parquet(paths)
-    if from_date:
-        ts_from = datetime.fromisoformat(from_date + "T00:00:00+00:00")
-        q = q.filter(pl.col("t") >= pl.lit(ts_from))
-    if to_date:
-        ts_to = datetime.fromisoformat(to_date + "T23:59:59+00:00")
-        q = q.filter(pl.col("t") <= pl.lit(ts_to))
-    q = q.select(["t", "o", "h", "l", "c", "v", "n"])  # minimal set for chart
-    df = q.collect()
+    def _paths(base: Path, ts_from: datetime, ts_to: datetime) -> list[str]:
+        if not base.exists():
+            return []
+        out: list[str] = []
+        d = ts_from.date()
+        while d <= ts_to.date():
+            p = base / f"date={d}" / "bars.parquet"
+            if p.exists():
+                out.append(str(p))
+            d = (datetime.combine(d, datetime.min.time(), tzinfo=timezone.utc) + timedelta(days=1)).date()
+        return out
+
+    base_1h = _base_dir() / "warehouse" / "bars" / "mid_1h" / f"venue=XNAS" / f"symbol={symbol}"
+
+    # If no explicit range provided, bound by available dates in warehouse
+    if (from_date is None) and (to_date is None):
+        def _list_dates(base: Path) -> list[str]:
+            if not base.exists():
+                return []
+            return sorted([
+                p.name.split("=")[1]
+                for p in base.glob("date=*")
+                if p.is_dir() and "=" in p.name
+            ])
+        ds = _list_dates(base_1h)
+        if not ds:
+            raise HTTPException(status_code=404, detail=f"No 1-hour warehouse data available for {symbol}. Run warehouse backfill first.")
+        ts_from = datetime.fromisoformat(ds[0] + "T00:00:00+00:00")
+        ts_to = datetime.fromisoformat(ds[-1] + "T23:59:59+00:00")
+
+    paths_1h = _paths(base_1h, ts_from, ts_to)
+    if not paths_1h:
+        _from = from_date or ts_from.date().isoformat()
+        _to = to_date or ts_to.date().isoformat()
+        raise HTTPException(status_code=404, detail=f"No 1-hour warehouse data available for {symbol} in date range {_from} to {_to}. Run warehouse backfill first.")
+
+    q = pl.scan_parquet(paths_1h).filter((pl.col("t") >= pl.lit(ts_from)) & (pl.col("t") <= pl.lit(ts_to)))
+
+    bucket = pl.col("t").dt.truncate("1d").alias("bucket")
+    qq = (
+        q.with_columns(bucket)
+         .group_by("bucket")
+         .agg(
+            o=pl.col("o").first(),
+            h=pl.col("h").max(),
+            l=pl.col("l").min(),
+            c=pl.col("c").last(),
+            v=pl.col("v").sum(),
+            n=pl.col("n").sum().fill_null(0),
+         )
+         .sort("bucket")
+    )
+    df = qq.collect()
     items = [
-        {
-            "t": _isoz(t),
-            "o": float(o),
-            "h": float(h),
-            "l": float(l),
-            "c": float(c),
-            "v": int(v),
-            "n": int(n),
-        }
-        for t, o, h, l, c, v, n in zip(df["t"], df["o"], df["h"], df["l"], df["c"], df["v"], df["n"])
+        {"t": _isoz(t), "o": float(o), "h": float(h), "l": float(l), "c": float(c), "v": int(v), "n": int(n)}
+        for t, o, h, l, c, v, n in zip(df["bucket"], df["o"], df["h"], df["l"], df["c"], df["v"], df["n"])
     ]
     return JSONResponse(content={"symbol": symbol, "bars": items})
 
@@ -101,15 +113,33 @@ async def get_minute(
     to_date: str = Query(..., alias="to"),
     rth_only: bool = True,
 ):
-    years = _years_in_range(symbol, from_date, to_date)
-    if not years:
-        raise HTTPException(status_code=404, detail="No data for symbol/year range")
-    paths = _paths_for(symbol, years, tf="1Min")
-    if not paths:
-        raise HTTPException(status_code=404, detail="No minute parquet files found")
+    # New warehouse paths: data/warehouse/bars/mid_1min/venue=XNAS/symbol={symbol}/date=YYYY-MM-DD/bars.parquet
+    try:
+        ts_from = datetime.fromisoformat(from_date + "T00:00:00+00:00")
+        ts_to = datetime.fromisoformat(to_date + "T23:59:59+00:00")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid from/to format; expected YYYY-MM-DD")
 
-    ts_from = datetime.fromisoformat(from_date + "T00:00:00+00:00")
-    ts_to = datetime.fromisoformat(to_date + "T23:59:59+00:00")
+    def _paths(symbol: str, ts_from: datetime, ts_to: datetime) -> list[str]:
+        base = _base_dir() / "warehouse" / "bars" / "mid_1min" / f"venue=XNAS" / f"symbol={symbol}"
+        if not base.exists():
+            return []
+        dates = []
+        d = ts_from.date()
+        while d <= ts_to.date():
+            dates.append(str(d))
+            d = (datetime.combine(d, datetime.min.time(), tzinfo=timezone.utc) + timedelta(days=1)).date()
+        out: list[str] = []
+        for ds in dates:
+            p = base / f"date={ds}" / "bars.parquet"
+            if p.exists():
+                out.append(str(p))
+        return out
+
+    paths = _paths(symbol, ts_from, ts_to)
+    if not paths:
+        raise HTTPException(status_code=404, detail=f"No 1-minute warehouse data available for {symbol} in date range {from_date} to {to_date}. Run warehouse backfill first.")
+
     q = pl.scan_parquet(paths).filter((pl.col("t") >= pl.lit(ts_from)) & (pl.col("t") <= pl.lit(ts_to)))
     if rth_only:
         q = q.filter(pl.col("rth") == True)
@@ -130,16 +160,34 @@ async def get_minute_decimated(
     target: int = 10000,
     rth_only: bool = True,
 ):
-    years = _years_in_range(symbol, from_date, to_date)
-    if not years:
-        raise HTTPException(status_code=404, detail="No data for symbol/year range")
-    paths = _paths_for(symbol, years, tf="1Min")
+    # New warehouse paths for minute bars
+    try:
+        ts_from = datetime.fromisoformat(from_date + "T00:00:00+00:00")
+        ts_to = datetime.fromisoformat(to_date + "T23:59:59+00:00")
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid from/to format; expected YYYY-MM-DD")
+
+    def _paths(symbol: str, ts_from: datetime, ts_to: datetime) -> list[str]:
+        base = _base_dir() / "warehouse" / "bars" / "mid_1min" / f"venue=XNAS" / f"symbol={symbol}"
+        if not base.exists():
+            return []
+        dates = []
+        d = ts_from.date()
+        while d <= ts_to.date():
+            dates.append(str(d))
+            d = (datetime.combine(d, datetime.min.time(), tzinfo=timezone.utc) + timedelta(days=1)).date()
+        out: list[str] = []
+        for ds in dates:
+            p = base / f"date={ds}" / "bars.parquet"
+            if p.exists():
+                out.append(str(p))
+        return out
+
+    paths = _paths(symbol, ts_from, ts_to)
     if not paths:
-        raise HTTPException(status_code=404, detail="No minute parquet files found")
+        raise HTTPException(status_code=404, detail=f"No 1-minute warehouse data available for {symbol} in date range {from_date} to {to_date}. Run warehouse backfill first.")
 
     # Build base query with filters
-    ts_from = datetime.fromisoformat(from_date + "T00:00:00+00:00")
-    ts_to = datetime.fromisoformat(to_date + "T23:59:59+00:00")
     q = pl.scan_parquet(paths).filter((pl.col("t") >= pl.lit(ts_from)) & (pl.col("t") <= pl.lit(ts_to)))
     if rth_only:
         q = q.filter(pl.col("rth") == True)
@@ -195,75 +243,34 @@ async def get_hour(
     import logging
     logger = logging.getLogger(__name__)
 
-    years = _years_in_range(symbol, from_date, to_date)
-    if not years:
-        raise HTTPException(status_code=404, detail="No data for symbol/year range")
-    paths = _paths_for(symbol, years, tf="1Min")
-    if not paths:
-        raise HTTPException(status_code=404, detail="No minute parquet files found")
-    # Fast path: use pre-aggregated 1Hour parquet if available
-    hour_paths = _paths_for(symbol, years, tf="1Hour")
-    if hour_paths:
-        try:
-            ts_from = datetime.fromisoformat(from_date + "T00:00:00+00:00")
-            ts_to = datetime.fromisoformat(to_date + "T23:59:59+00:00")
-        except Exception:
-            raise HTTPException(status_code=400, detail="Invalid from/to format; expected YYYY-MM-DD")
-
-        qh = pl.scan_parquet(hour_paths).filter((pl.col("t") >= pl.lit(ts_from)) & (pl.col("t") <= pl.lit(ts_to)))
-        # Note: pre-aggregated hours are assumed RTH-aligned; rth_only flag is ignored here
-        qh = qh.select(["t", "o", "h", "l", "c", "v"])  # minimal set for chart
-        dfh = qh.collect()
-        if dfh.height == 0:
-            raise HTTPException(status_code=404, detail="No data rows in requested window")
-
-        items = [
-            {"t": _isoz(t), "o": float(o), "h": float(h), "l": float(l), "c": float(c), "v": int(v)}
-            for t, o, h, l, c, v in zip(dfh["t"], dfh["o"], dfh["h"], dfh["l"], dfh["c"], dfh["v"])
-        ]
-        return JSONResponse(content={"symbol": symbol, "bars": items})
-
-
-    # Inclusive window [from 00:00:00 .. to 23:59:59]
+    # Use pre-aggregated 1h parquet from warehouse if available
     try:
         ts_from = datetime.fromisoformat(from_date + "T00:00:00+00:00")
         ts_to = datetime.fromisoformat(to_date + "T23:59:59+00:00")
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid from/to format; expected YYYY-MM-DD")
 
-    q = pl.scan_parquet(paths).filter((pl.col("t") >= pl.lit(ts_from)) & (pl.col("t") <= pl.lit(ts_to)))
-    if rth_only:
-        q = q.filter(pl.col("rth") == True)
+    base = _base_dir() / "warehouse" / "bars" / "mid_1h" / f"venue=XNAS" / f"symbol={symbol}"
+    paths: list[str] = []
+    if base.exists():
+        d = ts_from.date()
+        while d <= ts_to.date():
+            p = base / f"date={d}" / "bars.parquet"
+            if p.exists():
+                paths.append(str(p))
+            d = (datetime.combine(d, datetime.min.time(), tzinfo=timezone.utc) + timedelta(days=1)).date()
+    if not paths:
+        _from = from_date
+        _to = to_date
+        raise HTTPException(status_code=404, detail=f"No 1-hour warehouse data available for {symbol} in date range {_from} to {_to}. Run warehouse backfill first.")
 
-    # Shift timestamps by -30m, truncate to hour, shift back +30m to align buckets to :30
-    bucket = ((pl.col("t") - pl.duration(minutes=30)).dt.truncate("1h") + pl.duration(minutes=30)).alias("bucket")
-
-    qq = (
-        q.select(["t", "o", "h", "l", "c", "v"])  # select required cols early
-         .with_columns(bucket)
-         .group_by("bucket")
-         .agg(
-            o=pl.col("o").first(),
-            h=pl.col("h").max(),
-            l=pl.col("l").min(),
-            c=pl.col("c").last(),
-            v=pl.col("v").sum(),
-         )
-         .sort("bucket")
-    )
-
-    df = qq.collect()
-    if df.height == 0:
+    qh = pl.scan_parquet(paths).filter((pl.col("t") >= pl.lit(ts_from)) & (pl.col("t") <= pl.lit(ts_to)))
+    qh = qh.select(["t", "o", "h", "l", "c", "v"])  # minimal set for chart
+    dfh = qh.collect()
+    if dfh.height == 0:
         raise HTTPException(status_code=404, detail="No data rows in requested window")
-
     items = [
         {"t": _isoz(t), "o": float(o), "h": float(h), "l": float(l), "c": float(c), "v": int(v)}
-        for t, o, h, l, c, v in zip(df["bucket"], df["o"], df["h"], df["l"], df["c"], df["v"])
+        for t, o, h, l, c, v in zip(dfh["t"], dfh["o"], dfh["h"], dfh["l"], dfh["c"], dfh["v"])
     ]
-
-    try:
-        logger.info("bars.hour", extra={"symbol": symbol, "from": from_date, "to": to_date, "rows": len(items)})
-    except Exception:
-        pass
-
     return JSONResponse(content={"symbol": symbol, "bars": items})

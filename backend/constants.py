@@ -15,7 +15,7 @@ DEFAULT_PORT = 8000
 CORS_ORIGINS = ["http://127.0.0.1:5173", "http://localhost:5173"]
 
 # Database Configuration
-DEFAULT_CATALOG_PATH = "data/catalog.sqlite"
+DEFAULT_CATALOG_PATH = "data/catalog.db"
 DEFAULT_DATA_DIR = "data"
 
 # Streaming Configuration

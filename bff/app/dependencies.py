@@ -12,15 +12,14 @@ import time
 import asyncio
 from fastapi import Depends
 
-from bff.app.config import (
-    BACKEND_BASE_URL,
-    BACKEND_TIMEOUT_SECONDS,
-    REDIS_ENABLED,
-    REDIS_URL,
-)
+from bff.app import config as config
 
 # Global HTTP client for backend communication
 _backend_client: Optional[httpx.AsyncClient] = None
+# Track the event loop that created the client to avoid cross-loop reuse in tests
+_backend_client_loop_id: Optional[int] = None
+# Track the base URL used to construct the client so patched configs take effect in tests
+_backend_client_base_url: Optional[str] = None
 
 # Global Redis client (if enabled)
 _redis_client = None
@@ -31,21 +30,44 @@ _redis_disabled_until: float = 0.0
 async def get_backend_client() -> httpx.AsyncClient:
     """
     Get async HTTP client for backend communication.
-    
+
     Returns:
         httpx.AsyncClient: Configured client for backend API calls
     """
-    global _backend_client
-    
-    if _backend_client is None:
+    global _backend_client, _backend_client_loop_id, _backend_client_base_url
+
+    current_loop = asyncio.get_running_loop()
+    current_loop_id = id(current_loop)
+    # Normalize backend base URL to include canonical API prefix
+    raw_base_url = config.BACKEND_BASE_URL  # read at call time so test patches take effect
+    desired_base_url = raw_base_url.rstrip('/')
+    if not desired_base_url.endswith('/api/v1'):
+        desired_base_url = desired_base_url + '/api/v1'
+
+    # Recreate client if it does not exist, is bound to a different loop, or base URL changed
+    needs_new = (
+        _backend_client is None
+        or _backend_client_loop_id != current_loop_id
+        or _backend_client_base_url != desired_base_url
+    )
+
+    if needs_new:
+        # Close existing client if present
+        if _backend_client is not None:
+            try:
+                await _backend_client.aclose()
+            except Exception:
+                pass
         _backend_client = httpx.AsyncClient(
-            base_url=BACKEND_BASE_URL,
-            timeout=httpx.Timeout(BACKEND_TIMEOUT_SECONDS),
+            base_url=desired_base_url,
+            timeout=httpx.Timeout(config.BACKEND_TIMEOUT_SECONDS),
             headers={
                 "User-Agent": "Hewston-BFF/0.1.0",
             }
         )
-    
+        _backend_client_loop_id = current_loop_id
+        _backend_client_base_url = desired_base_url
+
     return _backend_client
 
 
@@ -58,7 +80,7 @@ async def get_redis_client():
     """
     global _redis_client, _redis_disabled_until
 
-    if not REDIS_ENABLED:
+    if not config.REDIS_ENABLED:
         return None
 
     # Circuit breaker: if we recently failed, skip reconnect attempts for a while
@@ -71,7 +93,7 @@ async def get_redis_client():
             import redis.asyncio as redis
             # Use very short socket timeouts to avoid 30s hangs when Redis is unreachable
             _redis_client = redis.from_url(
-                REDIS_URL,
+                config.REDIS_URL,
                 socket_connect_timeout=0.2,
                 socket_timeout=0.2,
                 retry_on_timeout=False,

@@ -1,4 +1,6 @@
 data/raw/
+data/warehouse/
+data/derived/
 __pycache__/
 .idea/
 .pytest_cache/

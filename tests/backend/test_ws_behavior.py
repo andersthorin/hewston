@@ -10,7 +10,7 @@ def test_ws_heartbeat_hb_event_monkeypatched_interval():
     # Speed up heartbeat for tests
     wsmod.HEARTBEAT_SECONDS = 0.05
     client = TestClient(app)
-    with client.websocket_connect("/backtests/test/ws") as ws:
+    with client.websocket_connect("/api/v1/backtests/test/ws") as ws:
         msg = ws.receive_json()
         assert msg["t"] == "hb"
         ws.close()
@@ -18,7 +18,7 @@ def test_ws_heartbeat_hb_event_monkeypatched_interval():
 
 def test_ws_err_on_invalid_messages():
     client = TestClient(app)
-    with client.websocket_connect("/backtests/test/ws") as ws:
+    with client.websocket_connect("/api/v1/backtests/test/ws") as ws:
         # Unsupported message type
         ws.send_json({"t": "noop"})
         msg = ws.receive_json()

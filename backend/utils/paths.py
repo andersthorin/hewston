@@ -18,8 +18,17 @@ def get_base_data_dir() -> Path:
 
 
 def get_catalog_path() -> Path:
-    """Get the catalog database path from environment or default."""
-    return Path(os.environ.get("HEWSTON_CATALOG_PATH", DEFAULT_CATALOG_PATH))
+    """Get the catalog database path from environment or default.
+
+    Priority:
+    1) HEWSTON_CATALOG_PATH if set
+    2) <HEWSTON_DATA_DIR>/catalog.db if base set
+    3) DEFAULT_CATALOG_PATH
+    """
+    if "HEWSTON_CATALOG_PATH" in os.environ and os.environ["HEWSTON_CATALOG_PATH"]:
+        return Path(os.environ["HEWSTON_CATALOG_PATH"])
+    base = get_base_data_dir()
+    return base / Path(DEFAULT_CATALOG_PATH).name
 
 
 def get_raw_databento_dir(symbol: Optional[str] = None, year: Optional[int] = None) -> Path:
@@ -32,14 +41,7 @@ def get_raw_databento_dir(symbol: Optional[str] = None, year: Optional[int] = No
     return base
 
 
-def get_derived_bars_dir(symbol: Optional[str] = None, year: Optional[int] = None) -> Path:
-    """Get the derived bars directory, optionally for a specific symbol/year."""
-    base = get_base_data_dir() / "derived" / "bars"
-    if symbol and year:
-        return base / symbol / str(year)
-    elif symbol:
-        return base / symbol
-    return base
+
 
 
 def get_backtests_dir(run_id: Optional[str] = None) -> Path:

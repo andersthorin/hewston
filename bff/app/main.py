@@ -15,7 +15,7 @@ from contextlib import asynccontextmanager
 from bff.api.health import router as health_router
 from bff.api.proxy import router as proxy_router
 from bff.api.chart_data import router as chart_data_router
-from bff.api.run_data import router as run_data_router
+from bff.api.backtests import router as backtests_router
 from bff.api.websocket import router as websocket_router
 from bff.app.config import (
     BFF_API_TITLE,
@@ -115,7 +115,16 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(proxy_router, prefix="/api/v1")
     app.include_router(chart_data_router, prefix="/api/v1")
-    app.include_router(run_data_router, prefix="/api/v1")
+    app.include_router(backtests_router, prefix="/api/v1")
+
+    # Reset per-app backend client to avoid cross-test contamination from config reloads
+    try:
+        from bff.app import dependencies as _deps
+        _deps._backend_client = None
+        _deps._backend_client_loop_id = None
+        _deps._backend_client_base_url = None
+    except Exception:
+        pass
 
 
     # Debug: log registered routes on startup to verify routing

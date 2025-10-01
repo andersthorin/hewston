@@ -4,3 +4,9 @@ pytest>=8.2,<9
 
 structlog>=24,<25
 
+
+
+# Nautilus backtest engine and data deps
+nautilus-trader==1.219.0
+pandas>=2.3,<3
+pyarrow>=12,<22

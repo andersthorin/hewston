@@ -1,0 +1,21 @@
+{
+  "run_id": "b493202b13f140d7af4123a027d87814",
+  "dataset_id": "GOOGL-warehouse-1m",
+  "strategy_id": "sma_crossover",
+  "params": {
+    "fast": 20,
+    "slow": 50,
+    "instrument_id": "GOOGL.XNAS"
+  },
+  "seed": 42,
+  "slippage_fees": {},
+  "speed": 60,
+  "run_from": "2024-10-01",
+  "run_to": "2024-10-31",
+  "code_hash": "f3185a6c83b4011066c958a6c66ed33c2f1ee72f",
+  "env_lock": null,
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-09-30T17:13:22.044494+00:00",
+  "status": "DONE"
+}

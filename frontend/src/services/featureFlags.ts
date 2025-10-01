@@ -61,10 +61,10 @@ class FeatureFlagService {
       endpointMappings: {
         // Chart data endpoints
         chartData: (this.configuration.bffEnabled && this.configuration.chartDataEnabled) ? `${bffUrl}/api/v1/chart-data` : `${backendUrl}/bars`,
-        // Run data endpoints
-        runData: (this.configuration.bffEnabled && this.configuration.runDataEnabled) ? `${bffUrl}/api/v1/runs` : `${backendUrl}/backtests`,
+        // Backtest data endpoints
+        runData: (this.configuration.bffEnabled && this.configuration.runDataEnabled) ? `${bffUrl}/api/v1/backtests` : `${backendUrl}/backtests`,
         // WebSocket endpoints
-        websocket: (this.configuration.bffEnabled && this.configuration.websocketEnabled) ? `${bffWsUrl}/api/v1/runs/{id}/stream` : `${backendWsUrl}/backtests/{id}/ws`,
+        websocket: (this.configuration.bffEnabled && this.configuration.websocketEnabled) ? `${bffWsUrl}/api/v1/backtests/{id}/stream` : `${backendWsUrl}/backtests/{id}/ws`,
         // Health check
         health: `${backendUrl}/healthz`,
       },

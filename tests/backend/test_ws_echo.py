@@ -5,7 +5,7 @@ from backend.app.main import app
 
 def test_ws_echo_ctrl_message():
     client = TestClient(app)
-    with client.websocket_connect("/backtests/abc/ws") as ws:
+    with client.websocket_connect("/api/v1/backtests/abc/ws") as ws:
         ws.send_json({"t": "ctrl", "cmd": "play"})
         msg = ws.receive_json()
         assert msg["t"] == "ctrl"

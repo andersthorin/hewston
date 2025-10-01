@@ -2,29 +2,29 @@ import { z } from 'zod'
 import { apiGet, apiPost } from '../utils/api'
 import type { OrderData } from '../types/streaming'
 
-export const RunSummarySchema = z.object({
-  run_id: z.string(),
+export const BacktestSummarySchema = z.object({
+  backtest_id: z.string(),
   created_at: z.string(),
   strategy_id: z.string(),
   status: z.string(),
   symbol: z.string().optional().nullable(),
-  // Authoritative window from run manifest (must match RunDetail)
+  // Authoritative window from backtest manifest (must match BacktestDetail)
   run_from: z.string().optional().nullable(),
   run_to: z.string().optional().nullable(),
   duration_ms: z.number().optional().nullable(),
 })
-export type RunSummary = z.infer<typeof RunSummarySchema>
+export type BacktestSummary = z.infer<typeof BacktestSummarySchema>
 
-export const ListRunsResponseSchema = z.object({
-  items: z.array(RunSummarySchema),
+export const BacktestListResponseSchema = z.object({
+  items: z.array(BacktestSummarySchema),
   total: z.number(),
   limit: z.number(),
   offset: z.number(),
 })
-export type ListRunsResponse = z.infer<typeof ListRunsResponseSchema>
+export type BacktestListResponse = z.infer<typeof BacktestListResponseSchema>
 
-export const RunDetailSchema = z.object({
-  run_id: z.string(),
+export const BacktestDetailSchema = z.object({
+  backtest_id: z.string(),
   dataset_id: z.string().optional().nullable(),
   strategy_id: z.string(),
   status: z.string(),
@@ -42,13 +42,13 @@ export const RunDetailSchema = z.object({
     run_manifest_path: z.string().optional().nullable(),
   }).optional().nullable(),
   manifest: z.object({ path: z.string().optional().nullable() }).optional().nullable(),
-  // Enriched by backend: window from run-manifest.json
+  // Enriched by backend: window from backtest-manifest.json
   run_from: z.string().optional().nullable(),
   run_to: z.string().optional().nullable(),
 })
-export type RunDetail = z.infer<typeof RunDetailSchema>
+export type BacktestDetail = z.infer<typeof BacktestDetailSchema>
 
-export type ListRunsQuery = {
+export type BacktestListQuery = {
   symbol?: string
   strategy_id?: string
   from?: string
@@ -58,15 +58,15 @@ export type ListRunsQuery = {
   order?: string
 }
 
-export async function listBacktests(query: ListRunsQuery = {}): Promise<ListRunsResponse> {
+export async function listBacktests(query: BacktestListQuery = {}): Promise<BacktestListResponse> {
   const params = new URLSearchParams()
   for (const [k, v] of Object.entries(query)) {
     if (v !== undefined && v !== null && v !== '') params.set(k, String(v))
   }
-  const res = await fetch(`/backtests?${params.toString()}`)
+  const res = await fetch(`/api/v1/backtests?${params.toString()}`)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
   const json = await res.json()
-  return ListRunsResponseSchema.parse(json)
+  return BacktestListResponseSchema.parse(json)
 }
 
 export type StreamFrame = {
@@ -78,28 +78,27 @@ export type StreamFrame = {
   dropped: number
 }
 
-export async function getRunDetail(run_id: string): Promise<RunDetail> {
-  const json = await apiGet(`/backtests/${run_id}`)
-  return RunDetailSchema.parse(json)
+export async function getBacktestDetail(backtest_id: string): Promise<BacktestDetail> {
+  const json = await apiGet(`/api/v1/backtests/${backtest_id}/complete`)
+  return BacktestDetailSchema.parse(json)
 }
 
 // --- Create Backtest ---
-export type CreateRunRequest = {
+export type CreateBacktestRequest = {
   strategy_id: string
   params?: Record<string, unknown>
   dataset_id?: string
   symbol?: string
-  year?: number
   from?: string
   to?: string
   speed?: number
   seed?: number
 }
-export type CreateRunResponse = { run_id: string; status: string }
+export type CreateBacktestResponse = { backtest_id: string; status: string }
 
 export async function createBacktest(
-  req: CreateRunRequest,
+  req: CreateBacktestRequest,
   idempotencyKey?: string,
-): Promise<CreateRunResponse> {
-  return apiPost<CreateRunResponse>('/backtests', req, { idempotencyKey })
+): Promise<CreateBacktestResponse> {
+  return apiPost<CreateBacktestResponse>('/api/v1/backtests', req, { idempotencyKey })
 }

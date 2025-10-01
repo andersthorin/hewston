@@ -13,7 +13,6 @@ from backend.utils.paths import (
     get_base_data_dir,
     get_catalog_path,
     get_raw_databento_dir,
-    get_derived_bars_dir,
     get_backtests_dir,
     ensure_dir,
 )
@@ -84,28 +83,7 @@ class TestPathUtilities:
         expected = Path(custom_base) / "backtests"
         assert result == expected
 
-    def test_get_derived_bars_dir_default(self):
-        """Test get_derived_bars_dir returns correct default path."""
-        with patch.dict(os.environ, {}, clear=True):
-            result = get_derived_bars_dir()
-            expected = Path("data") / "derived" / "bars"
-            assert result == expected
 
-    def test_get_derived_bars_dir_with_custom_base(self, monkeypatch):
-        """Test get_derived_bars_dir with custom base directory."""
-        custom_base = "/custom/base"
-        monkeypatch.setenv("HEWSTON_DATA_DIR", custom_base)
-
-        result = get_derived_bars_dir()
-        expected = Path(custom_base) / "derived" / "bars"
-        assert result == expected
-
-    def test_get_derived_bars_dir_with_symbol_and_year(self):
-        """Test get_derived_bars_dir with symbol and year parameters."""
-        with patch.dict(os.environ, {}, clear=True):
-            result = get_derived_bars_dir("AAPL", 2023)
-            expected = Path("data") / "derived" / "bars" / "AAPL" / "2023"
-            assert result == expected
 
     def test_get_backtests_dir_with_run_id(self):
         """Test get_backtests_dir with run_id parameter."""
@@ -121,19 +99,16 @@ class TestPathUtilities:
             base = get_base_data_dir()
             catalog = get_catalog_path()
             raw_databento = get_raw_databento_dir()
-            derived_bars = get_derived_bars_dir()
             backtests = get_backtests_dir()
 
             # All should be Path objects
             assert isinstance(base, Path)
             assert isinstance(catalog, Path)
             assert isinstance(raw_databento, Path)
-            assert isinstance(derived_bars, Path)
             assert isinstance(backtests, Path)
 
             # All should be relative to the same base (except catalog which has its own path)
             assert raw_databento.parents[1] == base
-            assert derived_bars.parents[1] == base
             assert backtests.parent == base
 
     def test_path_string_conversion(self):

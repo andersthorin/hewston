@@ -9,7 +9,7 @@ import pandas as pd
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from backend.services.backtests import list_runs_service, get_run_service
+from backend.services.backtests import list_backtests_service, get_backtest_service
 
 from uuid import uuid4
 from fastapi import Body, Header, HTTPException, Request, status, Query
@@ -91,7 +91,7 @@ async def list_backtests(
             "order": order,
         },
     )
-    return list_runs_service(
+    return list_backtests_service(
         symbol=symbol,
         strategy_id=strategy_id,
         from_date=from_date,
@@ -104,7 +104,7 @@ async def list_backtests(
 
 @router.get("/backtests/{run_id}")
 async def get_backtest(run_id: str):
-    data = get_run_service(run_id)
+    data = get_backtest_service(run_id)
     if not data:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -119,7 +119,7 @@ async def get_backtest_metrics(run_id: str):
     """Return metrics.json for a run.
     Shape: a flat JSON object with numeric fields (arbitrary keys allowed).
     """
-    run = get_run_service(run_id)
+    run = get_backtest_service(run_id)
     if not run:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -127,16 +127,22 @@ async def get_backtest_metrics(run_id: str):
         )
     metrics_path = ((run.get("artifacts") or {}).get("metrics_path"))
     try:
-        if not metrics_path:
-            raise FileNotFoundError("missing metrics_path")
         import os
+        if not metrics_path:
+            logger.warning("get_metrics.missing_path", extra={"run_id": run_id})
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": {"code": "ARTIFACT_MISSING", "message": f"metrics_path missing for backtest {run_id}"}},
+            )
         if not os.path.isfile(metrics_path):
-            raise FileNotFoundError(metrics_path)
+            logger.warning("get_metrics.file_not_found", extra={"run_id": run_id, "path": metrics_path})
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": {"code": "ARTIFACT_NOT_FOUND", "message": f"metrics file not found at {metrics_path}"}},
+            )
         with open(metrics_path, "r") as f:
             data = json.load(f)
         return JSONResponse(status_code=200, content=data)
-    except FileNotFoundError:
-        return JSONResponse(status_code=404, content={"error": {"code": "RUN_NOT_FOUND", "message": "metrics not available"}})
     except Exception as e:
         logger.exception("get_metrics.error", extra={"run_id": run_id, "error": str(e)[:200]})
         return JSONResponse(status_code=500, content={"error": {"code": "INTERNAL", "message": "failed to load metrics"}})
@@ -147,7 +153,7 @@ async def get_backtest_equity(run_id: str):
     """Return equity curve as list of points: { equity: [{timestamp, equity, drawdown?}] }.
     Parquet schema expected: columns ['ts_utc', 'value'] where ts_utc is datetime-like.
     """
-    run = get_run_service(run_id)
+    run = get_backtest_service(run_id)
     if not run:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -155,11 +161,19 @@ async def get_backtest_equity(run_id: str):
         )
     eq_path = ((run.get("artifacts") or {}).get("equity_path"))
     try:
-        if not eq_path:
-            raise FileNotFoundError("missing equity_path")
         import os
+        if not eq_path:
+            logger.warning("get_equity.missing_path", extra={"run_id": run_id})
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": {"code": "ARTIFACT_MISSING", "message": f"equity_path missing for backtest {run_id}"}},
+            )
         if not os.path.isfile(eq_path):
-            raise FileNotFoundError(eq_path)
+            logger.warning("get_equity.file_not_found", extra={"run_id": run_id, "path": eq_path})
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": {"code": "ARTIFACT_NOT_FOUND", "message": f"equity file not found at {eq_path}"}},
+            )
         import polars as pl
         df = pl.read_parquet(eq_path)
         # Accept legacy naming too; normalize to 'ts_utc'
@@ -183,8 +197,6 @@ async def get_backtest_equity(run_id: str):
                     pass
             points.append(pt)
         return JSONResponse(status_code=200, content={"equity": points})
-    except FileNotFoundError:
-        return JSONResponse(status_code=404, content={"error": {"code": "RUN_NOT_FOUND", "message": "equity not available"}})
     except Exception as e:
         logger.exception("get_equity.error", extra={"run_id": run_id, "error": str(e)[:200]})
         return JSONResponse(status_code=500, content={"error": {"code": "INTERNAL", "message": "failed to load equity"}})
@@ -196,7 +208,7 @@ async def get_backtest_orders(run_id: str):
     Parquet schema suggested in docs: ts_utc, side, qty, price, order_id, type, time_in_force, symbol?
     Response maps to aggregator-friendly shape.
     """
-    run = get_run_service(run_id)
+    run = get_backtest_service(run_id)
     if not run:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -204,11 +216,19 @@ async def get_backtest_orders(run_id: str):
         )
     path = ((run.get("artifacts") or {}).get("orders_path"))
     try:
-        if not path:
-            raise FileNotFoundError("missing orders_path")
         import os
+        if not path:
+            logger.warning("get_orders.missing_path", extra={"run_id": run_id})
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": {"code": "ARTIFACT_MISSING", "message": f"orders_path missing for backtest {run_id}"}},
+            )
         if not os.path.isfile(path):
-            raise FileNotFoundError(path)
+            logger.warning("get_orders.file_not_found", extra={"run_id": run_id, "path": path})
+            return JSONResponse(
+                status_code=status.HTTP_404_NOT_FOUND,
+                content={"error": {"code": "ARTIFACT_NOT_FOUND", "message": f"orders file not found at {path}"}},
+            )
         import polars as pl
         df = pl.read_parquet(path)
         rows = []
@@ -230,8 +250,6 @@ async def get_backtest_orders(run_id: str):
                 "commission": (float(r.get("commission")) if r.get("commission") is not None else None),
             })
         return JSONResponse(status_code=200, content={"orders": rows})
-    except FileNotFoundError:
-        return JSONResponse(status_code=404, content={"error": {"code": "RUN_NOT_FOUND", "message": "orders not available"}})
     except Exception as e:
         logger.exception("get_orders.error", extra={"run_id": run_id, "error": str(e)[:200]})
         return JSONResponse(status_code=500, content={"error": {"code": "INTERNAL", "message": "failed to load orders"}})

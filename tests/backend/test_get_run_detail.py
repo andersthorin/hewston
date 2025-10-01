@@ -36,9 +36,9 @@ def seed_one_run(db_path: str):
         )
         conn.execute(
             """
-            INSERT INTO runs (run_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
-                              code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
-                              fills_path, run_manifest_path)
+            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
+                                  code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
+                                  fills_path, run_manifest_path)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -69,7 +69,7 @@ def test_get_run_detail_shape(monkeypatch):
         monkeypatch.setattr(svc, "get_catalog", lambda: SqliteCatalog(db_path))
 
         client = TestClient(app)
-        r = client.get("/backtests/r100")
+        r = client.get("/api/v1/backtests/r100")
         assert r.status_code == 200
         j = r.json()
         # Core fields

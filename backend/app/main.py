@@ -47,10 +47,10 @@ def create_app() -> FastAPI:
             pass
         return response
 
-    # REST routes
-    app.include_router(health_router)
-    app.include_router(backtests_router)
-    app.include_router(bars_router)
+    # REST routes (canonical prefix)
+    app.include_router(health_router, prefix="/api/v1")
+    app.include_router(backtests_router, prefix="/api/v1")
+    app.include_router(bars_router, prefix="/api/v1")
 
     return app
 

@@ -48,7 +48,7 @@ def select_candidates(*, keep_latest: int, max_age_days: Optional[int]) -> Tuple
     # Order all runs by created_at DESC
     with cat._connect() as conn:  # type: ignore[attr-defined]
         rows = conn.execute(
-            "SELECT run_id, created_at FROM runs ORDER BY datetime(created_at) DESC"
+            "SELECT backtest_id AS run_id, created_at FROM backtests ORDER BY datetime(created_at) DESC"
         ).fetchall()
     run_ids_ordered = [r[0] for r in rows]
     kept = set(run_ids_ordered[: max(0, keep_latest)])
@@ -91,8 +91,8 @@ def apply_deletions(cands: List[Candidate]) -> Tuple[int, int]:
             continue
         try:
             with cat._connect() as conn:  # type: ignore[attr-defined]
-                conn.execute("DELETE FROM run_metrics WHERE run_id = ?", (c.run_id,))
-                conn.execute("DELETE FROM runs WHERE run_id = ?", (c.run_id,))
+                conn.execute("DELETE FROM backtest_metrics WHERE backtest_id = ?", (c.run_id,))
+                conn.execute("DELETE FROM backtests WHERE backtest_id = ?", (c.run_id,))
                 conn.commit()
         except Exception:
             # Best-effort: files are gone; log/skip DB error

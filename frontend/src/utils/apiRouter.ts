@@ -1,6 +1,6 @@
 /**
  * API routing logic for BFF vs backend endpoint selection.
- * 
+ *
  * This module provides routing logic that conditionally directs API calls
  * to BFF or backend endpoints based on feature flag configuration.
  */
@@ -24,92 +24,53 @@ class APIClientRouter {
   /**
    * Route API call to BFF or backend based on feature flag configuration.
    */
-  public async routeAPICall<T>(
+  routeAPICall = async <T,>(
     endpointGroup: EndpointGroup,
     endpoint: string,
     options: RequestInit & ApiRouterOptions = {}
-  ): Promise<T> {
+  ): Promise<T> => {
     const { allowFallback = false, timeout = 30000, ...requestOptions } = options
     const evaluation = featureFlagService.evaluateFeatureFlag(endpointGroup)
-    
+
     // Log routing decision for debugging
     this.logEndpointRouting(endpoint, evaluation.source, endpointGroup)
-    
+
     try {
       return await this.makeRequest<T>(evaluation, endpoint, requestOptions, timeout)
     } catch (error) {
-      // Attempt fallback if enabled, env-gated, and we were using BFF
-      const envFallback = import.meta.env.VITE_BFF_FALLBACK_ENABLED === 'true'
-      if (allowFallback && envFallback && evaluation.source === 'bff') {
-        console.warn(`BFF request failed for ${endpoint}, falling back to backend:`, error)
-        return await this.handleFallback<T>(endpointGroup, endpoint, requestOptions, timeout)
-      }
-      // Fallback disabled; rethrow original error
+      // No backend fallback: propagate BFF error immediately
       throw error
     }
-  }
+  };
 
   /**
    * Get effective base URL for specific endpoint group.
    */
-  public getEffectiveBaseURL(endpointGroup: EndpointGroup): string {
+  getEffectiveBaseURL = (endpointGroup: EndpointGroup): string => {
     const evaluation = featureFlagService.evaluateFeatureFlag(endpointGroup)
     return this.extractBaseUrl(evaluation.endpointUrl)
-  }
+  };
 
   /**
    * Handle fallback to backend when BFF fails.
    */
-  private async handleFallback<T>(
-    endpointGroup: EndpointGroup,
-    endpoint: string,
-    requestOptions: RequestInit,
-    timeout: number
-  ): Promise<T> {
-    // Force backend evaluation
-    const backendUrl = this.getBackendUrl(endpointGroup)
-    const fallbackEvaluation: FeatureFlagEvaluation = {
-      enabled: false,
-      endpointUrl: backendUrl,
-      source: 'backend'
-    }
 
-    // Map the logical endpoint to the backend shape for fallback
-    let fallbackEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
-    if (endpointGroup === 'chartData') {
-      // chart-data -> bars
-      if (fallbackEndpoint.startsWith('chart-data')) {
-        fallbackEndpoint = fallbackEndpoint.replace(/^chart-data/, 'bars')
-      }
-    } else if (endpointGroup === 'runData') {
-      // runs -> backtests, and stream -> ws
-      if (fallbackEndpoint.startsWith('runs')) {
-        fallbackEndpoint = fallbackEndpoint.replace(/^runs/, 'backtests')
-      }
-      if (/^backtests\/.+\/stream(\?|$)/.test(fallbackEndpoint)) {
-        fallbackEndpoint = fallbackEndpoint.replace(/\/stream(\?|$)/, '/ws$1')
-      }
-    }
-
-    this.logEndpointRouting(fallbackEndpoint, 'backend', endpointGroup, true)
-    return await this.makeRequest<T>(fallbackEvaluation, fallbackEndpoint, requestOptions, timeout)
-  }
 
   /**
    * Make the actual HTTP request.
    */
-  private async makeRequest<T>(
+  makeRequest = async <T,>(
     evaluation: FeatureFlagEvaluation,
     endpoint: string,
     requestOptions: RequestInit,
     timeout: number
-  ): Promise<T> {
+  ): Promise<T> => {
     const baseUrl = this.extractBaseUrl(evaluation.endpointUrl)
     const fullUrl = this.buildFullUrl(baseUrl, endpoint, evaluation.source)
-    
+
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeout)
-    
+
     try {
       const response = await fetch(fullUrl, {
         ...requestOptions,
@@ -119,24 +80,24 @@ class APIClientRouter {
           ...requestOptions.headers,
         },
       })
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
       }
-      
+
       return await response.json()
     } finally {
       clearTimeout(timeoutId)
     }
-  }
+  };
 
   /**
    * Build full URL based on endpoint and source.
    */
-  private buildFullUrl(baseUrl: string, endpoint: string, source: 'bff' | 'backend'): string {
+  buildFullUrl = (baseUrl: string, endpoint: string, source: 'bff' | 'backend'): string => {
     // Remove leading slash from endpoint if present
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
-    
+
     if (source === 'bff') {
       // BFF endpoints may need path transformation
       return this.transformBffEndpoint(baseUrl, cleanEndpoint)
@@ -144,12 +105,12 @@ class APIClientRouter {
       // Backend endpoints use direct path
       return `${baseUrl}/${cleanEndpoint}`
     }
-  }
+  };
 
   /**
    * Transform endpoint for BFF routing.
    */
-  private transformBffEndpoint(baseUrl: string, endpoint: string): string {
+  transformBffEndpoint = (baseUrl: string, endpoint: string): string => {
     // Map frontend endpoints to canonical BFF endpoints
     if (endpoint.startsWith('chart-data')) {
       // Preserve any tail (e.g. ?query)
@@ -161,42 +122,41 @@ class APIClientRouter {
     if (endpoint.startsWith('bars')) {
       return `${baseUrl}/api/v1/chart-data`
     } else if (endpoint.startsWith('backtests')) {
-      // Transform /backtests/{id} to /api/v1/runs/{id}/complete for aggregated data
-      const match = endpoint.match(/^backtests\/([^\/]+)(?:\/(.+))?$/)
-      if (match) {
-        const [, id, subpath] = match
-        if (!subpath) {
-          return `${baseUrl}/api/v1/runs/${id}/complete`
-        } else if (subpath === 'ws') {
-          return `${baseUrl}/api/v1/runs/${id}/stream`
-        }
+      // Handle list routes preserving query string
+      if (endpoint === 'backtests' || endpoint.startsWith('backtests?')) {
+        const tail = endpoint.slice('backtests'.length) // includes leading '?' if present
+        return `${baseUrl}/api/v1/backtests${tail}`
       }
-      return `${baseUrl}/api/v1/runs`
-    } else if (endpoint.startsWith('runs')) {
-      // Handle /runs endpoints for BFF
-      const match = endpoint.match(/^runs\/([^\/]+)(?:\/(.+))?$/)
+      // Transform backtests/{id}[/*] to canonical BFF endpoints
+      const match = endpoint.match(/^backtests\/([^\/\?]+)(?:\/(.+))?$/)
       if (match) {
         const [, id, subpath] = match
         if (!subpath) {
-          return `${baseUrl}/api/v1/runs/${id}/complete`
-        } else if (subpath === 'stream') {
-          return `${baseUrl}/api/v1/runs/${id}/stream`
+          // Default detail → complete aggregate
+          return `${baseUrl}/api/v1/backtests/${id}/complete`
+        } else if (subpath === 'complete') {
+          return `${baseUrl}/api/v1/backtests/${id}/complete`
+        } else if (subpath === 'stream' || subpath === 'ws') {
+          // Canonical WS path under backtests
+          return `${baseUrl}/api/v1/backtests/${id}/stream`
         } else {
-          return `${baseUrl}/api/v1/runs/${id}/${subpath}`
+          // Pass through other subpaths under backtests
+          return `${baseUrl}/api/v1/backtests/${id}/${subpath}`
         }
       }
-      // For /runs (list endpoint), add the /api/v1 prefix
-      return `${baseUrl}/api/v1/${endpoint}`
+      // Fallback: list
+      return `${baseUrl}/api/v1/backtests`
     }
+
 
     // Default: pass through
     return `${baseUrl}/${endpoint}`
-  }
+  };
 
   /**
    * Extract base URL from full endpoint URL.
    */
-  private extractBaseUrl(endpointUrl: string): string {
+  extractBaseUrl = (endpointUrl: string): string => {
     try {
       const url = new URL(endpointUrl)
       return `${url.protocol}//${url.host}`
@@ -204,14 +164,14 @@ class APIClientRouter {
       // Fallback: assume it's already a base URL
       return endpointUrl
     }
-  }
+  };
 
   /**
    * Get backend URL for specific endpoint group.
    */
-  private getBackendUrl(endpointGroup: EndpointGroup): string {
+  getBackendUrl = (endpointGroup: EndpointGroup): string => {
     const backendBase = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000'
-    
+
     switch (endpointGroup) {
       case 'chartData':
         return `${backendBase}/bars`
@@ -222,29 +182,29 @@ class APIClientRouter {
       default:
         return backendBase
     }
-  }
+  };
 
   /**
    * Log endpoint routing decision for debugging.
    */
-  private logEndpointRouting(
-    endpoint: string, 
-    target: 'bff' | 'backend', 
+  logEndpointRouting = (
+    endpoint: string,
+    target: 'bff' | 'backend',
     endpointGroup: EndpointGroup,
     isFallback = false
-  ): void {
+  ): void => {
     if (featureFlagService.getConfiguration().bffEnabled || import.meta.env.VITE_FEATURE_FLAG_DEBUG) {
       const prefix = isFallback ? '🔄 FALLBACK' : '🎯 ROUTING'
       console.log(`${prefix} [${endpointGroup}] ${endpoint} → ${target.toUpperCase()}`)
     }
-  }
+  };
 
   /**
    * Validate configuration and return any issues.
    */
-  public validateConfiguration(): string[] {
+  validateConfiguration = (): string[] => {
     return featureFlagService.validateConfiguration()
-  }
+  };
 }
 
 // Export singleton instance

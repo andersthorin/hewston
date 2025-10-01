@@ -1,0 +1,17 @@
+{
+  "run_id": "e2906a2a5ebf4f339e9546d16d356e1d",
+  "dataset_id": "TSLA-2024-1m",
+  "strategy_id": "sma_crossover",
+  "params": {},
+  "seed": 42,
+  "slippage_fees": {},
+  "speed": 60,
+  "run_from": "2024-10-01",
+  "run_to": "2024-11-05",
+  "code_hash": "a628ef4be23b67aca3df293c9141e079df4f440f",
+  "env_lock": null,
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-09-30T08:34:44.587066+00:00",
+  "status": "DONE"
+}

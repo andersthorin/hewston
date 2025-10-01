@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import time
 import uuid
 from pathlib import Path
@@ -10,9 +11,17 @@ import polars as pl
 
 from backend.adapters.nautilus import NautilusBacktestRunner
 from backend.adapters.sqlite_catalog import SqliteCatalog
+from backend.services.backtests import get_catalog
 from backend.utils.datetime import utc_now
 from backend.utils.git import get_git_commit_hash
 from backend.utils.paths import get_base_data_dir, get_backtests_dir, ensure_dir
+
+# Configure logging for backtest execution
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 
 def _write_parquet(records: list[dict], path: Path) -> None:
@@ -23,7 +32,7 @@ def _write_parquet(records: list[dict], path: Path) -> None:
 
 def run_backtest_and_persist(
     *,
-    dataset_id: str,
+    dataset_id: str | None = None,  # Optional - not needed for warehouse-based backtests
     strategy_id: str = "sma_crossover",
     params: Dict[str, Any] | None = None,
     seed: int = 42,
@@ -33,19 +42,25 @@ def run_backtest_and_persist(
     from_date: str | None = None,
     to_date: str | None = None,
 ) -> dict:
+    logger = logging.getLogger("backtest.job")
     params = params or {}
     slippage_fees = slippage_fees or {}
-    cat = SqliteCatalog()
+    cat = get_catalog()
 
-    created_at = utc_now()
-    code_hash = get_git_commit_hash()
+    logger.info(
+        f"Starting backtest: dataset={dataset_id}, strategy={strategy_id}, "
+        f"params={params}, from={from_date}, to={to_date}"
+    )
+
+    created_at_iso = utc_now().isoformat()
+    code_hash = get_git_commit_hash() or "unknown"
 
     # If run_id not supplied, create a new row (QUEUED)
     if not run_id:
         run_id = uuid.uuid4().hex
         # Prepare manifest path for DB row
         manifest_path_tmp = get_backtests_dir(run_id) / "run-manifest.json"
-        cat.create_run(
+        cat.create_backtest(
             run_id=run_id,
             dataset_id=dataset_id,
             strategy_id=strategy_id,
@@ -54,40 +69,59 @@ def run_backtest_and_persist(
             slippage_fees_json=json.dumps(slippage_fees, sort_keys=True),
             speed=speed,
             code_hash=code_hash,
-            created_at=created_at,
+            created_at=created_at_iso,
             status="QUEUED",
             run_manifest_path=str(manifest_path_tmp),
             input_hash=None,
             idempotency_key=None,
         )
 
-    # Prepare paths
+    # Prepare paths (absolute)
     out_dir = get_backtests_dir(run_id)
-    equity_path = out_dir / "equity.parquet"
-    orders_path = out_dir / "orders.parquet"
-    fills_path = out_dir / "fills.parquet"
-    metrics_path = out_dir / "metrics.json"
-    manifest_path = out_dir / "run-manifest.json"
+    out_dir_abs = out_dir.resolve()
+    ensure_dir(out_dir_abs)
+    equity_path = (out_dir_abs / "equity.parquet")
+    orders_path = (out_dir_abs / "orders.parquet")
+    fills_path = (out_dir_abs / "fills.parquet")
+    metrics_path = (out_dir_abs / "metrics.json")
+    manifest_path = (out_dir_abs / "run-manifest.json")
 
     # Move to RUNNING
-    cat.set_run_status(run_id, status="RUNNING")
+    cat.set_backtest_status(run_id, status="RUNNING")
+
+    # Do NOT prepare or derive datasets here; admin-only via CLI/APIs.
+    # If dataset is missing/not-ready, the runner will raise and we record ERROR.
 
     t0 = time.perf_counter()
     try:
+        logger.info("Initializing Nautilus backtest runner...")
         runner = NautilusBacktestRunner()
+
+        logger.info("Running backtest...")
         result = runner.run(
             dataset_id=dataset_id, strategy_id=strategy_id, params=params, seed=seed,
             from_date=from_date, to_date=to_date,
         )
         duration_ms = int((time.perf_counter() - t0) * 1000)
 
+        # Log result summary
+        logger.info(
+            f"Backtest completed in {duration_ms}ms: "
+            f"{len(result.get('orders', []))} orders, "
+            f"{len(result.get('fills', []))} fills, "
+            f"{len(result.get('equity', []))} equity points"
+        )
+        logger.info(f"Metrics: {result.get('metrics', {})}")
+
         # Write artifacts
+        logger.info("Writing artifacts to disk...")
         _write_parquet(result.get("equity", []), equity_path)
         _write_parquet(result.get("orders", []), orders_path)
         _write_parquet(result.get("fills", []), fills_path)
         metrics = result.get("metrics", {})
         ensure_dir(out_dir)
         metrics_path.write_text(json.dumps(metrics, indent=2))
+        logger.info(f"Artifacts written to {out_dir}")
 
         # Write manifest
         manifest = {
@@ -104,12 +138,13 @@ def run_backtest_and_persist(
             "env_lock": None,
             "calendar_version": "NAZDAQ-v1",
             "tz": "America/New_York",
-            "created_at": created_at,
+            "created_at": created_at_iso,
+            "status": "DONE",
         }
         manifest_path.write_text(json.dumps(manifest, indent=2))
 
         # Finalize DB row to DONE + metrics table
-        cat.set_run_status(
+        cat.set_backtest_status(
             run_id,
             status="DONE",
             duration_ms=duration_ms,
@@ -118,10 +153,11 @@ def run_backtest_and_persist(
             orders_path=str(orders_path),
             fills_path=str(fills_path),
         )
-        cat.upsert_run_metrics(run_id, metrics)
+        cat.upsert_backtest_metrics(run_id, metrics)
 
         return {
             "run_id": run_id,
+            "status": "DONE",
             "duration_ms": duration_ms,
             "paths": {
                 "metrics": str(metrics_path),
@@ -131,16 +167,51 @@ def run_backtest_and_persist(
                 "manifest": str(manifest_path),
             },
         }
-    except Exception as e:
+    except BaseException as e:
+        # Fail hard: mark as ERROR, write manifest with error, do not write artifacts
         duration_ms = int((time.perf_counter() - t0) * 1000)
-        cat.set_run_status(run_id, status="ERROR", duration_ms=duration_ms)
+        ensure_dir(out_dir)
+        error_payload = {
+            "error_type": type(e).__name__,
+            "error_message": str(e),
+        }
+        manifest = {
+            "run_id": run_id,
+            "dataset_id": dataset_id,
+            "strategy_id": strategy_id,
+            "params": params,
+            "seed": seed,
+            "slippage_fees": slippage_fees,
+            "speed": speed,
+            "run_from": from_date,
+            "run_to": to_date,
+            "code_hash": code_hash,
+            "env_lock": None,
+            "calendar_version": "NAZDAQ-v1",
+            "tz": "America/New_York",
+            "created_at": created_at_iso,
+            "status": "ERROR",
+            "error": error_payload,
+        }
         try:
-            import logging
-            logging.getLogger(__name__).error(
-                "run.error",
-                extra={"run_id": run_id, "duration_ms": duration_ms, "code": "RUNNER_ERROR", "message": str(e)[:200]},
-            )
+            manifest_path.write_text(json.dumps(manifest, indent=2))
         except Exception:
             pass
-        raise
+
+        # Update DB row to ERROR; do not set artifact paths
+        cat.set_backtest_status(
+            run_id,
+            status="ERROR",
+            duration_ms=duration_ms,
+        )
+
+        return {
+            "run_id": run_id,
+            "status": "ERROR",
+            "duration_ms": duration_ms,
+            "error": error_payload,
+            "paths": {
+                "manifest": str(manifest_path),
+            },
+        }
 

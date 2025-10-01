@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react'
-import { useRunPlayback } from '../services/ws'
+import { useBacktestPlayback } from '../services/ws'
 import type { WebSocketHealth } from '../services/websocket'
 import { featureFlagService } from '../services/featureFlags'
 
@@ -51,8 +51,8 @@ export interface WebSocketConnectionStatus {
 /**
  * Hook for monitoring WebSocket health and performance.
  */
-export function useWebSocketHealth(runId: string) {
-  const playback = useRunPlayback(runId)
+export function useWebSocketHealth(backtestId: string) {
+  const playback = useBacktestPlayback(backtestId)
   const [performanceMetrics, setPerformanceMetrics] = useState<WebSocketPerformanceMetrics>({
     currentFPS: 0,
     averageFPS: 0,
@@ -189,7 +189,7 @@ export function useWebSocketHealth(runId: string) {
  * Hook for WebSocket performance monitoring with alerts.
  */
 export function useWebSocketPerformanceMonitor(
-  runId: string,
+  backtestId: string,
   options: {
     fpsThreshold?: number
     latencyThreshold?: number
@@ -204,7 +204,7 @@ export function useWebSocketPerformanceMonitor(
     onPerformanceAlert
   } = options
 
-  const { performanceMetrics, connectionStatus } = useWebSocketHealth(runId)
+  const { performanceMetrics, connectionStatus } = useWebSocketHealth(backtestId)
   const [alerts, setAlerts] = useState<PerformanceAlert[]>([])
 
   // Monitor performance and generate alerts
