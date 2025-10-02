@@ -214,16 +214,46 @@ def _precompute_metrics_from_equity(equity_rows: List[dict]) -> Dict[str, List[O
 
 
 
-def _select_hourly_indices(equity_rows: List[dict]) -> List[int]:
+def _select_hourly_indices(equity_rows: List[dict], rth_only: bool = False) -> List[int]:
     """Return indices of the last equity point within each UTC hour.
+    Optionally filter to Regular Trading Hours (RTH) in America/New_York (09:30–16:00), Mon–Fri.
     Uses epoch seconds from normalize_timestamp(ts_utc) to bucket by hour.
     """
     hour_to_idx: Dict[int, int] = {}
+
+    def _is_rth(epoch_sec: int) -> bool:
+        if not rth_only:
+            return True
+        try:
+            from datetime import datetime, timezone
+            try:
+                from zoneinfo import ZoneInfo  # Python 3.9+
+            except Exception:
+                # Fallback: treat as always RTH if zoneinfo missing
+                return True
+            dt_utc = _dt.fromtimestamp(epoch_sec, tz=_dt.timezone.utc) if hasattr(_dt, 'timezone') else datetime.fromtimestamp(epoch_sec, tz=timezone.utc)
+            ny = dt_utc.astimezone(ZoneInfo("America/New_York"))
+            # Weekday 0=Mon..4=Fri
+            if ny.weekday() > 4:
+                return False
+            h, m = ny.hour, ny.minute
+            # RTH: 09:30 <= time < 16:00 local
+            if h < 9 or h > 15:
+                # allow 9:30+ and any 10..15; exclude 16:xx
+                return (h == 9 and m >= 30) if h == 9 else False
+            if h == 9:
+                return m >= 30
+            return True
+        except Exception:
+            return True
+
     for i, er in enumerate(equity_rows):
         try:
             epoch, _ = normalize_timestamp(er.get("ts_utc"))
-            hour_bucket = epoch // 3600
-            # Always keep the last index encountered for this hour
+            if not _is_rth(int(epoch)):
+                continue
+            hour_bucket = int(epoch) // 3600
+            # Keep last index encountered for this hour
             hour_to_idx[hour_bucket] = i
         except Exception:
             # Skip rows with invalid timestamps
@@ -239,12 +269,13 @@ async def produce_frames(
     speed: float = 1.0,
     realtime: bool = False,
     cadence: str = "1m",
+    rth_only: bool = True,
 ) -> AsyncGenerator[StreamFrame, None]:
     """
-    Async generator producing StreamFrame from run artifacts, optionally resampled to cadence and decimated to ~fps.
+    Async generator producing StreamFrame from run artifacts, optionally resampled to cadence, with optional RTH-only filtering, and paced to ~fps.
     - cadence: "1m" (default) emits every equity point; "1h" emits last point per UTC hour.
+    - rth_only: when True, include only points within 09:30-16:00 America/New_York, Mon-Fri.
     - If realtime=True, sleeps between frames according to fps and speed; else yields as fast as possible (test mode).
-    - Decimation: selects approximately ceil(N / max_frames) stride.
     """
     # Load and validate artifacts
     artifacts, dataset_id = _resolve_artifacts(run_id)
@@ -265,7 +296,7 @@ async def produce_frames(
     # Determine indices to emit based on cadence
     n_equity = len(equity_rows)
     if cadence == "1h":
-        indices = _select_hourly_indices(equity_rows)
+        indices = _select_hourly_indices(equity_rows, rth_only=rth_only)
     else:
         indices = list(range(n_equity))
 
@@ -318,6 +349,14 @@ async def produce_frames(
                 metrics=mi,
                 dropped=dropped,
             )
+            # Include total_frames on the first emitted frame for UI progress
+            if produced == 0:
+                try:
+                    # dataclass has optional field; attach if available
+                    frame.total_frames = total  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+
             # TEMP DEBUG: log first 20 backend frames with ts and equity
             if debug_count < 20:
                 try:

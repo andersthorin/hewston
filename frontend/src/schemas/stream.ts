@@ -10,21 +10,23 @@ export type Ctrl = z.infer<typeof CtrlSchema>
 
 export const StreamFrameSchema = z.object({
   t: z.literal('frame'),
-  ts: z.string(),
+  ts: z.string().optional(),
   ohlc: z
     .object({ o: z.number().optional(), h: z.number().optional(), l: z.number().optional(), c: z.number().optional(), v: z.number().optional() })
     .nullable()
     .optional(),
-  orders: z.array(z.any()),
-  equity: z.object({ ts: z.string(), value: z.number() }).nullable().optional(),
+  orders: z.array(z.any()).nullable().optional(),
+  equity: z.any().nullable().optional(),
   metrics: z
     .object({
       total_return_so_far: z.number().nullable().optional(),
       max_drawdown_so_far: z.number().nullable().optional(),
       sharpe_so_far: z.number().nullable().optional(),
     })
+    .nullable()
     .optional(),
-  dropped: z.number().int().nonnegative(),
+  total_frames: z.number().int().positive().optional(),
+  dropped: z.number().int().nonnegative().optional(),
 })
 export type StreamFrameT = z.infer<typeof StreamFrameSchema>
 

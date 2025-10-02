@@ -13,6 +13,7 @@ class StreamFrame:
     equity: Optional[Dict[str, Any]]  # { ts, value }
     metrics: Optional[Dict[str, float]] = None  # E11: per-frame running metrics
     dropped: int = 0
+    total_frames: Optional[int] = None  # optional total number of frames for this stream
 
 
 class Control:

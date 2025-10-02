@@ -37,6 +37,14 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
     true, // rth_only
     !!symbol && !!from && !!to
   )
+  useEffect(() => {
+    if (!isHourLoading && !isHourErr) {
+      const count = hourResp?.bars?.length ?? 0
+      console.debug('[RunPlayer] hourly API loaded', { count, symbol, from, to })
+    } else if (isHourErr) {
+      console.debug('[RunPlayer] hourly API error for', { symbol, from, to })
+    }
+  }, [isHourLoading, isHourErr, hourResp, symbol, from, to])
 
   const { state, onPlay, onPause, onSeek, subscribe } = useBacktestPlayback(backtest_id)
 
@@ -47,6 +55,8 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
 
   // Reflect playing state into store
   useEffect(() => { playbackStore._setPlaying(state.playing) }, [state.playing])
+
+  const recvCountRef = useRef(0)
 
   // Track the actual run window; prefer props (from manifest) and fall back to streaming inference
   const [runFrom, setRunFrom] = useState<string | null>(run_from ?? null)
@@ -61,12 +71,21 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   useEffect(() => {
     const unsub = subscribe((frame: StreamFrameData) => {
       try {
+        recvCountRef.current += 1
+        if (recvCountRef.current <= 50) {
+          const t = (frame as any)?.equity?.ts || (frame as any)?.ts
+          console.debug('[RunPlayer] subscribe: frame received', { n: recvCountRef.current, ts: t })
+        }
         // Always forward frame to playback store
         // @ts-ignore using compatible types
         playbackStore._setFrame(frame as any)
 
-        // Infer run window only if not provided via props
         const tsStr: string | undefined = frame?.equity?.ts || frame?.ts
+        const ohlc = (frame as any).ohlc as { o?: number; h?: number; l?: number; c?: number } | undefined
+        const hasOhlc = !!(ohlc && ohlc.o != null && ohlc.h != null && ohlc.l != null && ohlc.c != null)
+        const hasSnapshots = !!(dailySnapshotsRef.current && dayKeysRef.current && dayKeysRef.current.length > 0)
+
+        // Infer run window only if not provided via props
         if (tsStr && !(run_from && run_to)) {
           const day = tsStr.slice(0, 10)
           setRunFrom(prev => (prev && prev <= day ? prev : day))
@@ -76,19 +95,20 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
         // Drive the chart from streaming frames first; fall back to hourly snapshots if needed
         if (tsStr) {
           const y = parseInt(tsStr.slice(0,4)), m = parseInt(tsStr.slice(5,7)), d = parseInt(tsStr.slice(8,10))
-          const ohlc = (frame as any).ohlc as { o?: number; h?: number; l?: number; c?: number } | undefined
-          if (ohlc && ohlc.o != null && ohlc.h != null && ohlc.l != null && ohlc.c != null) {
+          if (hasOhlc) {
             const timeVal: Time = (viewMode === 'daily')
               ? ({ year: y, month: m, day: d } as Time)
               : (Math.floor(new Date(tsStr).getTime() / 1000) as unknown as Time)
-            const dp: CandlestickData = { time: timeVal, open: ohlc.o, high: ohlc.h, low: ohlc.l, close: ohlc.c }
+            const dp: CandlestickData = { time: timeVal, open: ohlc!.o!, high: ohlc!.h!, low: ohlc!.l!, close: ohlc!.c! }
+            console.debug('[RunPlayer] frame branch=streaming-ohlc', { ts: tsStr, dp, seeded: seededRef.current, viewMode })
             if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
             ohlcRef.current?.scrollToLatest()
             seededRef.current = true
             lastDayRef.current = tsStr.slice(0,10)
-          } else if (dailySnapshotsRef.current && dayKeysRef.current && dayKeysRef.current.length > 0) {
+          } else if (hasSnapshots) {
             const day = tsStr.slice(0, 10)
-            const snaps = dailySnapshotsRef.current.get(day) || []
+            const snaps = dailySnapshotsRef.current!.get(day) || []
+            console.debug('[RunPlayer] frame branch=snapshots', { ts: tsStr, day, snaps: snaps.length, seeded: seededRef.current, viewMode })
             if (snaps.length > 0) {
               // Find the latest snapshot at or before current streaming time
               let idx = snaps.length - 1
@@ -104,12 +124,18 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
                   ? ({ year: y, month: m, day: d } as Time)
                   : (Math.floor(new Date(s.t).getTime() / 1000) as unknown as Time)
                 const dp: CandlestickData = { time: timeVal, open: s.o, high: s.h, low: s.l, close: s.c }
+                console.debug('[RunPlayer] apply snapshot dp', { ts: tsStr, dp })
                 if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
                 if (day !== lastDayRef.current || !seededRef.current) { ohlcRef.current?.scrollToLatest() }
                 seededRef.current = true
                 lastDayRef.current = day
               }
             }
+          } else {
+            // Buffer frames until snapshots are available, then flush
+            bufferedFramesRef.current.push(frame)
+            if (bufferedFramesRef.current.length > 500) bufferedFramesRef.current.shift()
+            console.debug('[RunPlayer] frame branch=none (buffering until snapshots ready)', { ts: tsStr, buffered: bufferedFramesRef.current.length })
           }
         }
       } catch (error) {
@@ -130,6 +156,7 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   const hourIdxRef = useRef<number>(0)
 
   const lastDayRef = useRef<string | null>(null)
+  const bufferedFramesRef = useRef<StreamFrameData[]>([])
 
 
   // Group hourly bars by day and precompute cumulative daily snapshots per hour
@@ -170,10 +197,6 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
       const tsDate = new Date(b.t)
       const day = tsDate.toISOString().slice(0, 10)
       if (curDay !== day) {
-        // flush previous day if any
-        if (curDay && o != null && c != null && isFinite(h) && isFinite(l)) {
-          // ensure we pushed the last snapshot for the previous day
-        }
         curDay = day; o = null; h = -Infinity; l = Infinity; c = null
       }
       o = o ?? b.o; h = Math.max(h, b.h); l = Math.min(l, b.l); c = b.c
@@ -196,8 +219,56 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
     dailySnapshotsRef.current = filtered
     dayKeysRef.current = keys
 
+    console.debug('[RunPlayer] snapshots built', { days: keys.length, first: keys[0], last: keys[keys.length-1] })
     setSnapshotsVersion((v) => v + 1)
   }, [hourResp, runFrom, runTo])
+
+  // When snapshots become available, flush any buffered frames that arrived earlier
+  useEffect(() => {
+    const hasSnapshots = !!(dailySnapshotsRef.current && dayKeysRef.current && dayKeysRef.current.length > 0)
+    if (!hasSnapshots) return
+    if (bufferedFramesRef.current.length === 0) return
+
+    console.debug('[RunPlayer] flushing buffered frames', { count: bufferedFramesRef.current.length })
+    const frames = bufferedFramesRef.current.splice(0)
+    // sort by timestamp to replay in order
+    frames.sort((a, b) => {
+      const ta = new Date((a.equity?.ts || a.ts) as string).getTime()
+      const tb = new Date((b.equity?.ts || b.ts) as string).getTime()
+      return ta - tb
+    })
+
+    for (const f of frames) {
+      try {
+        const tsStr: string | undefined = (f as any)?.equity?.ts || (f as any)?.ts
+        if (!tsStr) continue
+        const y = parseInt(tsStr.slice(0,4)), m = parseInt(tsStr.slice(5,7)), d = parseInt(tsStr.slice(8,10))
+        const day = tsStr.slice(0, 10)
+        const snaps = dailySnapshotsRef.current!.get(day) || []
+        if (snaps.length === 0) continue
+        // pick the best snapshot at or before ts
+        let idx = snaps.length - 1
+        const tms = new Date(tsStr).getTime()
+        for (let i = snaps.length - 1; i >= 0; i--) {
+          const si: any = snaps[i]
+          const sms = new Date(si.t).getTime()
+          if (sms <= tms) { idx = i; break }
+        }
+        const s: any = snaps[idx]
+        if (!s) continue
+        const timeVal: Time = (viewMode === 'daily')
+          ? ({ year: y, month: m, day: d } as Time)
+          : (Math.floor(new Date(s.t).getTime() / 1000) as unknown as Time)
+        const dp: CandlestickData = { time: timeVal, open: s.o, high: s.h, low: s.l, close: s.c }
+        if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
+        if (day !== lastDayRef.current || !seededRef.current) { ohlcRef.current?.scrollToLatest() }
+        seededRef.current = true
+        lastDayRef.current = day
+      } catch (err) {
+        console.warn('[RunPlayer] failed to flush buffered frame', err)
+      }
+    }
+  }, [snapshotsVersion, viewMode])
 
   // Chart is now driven by streaming frames (see subscribe effect above) to keep it in sync with the scrubber.
   useEffect(() => {

@@ -34,6 +34,7 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
       try {
         const series = seriesRef.current as CandlestickSeriesApi | null
         series?.update(dp)
+        console.debug('[ChartOHLC] update', dp)
       } catch (error) {
         console.warn('Failed to update chart data:', error)
       }

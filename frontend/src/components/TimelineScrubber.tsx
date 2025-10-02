@@ -10,16 +10,22 @@ export default function TimelineScrubber({ stepSeconds = 60 }: TimelineScrubberP
   const range = usePlaybackSelector(selectors.range)
   const current = usePlaybackSelector(selectors.currentTs)
   const markers = usePlaybackSelector(selectors.filteredMarkers)
+  const totalFrames = usePlaybackSelector(selectors.totalFrames)
+  const currentFrameIndex = usePlaybackSelector(selectors.currentFrameIndex)
   const barRef = useRef<HTMLDivElement | null>(null)
 
   const pct = useMemo(() => {
+    if (typeof totalFrames === 'number' && totalFrames > 0) {
+      const p = (currentFrameIndex / totalFrames) * 100
+      return Math.min(100, Math.max(0, p))
+    }
     if (!current || !range.start || !range.end) return 0
     const cur = new Date(current).getTime()
     const start = new Date(range.start).getTime()
     const end = new Date(range.end).getTime()
     if (!(isFinite(cur) && isFinite(start) && isFinite(end) && end > start)) return 0
     return Math.min(100, Math.max(0, ((cur - start) / (end - start)) * 100))
-  }, [current, range.start, range.end])
+  }, [current, range.start, range.end, totalFrames, currentFrameIndex])
 
   const seekToPct = useCallback((p: number) => {
     if (!range.start || !range.end) return

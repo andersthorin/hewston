@@ -3,6 +3,7 @@ import type { StreamFrameT } from '../schemas/stream'
 import type { WorkerOutMessage } from '../types/streaming'
 import { createWebSocketManager, type BFFWebSocketManager, type WebSocketHealth } from './websocket'
 import { featureFlagService } from './featureFlags'
+import { DEFAULT_FPS } from '../constants'
 
 // Dev logging helper (only logs in Vite dev)
 const devLog = (...args: unknown[]) => {
@@ -44,6 +45,12 @@ export function useBacktestPlayback(backtestId: string) {
   const feRawDebugRef = useRef<number>(0)
 
   const notify = useCallback((f: StreamFrameT) => {
+    if (framesSeenRef.current <= 20) {
+      try {
+        // eslint-disable-next-line no-console
+        console.debug('[notify->subs]', { n: framesSeenRef.current, ts: (f as any)?.equity?.ts || (f as any)?.ts })
+      } catch {}
+    }
     subsRef.current.forEach((cb) => cb(f))
     setState((s) => ({ ...s, dropped: f.dropped }))
   }, [])
@@ -60,11 +67,17 @@ export function useBacktestPlayback(backtestId: string) {
   useEffect(() => {
     // Initialize worker
     const worker = new Worker(new URL('../workers/streamParser.ts', import.meta.url), { type: 'module' })
-    worker.postMessage({ type: 'init', fps: 30 })
+    worker.postMessage({ type: 'init', fps: DEFAULT_FPS })
     worker.onmessage = (ev: MessageEvent<WorkerOutMessage>) => {
       const msg = ev.data
       if (msg.type === 'frame') {
         framesSeenRef.current += 1
+        if (framesSeenRef.current <= 20) {
+          try {
+            // eslint-disable-next-line no-console
+            console.debug('[fe-worker->main]', { n: framesSeenRef.current, ts: (msg.data as any)?.equity?.ts || (msg.data as any)?.ts })
+          } catch {}
+        }
         notify(msg.data as StreamFrameT)
         // Stop keep-alive play retries after first frame
         if (playRetryTimerRef.current) { clearInterval(playRetryTimerRef.current); playRetryTimerRef.current = null }
@@ -75,6 +88,14 @@ export function useBacktestPlayback(backtestId: string) {
         console.debug('Worker ready')
       }
     }
+    // Capture worker fatal errors (outside its postMessage protocol)
+    worker.addEventListener('error', (e) => {
+      try { console.error('[worker.onerror]', e.message || e) } catch {}
+      setState((s) => ({ ...s, status: 'error', playing: false }))
+    })
+    worker.addEventListener('messageerror', (e) => {
+      try { console.error('[worker.messageerror]', e.data) } catch {}
+    })
     workerRef.current = worker
 
     // Initialize BFF-aware WebSocket manager
@@ -135,7 +156,13 @@ export function useBacktestPlayback(backtestId: string) {
             } catch {}
             feRawDebugRef.current += 1
           }
-          worker.postMessage({ type: 'frame', payload: msg })
+          try {
+            // eslint-disable-next-line no-console
+            if (feRawDebugRef.current <= 20) console.debug('[main->worker] post frame', { n: feRawDebugRef.current })
+            worker.postMessage({ type: 'frame', payload: msg })
+          } catch (err) {
+            console.error('Failed to post frame to worker', err)
+          }
         } else if (msg.t === 'err') {
           console.warn('Stream error from server:', msg)
           setState((s) => ({ ...s, status: 'error', playing: false }))
@@ -151,13 +178,19 @@ export function useBacktestPlayback(backtestId: string) {
         clearInterval(playRetryTimerRef.current)
         playRetryTimerRef.current = null
       }
-      setState((s) => ({ ...s, status: 'error', playing: false }))
+      // Reflect manager state to avoid sticky 'error' during auto-reconnects
+      const mgrState = wsManager.getState()
+      const nextStatus: PlaybackState['status'] = (mgrState === 'reconnecting' || mgrState === 'connecting') ? 'connecting' : 'error'
+      setState((s) => ({ ...s, status: nextStatus, playing: false }))
       updateHealthInfo(wsManager.getHealth())
     })
 
     const unsubscribeError = wsManager.addEventListener('error', (error: Event) => {
       console.warn('WebSocket error:', error)
-      setState((s) => ({ ...s, status: 'error', playing: false }))
+      // If auto-reconnect is enabled, show 'connecting' to avoid frozen/error UX
+      const mgrState = wsManager.getState()
+      const nextStatus: PlaybackState['status'] = (mgrState === 'reconnecting' || mgrState === 'connecting') ? 'connecting' : 'error'
+      setState((s) => ({ ...s, status: nextStatus, playing: false }))
       updateHealthInfo(wsManager.getHealth())
     })
 

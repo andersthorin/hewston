@@ -19,7 +19,7 @@ DEFAULT_CATALOG_PATH = "data/catalog.db"
 DEFAULT_DATA_DIR = "data"
 
 # Streaming Configuration
-DEFAULT_FPS = 30
+DEFAULT_FPS = 7
 DEFAULT_SPEED = 60
 HEARTBEAT_SECONDS = 5.0
 

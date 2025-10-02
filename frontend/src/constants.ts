@@ -23,14 +23,14 @@ export const CANDLESTICK_BAR_WIDTH = 14  // Fixed daily bar width (12-16px range
 export const CHART_MARGIN = { top: 10, right: 30, bottom: 30, left: 60 }
 
 // Streaming Configuration
-export const DEFAULT_FPS = 30
+export const DEFAULT_FPS = 7
 export const DEFAULT_SPEED = 60
 export const HEARTBEAT_INTERVAL_MS = 5000
 export const RECONNECT_DELAY_MS = 1000
 export const MAX_RECONNECT_ATTEMPTS = 5
 
 // Worker Configuration
-export const STREAM_PARSER_TARGET_MS = 1000 / 30  // 30 FPS target
+export const STREAM_PARSER_TARGET_MS = 1000 / DEFAULT_FPS
 export const MIN_FRAME_INTERVAL_MS = 16  // ~60 FPS max
 
 // Query Configuration

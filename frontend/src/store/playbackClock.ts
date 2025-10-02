@@ -11,6 +11,8 @@ export type PlaybackState = {
   markersMeta?: Array<{ ts: string; sym?: string }>
   focusedSymbol: string | null
   symbolsSeen: string[]
+  totalFrames?: number
+  currentFrameIndex: number
   // Live, client-computed metrics (used when server doesn't stream ..._so_far fields)
   metricsLive?: {
     total_return_so_far?: number
@@ -46,6 +48,8 @@ const initial: PlaybackState = {
   markersMeta: [],
   focusedSymbol: null,
   symbolsSeen: [],
+  totalFrames: undefined,
+  currentFrameIndex: 0,
   metricsLive: undefined,
 }
 
@@ -60,19 +64,34 @@ function createPlaybackStore(): PlaybackStore {
   let lastEquity: number | null = null
 
   const emit = () => subs.forEach((cb) => cb())
+  let debugCount = 0
 
   const store: PlaybackStore = {
     getState: () => state,
     subscribe: (cb) => { subs.add(cb); return () => subs.delete(cb) },
     _setFrame: (f) => {
+      const incomingTotal = (f as any)?.total_frames
+      const nextIdx = ((state as any).currentFrameIndex ?? 0) + 1
+
       state = {
         ...state,
         frame: f,
         currentSimTime: (f?.equity?.ts || f?.ts) ?? state.currentSimTime,
+        currentFrameIndex: nextIdx,
+        totalFrames: (state as any).totalFrames ?? (typeof incomingTotal === 'number' ? incomingTotal : undefined),
+      }
+
+      if (debugCount < 20) {
+        try {
+          // eslint-disable-next-line no-console
+          console.debug('[playback._setFrame]', { idx: nextIdx, ts: state.currentSimTime, total: state.totalFrames })
+        } catch {}
+        debugCount += 1
       }
 
       // Compute client-side running metrics from equity if present
-      const eq = f?.equity?.value
+      const rawEq: any = (f as any)?.equity?.value
+      const eq = typeof rawEq === 'number' ? rawEq : (rawEq != null ? Number(rawEq) : undefined)
       if (typeof eq === 'number' && isFinite(eq)) {
         if (initialEquity == null) initialEquity = eq
         if (peakEquity == null || eq > peakEquity) peakEquity = eq
@@ -121,11 +140,11 @@ function createPlaybackStore(): PlaybackStore {
     },
     _setPlaying: (p) => { state = { ...state, playing: p }; emit() },
     _setRange: (r) => {
-      // Reset client-side running metrics when run window changes
+      // Reset client-side running metrics and frame counters when run window changes
       initialEquity = null
       peakEquity = null
       lastEquity = null
-      state = { ...state, range: r, metricsLive: undefined }
+      state = { ...state, range: r, metricsLive: undefined, currentFrameIndex: 0, totalFrames: undefined }
       emit()
     },
     _addMarkers: (ts) => { state = { ...state, markers: dedupeAppend(state.markers, ts) }; emit() },
@@ -183,6 +202,8 @@ export const selectors = {
   markersMeta: (s: PlaybackState) => (s as any).markersMeta ?? [],
   focusedSymbol: (s: PlaybackState) => (s as any).focusedSymbol ?? null,
   symbolsSeen: (s: PlaybackState) => (s as any).symbolsSeen ?? [],
+  totalFrames: (s: PlaybackState) => (s as any).totalFrames as number | undefined,
+  currentFrameIndex: (s: PlaybackState) => (s as any).currentFrameIndex as number,
   metricsLive: (s: PlaybackState) => (s as any).metricsLive,
   filteredMarkers: (() => {
     // Memoize by reference to avoid useSyncExternalStore getSnapshot churn

@@ -47,6 +47,7 @@ export interface StreamFrameData {
     max_drawdown_so_far?: number | null
     sharpe_so_far?: number | null
   }
+  total_frames?: number        // total number of frames to expect (optional, first frame)
   dropped: number              // number of dropped frames
 }
 

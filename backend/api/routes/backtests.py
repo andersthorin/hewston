@@ -14,6 +14,8 @@ from backend.services.backtests import list_backtests_service, get_backtest_serv
 from uuid import uuid4
 from fastapi import Body, Header, HTTPException, Request, status, Query
 from fastapi.responses import JSONResponse, StreamingResponse
+from backend.constants import DEFAULT_FPS
+
 
 
 def _json_default(o):
@@ -293,7 +295,7 @@ async def backtests_ws_echo(websocket: WebSocket, run_id: str) -> None:
         async def _run():
             nonlocal frames_sent, last_dropped
             try:
-                async for fr in produce_frames(run_id=run_id, fps=10, speed=1.0, realtime=True, cadence="1h"):
+                async for fr in produce_frames(run_id=run_id, fps=DEFAULT_FPS, speed=1.0, realtime=True, cadence="1h"):
                     d = {
                         "t": fr.t,
                         "ts": fr.ts,
@@ -302,6 +304,7 @@ async def backtests_ws_echo(websocket: WebSocket, run_id: str) -> None:
                         "equity": fr.equity,
                         "metrics": fr.metrics,
                         "dropped": fr.dropped,
+                        "total_frames": getattr(fr, "total_frames", None),
                     }
                     await websocket.send_text(_json_dumps(d))
                     frames_sent += 1
@@ -369,7 +372,7 @@ async def stream_backtest(run_id: str, speed: float = 1.0):
         frames_sent = 0
         last_dropped = 0
         try:
-            async for fr in produce_frames(run_id=run_id, fps=10, speed=float(speed), realtime=True, cadence="1h"):
+            async for fr in produce_frames(run_id=run_id, fps=DEFAULT_FPS, speed=float(speed), realtime=True, cadence="1h"):
                 payload = {
                     "t": fr.t,
                     "ts": fr.ts,
@@ -378,6 +381,7 @@ async def stream_backtest(run_id: str, speed: float = 1.0):
                     "equity": fr.equity,
                     "metrics": fr.metrics,
                     "dropped": fr.dropped,
+                    "total_frames": getattr(fr, "total_frames", None),
                 }
                 yield f"event: frame\ndata: {_json_dumps(payload)}\n\n"
                 frames_sent += 1
