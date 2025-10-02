@@ -213,15 +213,36 @@ def _precompute_metrics_from_equity(equity_rows: List[dict]) -> Dict[str, List[O
 
 
 
+
+def _select_hourly_indices(equity_rows: List[dict]) -> List[int]:
+    """Return indices of the last equity point within each UTC hour.
+    Uses epoch seconds from normalize_timestamp(ts_utc) to bucket by hour.
+    """
+    hour_to_idx: Dict[int, int] = {}
+    for i, er in enumerate(equity_rows):
+        try:
+            epoch, _ = normalize_timestamp(er.get("ts_utc"))
+            hour_bucket = epoch // 3600
+            # Always keep the last index encountered for this hour
+            hour_to_idx[hour_bucket] = i
+        except Exception:
+            # Skip rows with invalid timestamps
+            continue
+    # Return indices ordered by hour
+    return [hour_to_idx[h] for h in sorted(hour_to_idx.keys())]
+
+
 async def produce_frames(
     *,
     run_id: str,
     fps: int = DEFAULT_FPS,
     speed: float = 1.0,
     realtime: bool = False,
+    cadence: str = "1m",
 ) -> AsyncGenerator[StreamFrame, None]:
     """
-    Async generator producing StreamFrame from run artifacts, decimated to ~fps.
+    Async generator producing StreamFrame from run artifacts, optionally resampled to cadence and decimated to ~fps.
+    - cadence: "1m" (default) emits every equity point; "1h" emits last point per UTC hour.
     - If realtime=True, sleeps between frames according to fps and speed; else yields as fast as possible (test mode).
     - Decimation: selects approximately ceil(N / max_frames) stride.
     """
@@ -241,16 +262,21 @@ async def produce_frames(
     bars_map = _load_bars_data(dataset_id)
     orders_by_ts = _organize_orders_by_timestamp(orders_rows)
 
-    total = len(equity_rows)
+    # Determine indices to emit based on cadence
+    n_equity = len(equity_rows)
+    if cadence == "1h":
+        indices = _select_hourly_indices(equity_rows)
+    else:
+        indices = list(range(n_equity))
+
+    total = len(indices)
     if total == 0:
         return
-    # Decimation stride
-    if realtime:
-        target = fps  # logical target; we stride if needed
-        stride = max(1, total // target) if total > target else 1
-    else:
-        # Option A: no decimation in non-realtime mode — emit all frames
-        stride = 1
+
+    # Decimation stride (applied on selected indices)
+    # In realtime mode we pace using asyncio.sleep per frame; do not decimate based on total.
+    # Always emit all selected frames in order.
+    stride = 1
 
     dropped = 0
     produced = 0
@@ -259,7 +285,8 @@ async def produce_frames(
 
     # Produce frames
     try:
-        for i in range(0, total, stride):
+        for pos in range(0, total, stride):
+            i = indices[pos]
             er = equity_rows[i]
             key, iso = normalize_timestamp(er["ts_utc"])
             ohlc = bars_map.get(key)
@@ -276,11 +303,11 @@ async def produce_frames(
                     except Exception:
                         pass
                 orders_payload.append(o2)
-            # Metrics attachment for this index (may contain None values)
+            # Metrics attachment for this original equity index (may contain None values)
             mi = {
-                "total_return_so_far": metrics_arrays.get("total_return_so_far", [None]*total)[i],
-                "max_drawdown_so_far": metrics_arrays.get("max_drawdown_so_far", [None]*total)[i],
-                "sharpe_so_far": metrics_arrays.get("sharpe_so_far", [None]*total)[i],
+                "total_return_so_far": metrics_arrays.get("total_return_so_far", [None]*n_equity)[i],
+                "max_drawdown_so_far": metrics_arrays.get("max_drawdown_so_far", [None]*n_equity)[i],
+                "sharpe_so_far": metrics_arrays.get("sharpe_so_far", [None]*n_equity)[i],
             }
             frame = StreamFrame(
                 t="frame",

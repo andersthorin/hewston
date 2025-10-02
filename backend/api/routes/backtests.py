@@ -293,7 +293,7 @@ async def backtests_ws_echo(websocket: WebSocket, run_id: str) -> None:
         async def _run():
             nonlocal frames_sent, last_dropped
             try:
-                async for fr in produce_frames(run_id=run_id, fps=30, speed=1.0, realtime=False):
+                async for fr in produce_frames(run_id=run_id, fps=10, speed=1.0, realtime=True, cadence="1h"):
                     d = {
                         "t": fr.t,
                         "ts": fr.ts,
@@ -369,7 +369,7 @@ async def stream_backtest(run_id: str, speed: float = 1.0):
         frames_sent = 0
         last_dropped = 0
         try:
-            async for fr in produce_frames(run_id=run_id, fps=30, speed=float(speed), realtime=False):
+            async for fr in produce_frames(run_id=run_id, fps=10, speed=float(speed), realtime=True, cadence="1h"):
                 payload = {
                     "t": fr.t,
                     "ts": fr.ts,
