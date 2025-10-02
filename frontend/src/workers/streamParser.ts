@@ -14,13 +14,10 @@ function handleFrame(payload: unknown) {
   if (!parsed.success) {
     // drop invalid
     if (seen < 50) {
-      try {
-        const obj: any = payload && typeof payload === 'object' ? (payload as any) : null
-        const keys = obj ? Object.keys(obj) : []
-        const hasTs = !!(obj && (obj.ts || obj?.equity?.ts))
-        // eslint-disable-next-line no-console
-        console.debug('[worker] drop invalid frame', { t: obj?.t, hasTs, keys })
-      } catch {}
+      const obj: any = payload && typeof payload === 'object' ? (payload as any) : null
+      const keys = obj ? Object.keys(obj) : []
+      const hasTs = !!(obj && (obj.ts || obj?.equity?.ts))
+      console.debug('[worker] drop invalid frame', { t: obj?.t, hasTs, keys, errors: parsed.error?.errors, sample: obj })
     }
     return
   }

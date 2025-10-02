@@ -361,8 +361,7 @@ async def produce_frames(
             if debug_count < 20:
                 try:
                     logger.info(
-                        "TEMP_DEBUG.backend.frame",
-                        extra={"run_id": run_id, "n": debug_count + 1, "ts": iso, "eq": float(er["value"])},
+                        f"TEMP_DEBUG.backend.frame run_id={run_id} n={debug_count + 1} ts={iso} eq={float(er['value'])}"
                     )
                 except Exception:
                     pass

@@ -275,7 +275,8 @@ async def backtests_ws_echo(websocket: WebSocket, run_id: str) -> None:
     WS endpoint with heartbeat, ctrl echo, and optional frame streaming when available.
     - Sends periodic {"t":"hb"}
     - Echoes {"t":"ctrl", ...} with {"echo": true}
-    - On {"t":"ctrl","cmd":"play"} attempts to stream frames for run_id if artifacts exist
+    - Waits for {"t":"ready"} signal before starting to stream frames
+    - On {"t":"ctrl","cmd":"play"} attempts to stream frames for run_id if artifacts exist (only after ready signal)
     - Sends {"t":"err", code:"VALIDATION", msg:"..."} on invalid payloads
     """
     await websocket.accept()
@@ -287,14 +288,20 @@ async def backtests_ws_echo(websocket: WebSocket, run_id: str) -> None:
     player_task: asyncio.Task | None = None
     frames_sent = 0
     last_dropped = 0
+    ready_received = False  # Track if frontend has sent ready signal
 
     async def _start_player() -> None:
         nonlocal player_task, frames_sent, last_dropped
+        # Only start streaming if frontend is ready
+        if not ready_received:
+            logger.debug("ws.play_ignored", extra={"run_id": run_id, "reason": "frontend_not_ready"})
+            return
         if player_task and not player_task.done():
             return
         async def _run():
             nonlocal frames_sent, last_dropped
             try:
+                logger.info("ws.stream_start", extra={"run_id": run_id})
                 async for fr in produce_frames(run_id=run_id, fps=DEFAULT_FPS, speed=1.0, realtime=True, cadence="1h"):
                     d = {
                         "t": fr.t,
@@ -309,6 +316,7 @@ async def backtests_ws_echo(websocket: WebSocket, run_id: str) -> None:
                     await websocket.send_text(_json_dumps(d))
                     frames_sent += 1
                     last_dropped = fr.dropped or 0
+                logger.info("ws.stream_complete", extra={"run_id": run_id, "frames_sent": frames_sent})
             except Exception as e:
                 try:
                     await websocket.send_text(_json_dumps({"t": "err", "code": "STREAM_ERROR", "msg": str(e)[:200]}))
@@ -329,7 +337,15 @@ async def backtests_ws_echo(websocket: WebSocket, run_id: str) -> None:
                 continue
 
             t = payload.get("t")
-            if t == "ctrl":
+            if t == "ready":
+                # Frontend signals it's ready to receive frames
+                ready_received = True
+                logger.info("ws.ready_received", extra={"run_id": run_id})
+                # Acknowledge ready signal
+                await websocket.send_text(json.dumps({"t": "ready_ack"}))
+                # Auto-start streaming after ready signal
+                await _start_player()
+            elif t == "ctrl":
                 cmd = payload.get("cmd")
                 if cmd not in {"play", "pause", "seek", "speed"}:
                     await websocket.send_text(

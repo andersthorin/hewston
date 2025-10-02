@@ -46,7 +46,8 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
     }
   }, [isHourLoading, isHourErr, hourResp, symbol, from, to])
 
-  const { state, onPlay, onPause, onSeek, subscribe } = useBacktestPlayback(backtest_id)
+  const playback = useBacktestPlayback(backtest_id)
+  const { state, onPlay, onPause, onSeek, subscribe } = playback
 
   // Wire WS controls into playback store controls
   useEffect(() => {
@@ -57,6 +58,7 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   useEffect(() => { playbackStore._setPlaying(state.playing) }, [state.playing])
 
   const recvCountRef = useRef(0)
+  const readySentRef = useRef(false) // Track if ready signal has been sent
 
   // Track the actual run window; prefer props (from manifest) and fall back to streaming inference
   const [runFrom, setRunFrom] = useState<string | null>(run_from ?? null)
@@ -85,8 +87,9 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
         const hasOhlc = !!(ohlc && ohlc.o != null && ohlc.h != null && ohlc.l != null && ohlc.c != null)
         const hasSnapshots = !!(dailySnapshotsRef.current && dayKeysRef.current && dayKeysRef.current.length > 0)
 
-        // Infer run window only if not provided via props
-        if (tsStr && !(run_from && run_to)) {
+        // Infer run window from frames only if not provided via props
+        // This ensures the timeline shows the correct range immediately
+        if (tsStr && !runFrom && !runTo) {
           const day = tsStr.slice(0, 10)
           setRunFrom(prev => (prev && prev <= day ? prev : day))
           setRunTo(prev => (prev && prev >= day ? prev : day))
@@ -132,10 +135,8 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
               }
             }
           } else {
-            // Buffer frames until snapshots are available, then flush
-            bufferedFramesRef.current.push(frame)
-            if (bufferedFramesRef.current.length > 500) bufferedFramesRef.current.shift()
-            console.debug('[RunPlayer] frame branch=none (buffering until snapshots ready)', { ts: tsStr, buffered: bufferedFramesRef.current.length })
+            // Snapshots not ready yet - this shouldn't happen with wait-for-ready approach
+            console.debug('[RunPlayer] frame branch=none (snapshots not ready - unexpected)', { ts: tsStr })
           }
         }
       } catch (error) {
@@ -156,7 +157,6 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   const hourIdxRef = useRef<number>(0)
 
   const lastDayRef = useRef<string | null>(null)
-  const bufferedFramesRef = useRef<StreamFrameData[]>([])
 
 
   // Group hourly bars by day and precompute cumulative daily snapshots per hour
@@ -223,52 +223,25 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
     setSnapshotsVersion((v) => v + 1)
   }, [hourResp, runFrom, runTo])
 
-  // When snapshots become available, flush any buffered frames that arrived earlier
+  // When snapshots become available, send ready signal to backend to start streaming
   useEffect(() => {
     const hasSnapshots = !!(dailySnapshotsRef.current && dayKeysRef.current && dayKeysRef.current.length > 0)
     if (!hasSnapshots) return
-    if (bufferedFramesRef.current.length === 0) return
+    if (readySentRef.current) return // Only send once
 
-    console.debug('[RunPlayer] flushing buffered frames', { count: bufferedFramesRef.current.length })
-    const frames = bufferedFramesRef.current.splice(0)
-    // sort by timestamp to replay in order
-    frames.sort((a, b) => {
-      const ta = new Date((a.equity?.ts || a.ts) as string).getTime()
-      const tb = new Date((b.equity?.ts || b.ts) as string).getTime()
-      return ta - tb
-    })
+    console.debug('[RunPlayer] snapshots ready, sending ready signal to backend')
+    readySentRef.current = true
 
-    for (const f of frames) {
+    // Send ready signal to backend via playback service
+    if (playback) {
       try {
-        const tsStr: string | undefined = (f as any)?.equity?.ts || (f as any)?.ts
-        if (!tsStr) continue
-        const y = parseInt(tsStr.slice(0,4)), m = parseInt(tsStr.slice(5,7)), d = parseInt(tsStr.slice(8,10))
-        const day = tsStr.slice(0, 10)
-        const snaps = dailySnapshotsRef.current!.get(day) || []
-        if (snaps.length === 0) continue
-        // pick the best snapshot at or before ts
-        let idx = snaps.length - 1
-        const tms = new Date(tsStr).getTime()
-        for (let i = snaps.length - 1; i >= 0; i--) {
-          const si: any = snaps[i]
-          const sms = new Date(si.t).getTime()
-          if (sms <= tms) { idx = i; break }
-        }
-        const s: any = snaps[idx]
-        if (!s) continue
-        const timeVal: Time = (viewMode === 'daily')
-          ? ({ year: y, month: m, day: d } as Time)
-          : (Math.floor(new Date(s.t).getTime() / 1000) as unknown as Time)
-        const dp: CandlestickData = { time: timeVal, open: s.o, high: s.h, low: s.l, close: s.c }
-        if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
-        if (day !== lastDayRef.current || !seededRef.current) { ohlcRef.current?.scrollToLatest() }
-        seededRef.current = true
-        lastDayRef.current = day
+        playback.sendReady()
+        console.debug('[RunPlayer] ready signal sent')
       } catch (err) {
-        console.warn('[RunPlayer] failed to flush buffered frame', err)
+        console.warn('[RunPlayer] failed to send ready signal', err)
       }
     }
-  }, [snapshotsVersion, viewMode])
+  }, [snapshotsVersion, playback])
 
   // Chart is now driven by streaming frames (see subscribe effect above) to keep it in sync with the scrubber.
   useEffect(() => {

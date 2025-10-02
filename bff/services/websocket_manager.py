@@ -147,6 +147,9 @@ class WebSocketConnectionManager:
             elif message_dict.get("t") == "ctrl":
                 # Handle frontend control messages (forward to backend)
                 await self._handle_control_message(connection_id, message_dict)
+            elif message_dict.get("t") == "ready":
+                # Handle frontend ready signal (forward to backend)
+                await self._handle_ready_signal(connection_id, message_dict)
             else:
                 await self._send_error(
                     connection_id,
@@ -312,6 +315,57 @@ class WebSocketConnectionManager:
                 connection_id,
                 "CONTROL_ERROR",
                 f"Error handling control message: {str(e)}"
+            )
+
+    async def _handle_ready_signal(self, connection_id: str, message_dict: Dict[str, Any]) -> None:
+        """Handle frontend ready signal by forwarding to backend."""
+        try:
+            # Find which run this connection is subscribed to
+            if connection_id not in self.connection_metadata:
+                await self._send_error(
+                    connection_id,
+                    "NO_SUBSCRIPTION",
+                    "Must be subscribed to a run to send ready signal"
+                )
+                return
+
+            subscriptions = self.connection_metadata[connection_id].get("subscriptions", set())
+            if not subscriptions:
+                await self._send_error(
+                    connection_id,
+                    "NO_SUBSCRIPTION",
+                    "Must be subscribed to a run to send ready signal"
+                )
+                return
+
+            # Forward to all subscribed runs (typically just one)
+            for run_id in subscriptions:
+                if run_id in self.backend_connections:
+                    backend_ws = self.backend_connections[run_id]
+                    try:
+                        await backend_ws.send(json.dumps(message_dict))
+                        self.logger.info(
+                            "ready.forwarded",
+                            extra={
+                                "connection_id": connection_id,
+                                "run_id": run_id,
+                            }
+                        )
+                    except Exception as e:
+                        self.logger.warning(
+                            "ready.forward_error",
+                            extra={
+                                "connection_id": connection_id,
+                                "run_id": run_id,
+                                "error": str(e),
+                            }
+                        )
+
+        except Exception as e:
+            await self._send_error(
+                connection_id,
+                "READY_ERROR",
+                f"Error handling ready signal: {str(e)}"
             )
 
     async def _ensure_backend_connection(self, run_id: str) -> None:

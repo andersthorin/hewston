@@ -40,7 +40,6 @@ export function useBacktestPlayback(backtestId: string) {
   const workerRef = useRef<Worker | null>(null)
   const wsManagerRef = useRef<BFFWebSocketManager | null>(null)
   const framesSeenRef = useRef<number>(0)
-  const playRetryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // TEMP DEBUG: limit first 20 raw WS frame logs
   const feRawDebugRef = useRef<number>(0)
 
@@ -79,8 +78,6 @@ export function useBacktestPlayback(backtestId: string) {
           } catch {}
         }
         notify(msg.data as StreamFrameT)
-        // Stop keep-alive play retries after first frame
-        if (playRetryTimerRef.current) { clearInterval(playRetryTimerRef.current); playRetryTimerRef.current = null }
       } else if (msg.type === 'error') {
         console.warn('Worker error:', msg.error)
         setState((s) => ({ ...s, status: 'error', playing: false }))
@@ -112,34 +109,15 @@ export function useBacktestPlayback(backtestId: string) {
 
     let closed = false
 
-    const startPlayKeepalive = () => {
-      if (playRetryTimerRef.current) { clearInterval(playRetryTimerRef.current); playRetryTimerRef.current = null }
-      playRetryTimerRef.current = setInterval(() => {
-        if (!wsManager.isReady()) return
-        if (framesSeenRef.current > 0) return
-        try {
-          wsManager.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
-          devLog('play.sent', { backtestId, reason: 'keepalive' })
-        } catch (error) {
-          console.warn('Failed to send keepalive play command:', error)
-        }
-      }, 1000)
-    }
-
     // Setup WebSocket manager event listeners
     const unsubscribeOpen = wsManager.addEventListener('open', () => {
       framesSeenRef.current = 0
       devLog('ws.open', { backtestId, source: wsManager.getHealth().connectionSource })
-      setState((s) => ({ ...s, status: 'ws', playing: true }))
+      setState((s) => ({ ...s, status: 'ws', playing: false })) // Don't auto-play, wait for ready signal
       updateHealthInfo(wsManager.getHealth())
 
-      try {
-        wsManager.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
-        devLog('play.sent', { backtestId, reason: 'open' })
-      } catch (error) {
-        console.warn('Failed to send initial play command:', error)
-      }
-      startPlayKeepalive()
+      // Don't send play command here - wait for frontend to send ready signal
+      devLog('ws.connected', { backtestId, reason: 'waiting_for_ready_signal' })
     })
 
     const unsubscribeMessage = wsManager.addEventListener('message', (event: MessageEvent) => {
@@ -174,10 +152,6 @@ export function useBacktestPlayback(backtestId: string) {
     })
 
     const unsubscribeClose = wsManager.addEventListener('close', () => {
-      if (playRetryTimerRef.current) {
-        clearInterval(playRetryTimerRef.current)
-        playRetryTimerRef.current = null
-      }
       // Reflect manager state to avoid sticky 'error' during auto-reconnects
       const mgrState = wsManager.getState()
       const nextStatus: PlaybackState['status'] = (mgrState === 'reconnecting' || mgrState === 'connecting') ? 'connecting' : 'error'
@@ -225,12 +199,6 @@ export function useBacktestPlayback(backtestId: string) {
       unsubscribeStateChange()
       unsubscribeHealthUpdate()
 
-      // Cleanup timers
-      if (playRetryTimerRef.current) {
-        clearInterval(playRetryTimerRef.current)
-        playRetryTimerRef.current = null
-      }
-
       // Close WebSocket manager
       if (wsManagerRef.current) {
         wsManagerRef.current.close()
@@ -270,6 +238,11 @@ export function useBacktestPlayback(backtestId: string) {
     wsManagerRef.current?.send(JSON.stringify({ t: 'ctrl', cmd: 'seek', ts: isoTs }))
   }, [])
 
+  const sendReady = useCallback(() => {
+    wsManagerRef.current?.send(JSON.stringify({ t: 'ready' }))
+    console.debug('[ws] ready signal sent to backend')
+  }, [])
+
   // Additional BFF-specific functions
   const getConnectionHealth = useCallback(() => {
     return wsManagerRef.current?.getHealth() || null
@@ -290,6 +263,7 @@ export function useBacktestPlayback(backtestId: string) {
     onPause,
     onSpeedChange,
     onSeek,
+    sendReady,
     // Enhanced BFF functions
     getConnectionHealth,
     reconnect,

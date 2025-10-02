@@ -25,7 +25,7 @@ export const StreamFrameSchema = z.object({
     })
     .nullable()
     .optional(),
-  total_frames: z.number().int().positive().optional(),
+  total_frames: z.number().int().positive().nullable().optional(),
   dropped: z.number().int().nonnegative().optional(),
 })
 export type StreamFrameT = z.infer<typeof StreamFrameSchema>
