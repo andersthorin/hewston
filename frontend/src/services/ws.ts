@@ -40,6 +40,8 @@ export function useBacktestPlayback(backtestId: string) {
   const wsManagerRef = useRef<BFFWebSocketManager | null>(null)
   const framesSeenRef = useRef<number>(0)
   const playRetryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // TEMP DEBUG: limit first 20 raw WS frame logs
+  const feRawDebugRef = useRef<number>(0)
 
   const notify = useCallback((f: StreamFrameT) => {
     subsRef.current.forEach((cb) => cb(f))
@@ -123,7 +125,16 @@ export function useBacktestPlayback(backtestId: string) {
       try {
         const msg = JSON.parse(event.data)
         if (msg.t === 'frame') {
-          devLog('frame.ts', msg.ts)
+          // TEMP DEBUG: log first 20 raw frames from WS before any transformation
+          if (feRawDebugRef.current < 20) {
+            try {
+              const ts = msg.ts || msg?.equity?.ts
+              const eq = msg?.equity?.value
+              // eslint-disable-next-line no-console
+              console.debug('[fe-ws-raw]', { n: feRawDebugRef.current + 1, ts, eq })
+            } catch {}
+            feRawDebugRef.current += 1
+          }
           worker.postMessage({ type: 'frame', payload: msg })
         } else if (msg.t === 'err') {
           console.warn('Stream error from server:', msg)

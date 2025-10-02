@@ -204,16 +204,27 @@ class NautilusBacktestRunner:
                 logger.error(f"❌ CRITICAL: No account found for venue {venue}")
                 raise RuntimeError(f"No account for venue {venue}")
 
-            # Get total account value using balance_total with USD currency
+            # Get total account value including unrealized PnL; prefer account.equity_total
             from nautilus_trader.model.currencies import USD
-            equity_money = account.balance_total(USD)
-            ending_balance = float(equity_money.as_double())
+            ending_balance: float
+            try:
+                equity_money = getattr(account, "equity_total")(USD)  # type: ignore[attr-defined]
+                ending_balance = float(equity_money.as_double())
+            except Exception:
+                # Fallback: use last equity point captured by the strategy if available
+                if isinstance(equity, list) and equity:
+                    try:
+                        ending_balance = float(equity[-1].get("value"))
+                    except Exception:
+                        ending_balance = starting_balance
+                else:
+                    # Last resort: cash balance (may ignore unrealized PnL)
+                    bal = account.balance_total(USD)
+                    ending_balance = float(bal.as_double())
             metrics["total_return"] = (ending_balance - starting_balance) / starting_balance
 
             logger.info(
-                f"✓ Extracted metrics from Nautilus portfolio: "
-                f"start=${starting_balance:.2f}, end=${ending_balance:.2f}, "
-                f"return={metrics['total_return']:.4f}"
+                f"Extracted metrics: start=${starting_balance:.2f}, end=${ending_balance:.2f}, return={metrics['total_return']:.4f}"
             )
 
         except AttributeError as e:

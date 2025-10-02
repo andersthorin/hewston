@@ -1,0 +1,19 @@
+{
+  "run_id": "56deeb4afcec4403854b64d26514ab7a",
+  "dataset_id": "warehouse_quotes",
+  "strategy_id": "sma_crossover",
+  "params": {
+    "instrument_id": "AAPL.XNAS"
+  },
+  "seed": 42,
+  "slippage_fees": {},
+  "speed": 60,
+  "run_from": "2024-11-06",
+  "run_to": "2024-11-08",
+  "code_hash": "9fcbf18b3fe96b2437770e5cd4c86f6ea5031736",
+  "env_lock": null,
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-10-02T11:47:36.950562+00:00",
+  "status": "DONE"
+}

@@ -2,7 +2,6 @@ import { useParams } from 'react-router-dom'
 import { useBacktestDetail } from '../hooks/useRunData'
 import RunPlayerContainer from '../containers/RunPlayerContainer'
 import ErrorBoundary from '../components/ErrorBoundary'
-import MetricsSummary from '../components/MetricsSummary'
 import StreamingMetricsPanel from '../components/StreamingMetricsPanel'
 import SymbolFocus from '../components/SymbolFocus'
 
@@ -54,11 +53,8 @@ export default function BacktestDetailView() {
 
       {!isErrorStatus && (
         <>
-          <MetricsSummary
-            metrics={(data as any)?.metrics ?? undefined}
-            equity={(data as any)?.equity ?? undefined}
-            loading={isLoading}
-          />
+          {/* Live streaming metrics (single panel) */}
+          <StreamingMetricsPanel />
           {/* Symbol focus (E11.3) */}
           <SymbolFocus />
 
@@ -71,8 +67,6 @@ export default function BacktestDetailView() {
             />
           </ErrorBoundary>
 
-          {/* Live streaming metrics (E11.2 stream) */}
-          <StreamingMetricsPanel />
         </>
       )}
     </div>

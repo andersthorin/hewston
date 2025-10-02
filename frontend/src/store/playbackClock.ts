@@ -11,6 +11,12 @@ export type PlaybackState = {
   markersMeta?: Array<{ ts: string; sym?: string }>
   focusedSymbol: string | null
   symbolsSeen: string[]
+  // Live, client-computed metrics (used when server doesn't stream ..._so_far fields)
+  metricsLive?: {
+    total_return_so_far?: number
+    max_drawdown_so_far?: number
+    sharpe_so_far?: number
+  }
 }
 
 export type PlaybackStore = {
@@ -40,12 +46,18 @@ const initial: PlaybackState = {
   markersMeta: [],
   focusedSymbol: null,
   symbolsSeen: [],
+  metricsLive: undefined,
 }
 
 function createPlaybackStore(): PlaybackStore {
   let state: PlaybackState = { ...initial }
   const subs = new Set<() => void>()
   let controls: { play: () => void; pause: () => void; seek: (ts: string) => void } | null = null
+
+  // Local accumulators for client-side running metrics
+  let initialEquity: number | null = null
+  let peakEquity: number | null = null
+  let lastEquity: number | null = null
 
   const emit = () => subs.forEach((cb) => cb())
 
@@ -58,6 +70,31 @@ function createPlaybackStore(): PlaybackStore {
         frame: f,
         currentSimTime: (f?.equity?.ts || f?.ts) ?? state.currentSimTime,
       }
+
+      // Compute client-side running metrics from equity if present
+      const eq = f?.equity?.value
+      if (typeof eq === 'number' && isFinite(eq)) {
+        if (initialEquity == null) initialEquity = eq
+        if (peakEquity == null || eq > peakEquity) peakEquity = eq
+        if (lastEquity == null) lastEquity = eq
+
+        const total_return_so_far = initialEquity ? (eq / initialEquity) - 1 : undefined
+        const max_drawdown_so_far = peakEquity ? (peakEquity - eq) / peakEquity : undefined
+
+        // Update state.metricsLive without touching server-provided metrics in frame
+        state = {
+          ...state,
+          metricsLive: {
+            total_return_so_far,
+            max_drawdown_so_far,
+            // sharpe_so_far left undefined unless we implement an online estimator
+            sharpe_so_far: state.metricsLive?.sharpe_so_far,
+          },
+        }
+
+        lastEquity = eq
+      }
+
       // accumulate markers from orders if present
       if (Array.isArray(f?.orders) && f.orders.length > 0) {
         const newMarks = f.orders.map((o: any) => (o.ts_utc || o.ts || f.ts)).filter(Boolean)
@@ -83,7 +120,14 @@ function createPlaybackStore(): PlaybackStore {
       emit()
     },
     _setPlaying: (p) => { state = { ...state, playing: p }; emit() },
-    _setRange: (r) => { state = { ...state, range: r }; emit() },
+    _setRange: (r) => {
+      // Reset client-side running metrics when run window changes
+      initialEquity = null
+      peakEquity = null
+      lastEquity = null
+      state = { ...state, range: r, metricsLive: undefined }
+      emit()
+    },
     _addMarkers: (ts) => { state = { ...state, markers: dedupeAppend(state.markers, ts) }; emit() },
     _addSymbols: (syms) => { state = { ...state, symbolsSeen: dedupeAppendStr(state.symbolsSeen, syms) }; emit() },
     setFocus: (sym) => { state = { ...state, focusedSymbol: sym }; emit() },
@@ -139,6 +183,7 @@ export const selectors = {
   markersMeta: (s: PlaybackState) => (s as any).markersMeta ?? [],
   focusedSymbol: (s: PlaybackState) => (s as any).focusedSymbol ?? null,
   symbolsSeen: (s: PlaybackState) => (s as any).symbolsSeen ?? [],
+  metricsLive: (s: PlaybackState) => (s as any).metricsLive,
   filteredMarkers: (() => {
     // Memoize by reference to avoid useSyncExternalStore getSnapshot churn
     let lastFocus: string | null = null

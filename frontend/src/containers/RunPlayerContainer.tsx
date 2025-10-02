@@ -54,6 +54,9 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   useEffect(() => { setRunFrom(run_from ?? null); }, [run_from])
   useEffect(() => { setRunTo(run_to ?? null); }, [run_to])
 
+  // View mode must be declared before effects that reference it
+  const [viewMode, setViewMode] = useState<'daily'|'hourly'>('daily')
+
   // Subscribe to frames to infer run window only if props not provided
   useEffect(() => {
     const unsub = subscribe((frame: StreamFrameData) => {
@@ -61,13 +64,52 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
         // Always forward frame to playback store
         // @ts-ignore using compatible types
         playbackStore._setFrame(frame as any)
+
         // Infer run window only if not provided via props
-        if (!(run_from && run_to)) {
-          const ts: string | undefined = frame?.ts || frame?.equity?.ts
-          if (ts) {
-            const day = ts.slice(0, 10)
-            setRunFrom(prev => (prev && prev <= day ? prev : day))
-            setRunTo(prev => (prev && prev >= day ? prev : day))
+        const tsStr: string | undefined = frame?.equity?.ts || frame?.ts
+        if (tsStr && !(run_from && run_to)) {
+          const day = tsStr.slice(0, 10)
+          setRunFrom(prev => (prev && prev <= day ? prev : day))
+          setRunTo(prev => (prev && prev >= day ? prev : day))
+        }
+
+        // Drive the chart from streaming frames first; fall back to hourly snapshots if needed
+        if (tsStr) {
+          const y = parseInt(tsStr.slice(0,4)), m = parseInt(tsStr.slice(5,7)), d = parseInt(tsStr.slice(8,10))
+          const ohlc = (frame as any).ohlc as { o?: number; h?: number; l?: number; c?: number } | undefined
+          if (ohlc && ohlc.o != null && ohlc.h != null && ohlc.l != null && ohlc.c != null) {
+            const timeVal: Time = (viewMode === 'daily')
+              ? ({ year: y, month: m, day: d } as Time)
+              : (Math.floor(new Date(tsStr).getTime() / 1000) as unknown as Time)
+            const dp: CandlestickData = { time: timeVal, open: ohlc.o, high: ohlc.h, low: ohlc.l, close: ohlc.c }
+            if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
+            ohlcRef.current?.scrollToLatest()
+            seededRef.current = true
+            lastDayRef.current = tsStr.slice(0,10)
+          } else if (dailySnapshotsRef.current && dayKeysRef.current && dayKeysRef.current.length > 0) {
+            const day = tsStr.slice(0, 10)
+            const snaps = dailySnapshotsRef.current.get(day) || []
+            if (snaps.length > 0) {
+              // Find the latest snapshot at or before current streaming time
+              let idx = snaps.length - 1
+              const tms = new Date(tsStr).getTime()
+              for (let i = snaps.length - 1; i >= 0; i--) {
+                const si: any = snaps[i]
+                const sms = new Date(si.t).getTime()
+                if (sms <= tms) { idx = i; break }
+              }
+              const s: any = snaps[idx]
+              if (s) {
+                const timeVal: Time = (viewMode === 'daily')
+                  ? ({ year: y, month: m, day: d } as Time)
+                  : (Math.floor(new Date(s.t).getTime() / 1000) as unknown as Time)
+                const dp: CandlestickData = { time: timeVal, open: s.o, high: s.h, low: s.l, close: s.c }
+                if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
+                if (day !== lastDayRef.current || !seededRef.current) { ohlcRef.current?.scrollToLatest() }
+                seededRef.current = true
+                lastDayRef.current = day
+              }
+            }
           }
         }
       } catch (error) {
@@ -75,12 +117,10 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
       }
     })
     return unsub
-  }, [subscribe, run_from, run_to])
+  }, [subscribe, run_from, run_to, viewMode])
 
   // Imperative chart refs
   const ohlcRef = useRef<CandlestickChartAPI>(null)
-  const [viewMode, setViewMode] = useState<'daily'|'hourly'>('daily')
-
   const seededRef = useRef<boolean>(false)
 
   // Candlestick playback cursors and ticker (daily/api-sim via hourly snapshots)
@@ -88,6 +128,8 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   const dayKeysRef = useRef<string[] | null>(null)
   const dayIdxRef = useRef<number>(0)
   const hourIdxRef = useRef<number>(0)
+
+  const lastDayRef = useRef<string | null>(null)
 
 
   // Group hourly bars by day and precompute cumulative daily snapshots per hour
@@ -157,49 +199,11 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
     setSnapshotsVersion((v) => v + 1)
   }, [hourResp, runFrom, runTo])
 
-  // Hourly ticker driving realtime-style daily playback (mutate same daily bar per hour)
-  // Runs a 100ms timer and advances logical ticks based on elapsed time; fixed 1× (1000 ms per tick).
+  // Chart is now driven by streaming frames (see subscribe effect above) to keep it in sync with the scrubber.
   useEffect(() => {
-    // Always recreate ticker when play state, window, snapshots or viewMode change
-    if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null }
-    if (!state.playing) return
-    if (!runFrom || !runTo) return
-    if (!dailySnapshotsRef.current || !dayKeysRef.current || dayKeysRef.current.length === 0) return
-    // Reset series when switching mode for time-type changes
+    // When switching view mode, reset series so subsequent frame-driven updates render with correct time type
     ohlcRef.current?.reset([])
-
-    const period = 100 // ms per logical tick at fixed 10×
-    devLog('ticker.start', { period, days: dayKeysRef.current?.length })
-
-    hourTickerRef.current = setInterval(() => {
-      const keys = dayKeysRef.current!
-      if (dayIdxRef.current >= keys.length) {
-        clearInterval(hourTickerRef.current!); hourTickerRef.current = null; return
-
-      }
-      const day = keys[dayIdxRef.current]
-      const snaps = dailySnapshotsRef.current!.get(day) || []
-      if (snaps.length === 0) { dayIdxRef.current++; hourIdxRef.current = 0; return }
-      const y = parseInt(day.slice(0,4)), m = parseInt(day.slice(5,7)), d = parseInt(day.slice(8,10))
-      const i = hourIdxRef.current
-      const s = snaps[i]
-      if (!s) { dayIdxRef.current++; hourIdxRef.current = 0; return }
-
-      const timeVal: Time = (viewMode === 'daily')
-        ? ({ year: y, month: m, day: d } as Time)
-        : (Math.floor(new Date(s.t).getTime() / 1000) as unknown as Time)
-      const dp: CandlestickData = { time: timeVal, open: s.o, high: s.h, low: s.l, close: s.c }
-      const firstOfDay = (hourIdxRef.current === 0)
-      if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
-      if (firstOfDay || !seededRef.current) { ohlcRef.current?.scrollToLatest() }
-      seededRef.current = true
-
-      hourIdxRef.current = i + 1
-      if (hourIdxRef.current >= snaps.length) { dayIdxRef.current++; hourIdxRef.current = 0 }
-    }, period) // fixed step: one snapshot per tick for determinism
-
-    return () => { if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null } }
-  }, [state.playing, runFrom, runTo, snapshotsVersion, viewMode])
+  }, [viewMode])
 
 
   const formatTime = (t: Time, locale?: string) => {

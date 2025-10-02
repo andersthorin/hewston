@@ -254,6 +254,9 @@ async def produce_frames(
 
     dropped = 0
     produced = 0
+    # TEMP DEBUG: limit logging of first 20 produced frames per run
+    debug_count = 0
+
     # Produce frames
     try:
         for i in range(0, total, stride):
@@ -288,6 +291,16 @@ async def produce_frames(
                 metrics=mi,
                 dropped=dropped,
             )
+            # TEMP DEBUG: log first 20 backend frames with ts and equity
+            if debug_count < 20:
+                try:
+                    logger.info(
+                        "TEMP_DEBUG.backend.frame",
+                        extra={"run_id": run_id, "n": debug_count + 1, "ts": iso, "eq": float(er["value"])},
+                    )
+                except Exception:
+                    pass
+                debug_count += 1
             yield frame
             produced += 1
             if realtime:
