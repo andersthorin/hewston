@@ -83,22 +83,25 @@ class WebSocketConnectionManager:
     async def disconnect_client(self, connection_id: str) -> None:
         """
         Handle client disconnection and cleanup.
-        
+
         Args:
             connection_id: Connection identifier to disconnect
         """
-        # Remove from active connections
-        if connection_id in self.active_connections:
-            del self.active_connections[connection_id]
-        
-        # Clean up subscriptions
-        if connection_id in self.connection_metadata:
-            subscriptions = self.connection_metadata[connection_id].get("subscriptions", set())
+        # Remove from active connections (idempotent)
+        self.active_connections.pop(connection_id, None)
+
+        # Clean up subscriptions and metadata (idempotent)
+        meta = self.connection_metadata.pop(connection_id, None)
+        if meta:
+            subscriptions = meta.get("subscriptions", set()) or set()
             # Create a copy to avoid "set changed size during iteration" error
             for run_id in list(subscriptions):
-                await self._unsubscribe_from_run(connection_id, run_id)
-            del self.connection_metadata[connection_id]
-        
+                try:
+                    await self._unsubscribe_from_run(connection_id, run_id)
+                except Exception:
+                    # Best-effort cleanup; ignore errors during disconnect
+                    pass
+
         self.logger.info(
             "client.disconnected",
             extra={
@@ -320,8 +323,9 @@ class WebSocketConnectionManager:
         try:
             # Convert HTTP URL to WebSocket URL
             backend_ws_url = BACKEND_BASE_URL.replace("http://", "ws://").replace("https://", "wss://")
-            ws_url = f"{backend_ws_url}/backtests/{run_id}/ws"
-            
+            # Use canonical /api/v1 prefix for backend WebSocket endpoint
+            ws_url = f"{backend_ws_url}/api/v1/backtests/{run_id}/ws"
+
             self.logger.info(
                 "backend.connecting",
                 extra={

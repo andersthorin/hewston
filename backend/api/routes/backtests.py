@@ -300,6 +300,7 @@ async def backtests_ws_echo(websocket: WebSocket, run_id: str) -> None:
                         "ohlc": fr.ohlc,
                         "orders": fr.orders,
                         "equity": fr.equity,
+                        "metrics": fr.metrics,
                         "dropped": fr.dropped,
                     }
                     await websocket.send_text(_json_dumps(d))
@@ -375,6 +376,7 @@ async def stream_backtest(run_id: str, speed: float = 1.0):
                     "ohlc": fr.ohlc,
                     "orders": fr.orders,
                     "equity": fr.equity,
+                    "metrics": fr.metrics,
                     "dropped": fr.dropped,
                 }
                 yield f"event: frame\ndata: {_json_dumps(payload)}\n\n"

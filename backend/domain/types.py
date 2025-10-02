@@ -11,6 +11,7 @@ class StreamFrame:
     ohlc: Optional[Dict[str, Any]]
     orders: List[Dict[str, Any]]
     equity: Optional[Dict[str, Any]]  # { ts, value }
+    metrics: Optional[Dict[str, float]] = None  # E11: per-frame running metrics
     dropped: int = 0
 
 

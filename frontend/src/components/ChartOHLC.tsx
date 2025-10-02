@@ -38,6 +38,14 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
         console.warn('Failed to update chart data:', error)
       }
     },
+    setMarkers: (markers: Array<any>) => {
+      try {
+        const series = seriesRef.current as CandlestickSeriesApi | null
+        ;(series as any)?.setMarkers?.(markers)
+      } catch (error) {
+        console.warn('Failed to set markers:', error)
+      }
+    },
     scrollToLatest: () => {
       try {
         chartRef.current?.timeScale().scrollToRealTime()

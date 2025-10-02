@@ -4,6 +4,9 @@ import { useHourChartData } from '../hooks/useChartData'
 import { useBacktestPlayback } from '../services/ws'
 import PlaybackControls from '../components/PlaybackControls'
 import ChartOHLC, { type CandlestickChartAPI } from '../components/ChartOHLC'
+import TimelineScrubber from '../components/TimelineScrubber'
+import OverlaysOrders from '../components/OverlaysOrders'
+import playbackStore from '../store/playbackClock'
 import type { CandlestickData, Time } from 'lightweight-charts'
 import type { StreamFrameData } from '../types/streaming'
 
@@ -20,7 +23,7 @@ const devLog = (...args: unknown[]) => {
 
 export type RunPlayerContainerProps = { backtest_id: string; dataset_id?: string; run_from?: string; run_to?: string }
 
-export function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPlayerContainerProps) {
+function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPlayerContainerProps) {
   // Derive symbol from dataset_id if available (format: SYMBOL-*-1m)
   const symbol = (dataset_id?.split('-')[0] || '').toUpperCase() || undefined
 
@@ -35,7 +38,15 @@ export function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }
     !!symbol && !!from && !!to
   )
 
-  const { state, onPlay, onPause, subscribe } = useBacktestPlayback(backtest_id)
+  const { state, onPlay, onPause, onSeek, subscribe } = useBacktestPlayback(backtest_id)
+
+  // Wire WS controls into playback store controls
+  useEffect(() => {
+    playbackStore.setControls({ play: onPlay, pause: onPause, seek: onSeek })
+  }, [onPlay, onPause, onSeek])
+
+  // Reflect playing state into store
+  useEffect(() => { playbackStore._setPlaying(state.playing) }, [state.playing])
 
   // Track the actual run window; prefer props (from manifest) and fall back to streaming inference
   const [runFrom, setRunFrom] = useState<string | null>(run_from ?? null)
@@ -45,16 +56,22 @@ export function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }
 
   // Subscribe to frames to infer run window only if props not provided
   useEffect(() => {
-    if (run_from && run_to) return
     const unsub = subscribe((frame: StreamFrameData) => {
       try {
-        const ts: string | undefined = frame?.ts || frame?.equity?.ts
-        if (!ts) return
-        const day = ts.slice(0, 10)
-        setRunFrom(prev => (prev && prev <= day ? prev : day))
-        setRunTo(prev => (prev && prev >= day ? prev : day))
+        // Always forward frame to playback store
+        // @ts-ignore using compatible types
+        playbackStore._setFrame(frame as any)
+        // Infer run window only if not provided via props
+        if (!(run_from && run_to)) {
+          const ts: string | undefined = frame?.ts || frame?.equity?.ts
+          if (ts) {
+            const day = ts.slice(0, 10)
+            setRunFrom(prev => (prev && prev <= day ? prev : day))
+            setRunTo(prev => (prev && prev >= day ? prev : day))
+          }
+        }
       } catch (error) {
-        console.warn('Failed to process frame for run window inference:', error)
+        console.warn('Failed to process frame:', error)
       }
     })
     return unsub
@@ -62,6 +79,7 @@ export function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }
 
   // Imperative chart refs
   const ohlcRef = useRef<CandlestickChartAPI>(null)
+  const [viewMode, setViewMode] = useState<'daily'|'hourly'>('daily')
 
   const seededRef = useRef<boolean>(false)
 
@@ -74,6 +92,11 @@ export function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }
 
   // Group hourly bars by day and precompute cumulative daily snapshots per hour
   const [snapshotsVersion, setSnapshotsVersion] = useState(0)
+  // Keep playback store range in sync with inferred/known run window
+  useEffect(() => {
+    playbackStore._setRange({ start: runFrom, end: runTo })
+  }, [runFrom, runTo])
+
 
   const dailySnapshotsRef = useRef<Map<string, Array<{ o: number, h: number, l: number, c: number }>> | null>(null)
 
@@ -97,13 +120,13 @@ export function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }
     if (!hourResp?.bars) { dailySnapshotsRef.current = null; dayKeysRef.current = null; return }
     if (!runFrom || !runTo) { dailySnapshotsRef.current = null; dayKeysRef.current = null; return }
 
-    const byDay = new Map<string, Array<{ o: number, h: number, l: number, c: number }>>()
+    const byDay = new Map<string, Array<{ o: number, h: number, l: number, c: number, t: string }>>()
     // bars are sorted by time; build cumulative OHLC per calendar day
     let curDay: string | null = null
     let o: number | null = null, h = -Infinity, l = Infinity, c: number | null = null
     for (const b of hourResp.bars) {
-      const ts = new Date(b.t)
-      const day = ts.toISOString().slice(0, 10)
+      const tsDate = new Date(b.t)
+      const day = tsDate.toISOString().slice(0, 10)
       if (curDay !== day) {
         // flush previous day if any
         if (curDay && o != null && c != null && isFinite(h) && isFinite(l)) {
@@ -113,7 +136,7 @@ export function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }
       }
       o = o ?? b.o; h = Math.max(h, b.h); l = Math.min(l, b.l); c = b.c
       const arr = byDay.get(day) || []
-      arr.push({ o: o!, h, l, c: c! })
+      arr.push({ o: o!, h, l, c: c!, t: new Date(b.t).toISOString() })
       byDay.set(day, arr)
     }
     // Restrict to the inferred run window if known
@@ -137,11 +160,13 @@ export function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }
   // Hourly ticker driving realtime-style daily playback (mutate same daily bar per hour)
   // Runs a 100ms timer and advances logical ticks based on elapsed time; fixed 1× (1000 ms per tick).
   useEffect(() => {
-    // Always recreate ticker when play state, window, or snapshots change
+    // Always recreate ticker when play state, window, snapshots or viewMode change
     if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null }
     if (!state.playing) return
     if (!runFrom || !runTo) return
     if (!dailySnapshotsRef.current || !dayKeysRef.current || dayKeysRef.current.length === 0) return
+    // Reset series when switching mode for time-type changes
+    ohlcRef.current?.reset([])
 
     const period = 100 // ms per logical tick at fixed 10×
     devLog('ticker.start', { period, days: dayKeysRef.current?.length })
@@ -160,7 +185,10 @@ export function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }
       const s = snaps[i]
       if (!s) { dayIdxRef.current++; hourIdxRef.current = 0; return }
 
-      const dp: CandlestickData = { time: { year: y, month: m, day: d } as Time, open: s.o, high: s.h, low: s.l, close: s.c }
+      const timeVal: Time = (viewMode === 'daily')
+        ? ({ year: y, month: m, day: d } as Time)
+        : (Math.floor(new Date(s.t).getTime() / 1000) as unknown as Time)
+      const dp: CandlestickData = { time: timeVal, open: s.o, high: s.h, low: s.l, close: s.c }
       const firstOfDay = (hourIdxRef.current === 0)
       if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
       if (firstOfDay || !seededRef.current) { ohlcRef.current?.scrollToLatest() }
@@ -171,7 +199,7 @@ export function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }
     }, period) // fixed step: one snapshot per tick for determinism
 
     return () => { if (hourTickerRef.current) { clearInterval(hourTickerRef.current); hourTickerRef.current = null } }
-  }, [state.playing, runFrom, runTo, snapshotsVersion])
+  }, [state.playing, runFrom, runTo, snapshotsVersion, viewMode])
 
 
   const formatTime = (t: Time, locale?: string) => {
@@ -188,18 +216,26 @@ export function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }
       console.warn('Failed to format time:', error)
       return String(t)
     }
+
   }
+
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <PlaybackControls playing={state.playing} onPlay={onPlay} onPause={onPause} />
         <div className="flex items-center gap-2">
-          <div className="text-slate-500">Transport: {state.status} · Candles: daily/api-sim</div>
+          <div className="text-slate-500">Transport: {state.status}</div>
+          <div className="inline-flex rounded border border-slate-300 overflow-hidden text-xs">
+            <button className={`px-2 py-1 ${viewMode==='daily'?'bg-slate-200':''}`} onClick={() => setViewMode('daily')}>Daily</button>
+            <button className={`px-2 py-1 ${viewMode==='hourly'?'bg-slate-200':''}`} onClick={() => setViewMode('hourly')}>Hourly</button>
+          </div>
         </div>
       </div>
       <div className="grid grid-cols-1 gap-4">
         <ChartOHLC ref={ohlcRef} formatTime={formatTime} />
+        <OverlaysOrders chartRef={ohlcRef as any} />
+        <TimelineScrubber />
         {!runFrom || !runTo ? <div className="text-sm text-slate-500">Waiting for frames…</div> : null}
         {isHourLoading ? <div className="text-sm text-slate-500">Loading hourly data…</div> : null}
         {isHourErr ? <div className="text-sm text-amber-600">No hourly data for {symbol} in this range.</div> : null}
@@ -207,5 +243,7 @@ export function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }
     </div>
   )
 }
+
+
 
 export default RunPlayerContainer

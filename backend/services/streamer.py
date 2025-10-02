@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from datetime import datetime as _dt
 from typing import AsyncGenerator, Dict, List, Optional, Tuple
+import math
 
 import polars as pl
 import pandas as pd
@@ -135,6 +136,83 @@ def _calculate_decimation_stride(total_frames: int, fps: int, realtime: bool) ->
         return 1
 
 
+def _precompute_metrics_from_equity(equity_rows: List[dict]) -> Dict[str, List[Optional[float]]]:
+    """Compute per-index running metrics for finished runs.
+    Returns dict of arrays aligned to equity_rows order with possible None entries.
+    Metrics:
+      - total_return_so_far: equity[i]/equity[0] - 1
+      - max_drawdown_so_far: max_{tau<=i} (peak_to_date - equity[tau]) / peak_to_date
+      - sharpe_so_far: mean(r[1..i]) / std(r[1..i]) with r_t = equity[t]/equity[t-1]-1, r_f=0 (no annualization)
+    """
+    n = len(equity_rows)
+    if n == 0:
+        return {"total_return_so_far": [], "max_drawdown_so_far": [], "sharpe_so_far": []}
+
+    vals = [float(er.get("value", float("nan"))) for er in equity_rows]
+    base = vals[0]
+
+    trs: List[Optional[float]] = [None] * n
+    mdd: List[Optional[float]] = [None] * n
+    shp: List[Optional[float]] = [None] * n
+
+    # total return so far
+    for i in range(n):
+        v = vals[i]
+        if base and base != 0.0 and math.isfinite(v):
+            trs[i] = (v / base) - 1.0
+        else:
+            trs[i] = None
+
+    # max drawdown so far
+    peak = -float("inf")
+    cur_mdd = 0.0
+    for i in range(n):
+        v = vals[i]
+        if math.isfinite(v):
+            if v > peak:
+                peak = v
+            if peak and peak > 0.0:
+                dd = (peak - v) / peak
+                if dd > cur_mdd:
+                    cur_mdd = dd
+                mdd[i] = cur_mdd
+            else:
+                mdd[i] = None
+        else:
+            mdd[i] = None
+
+    # sharpe so far (run-to-date, r_f=0, no annualization)
+    sum_r = 0.0
+    sum_r2 = 0.0
+    count = 0
+    prev = vals[0]
+    shp[0] = None
+    for i in range(1, n):
+        v = vals[i]
+        if math.isfinite(v) and math.isfinite(prev) and prev != 0.0:
+            r = (v / prev) - 1.0
+            sum_r += r
+            sum_r2 += r * r
+            count += 1
+            mean = sum_r / count
+            var = (sum_r2 / count) - (mean * mean)
+            std = math.sqrt(var) if var > 0 else 0.0
+            if std > 0:
+                shp[i] = mean / std
+            else:
+                shp[i] = None
+        else:
+            shp[i] = None
+        prev = v
+
+    return {
+        "total_return_so_far": trs,
+        "max_drawdown_so_far": mdd,
+        "sharpe_so_far": shp,
+    }
+
+
+
 async def produce_frames(
     *,
     run_id: str,
@@ -155,6 +233,9 @@ async def produce_frames(
     # Load data from parquet files
     equity_rows = _iter_parquet_dicts(artifacts["equity"], select=["ts_utc", "value"]) if artifacts.get("equity") else []
     orders_rows = _iter_parquet_dicts(artifacts["orders"]) if artifacts.get("orders") else []
+
+    # Precompute metrics from equity for finished runs
+    metrics_arrays = _precompute_metrics_from_equity(equity_rows)
 
     # Prepare data structures
     bars_map = _load_bars_data(dataset_id)
@@ -192,12 +273,19 @@ async def produce_frames(
                     except Exception:
                         pass
                 orders_payload.append(o2)
+            # Metrics attachment for this index (may contain None values)
+            mi = {
+                "total_return_so_far": metrics_arrays.get("total_return_so_far", [None]*total)[i],
+                "max_drawdown_so_far": metrics_arrays.get("max_drawdown_so_far", [None]*total)[i],
+                "sharpe_so_far": metrics_arrays.get("sharpe_so_far", [None]*total)[i],
+            }
             frame = StreamFrame(
                 t="frame",
                 ts=iso,
                 ohlc=ohlc,
                 orders=orders_payload,
                 equity={"ts": iso, "value": er["value"]},
+                metrics=mi,
                 dropped=dropped,
             )
             yield frame

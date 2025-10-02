@@ -17,6 +17,13 @@ export const StreamFrameSchema = z.object({
     .optional(),
   orders: z.array(z.any()),
   equity: z.object({ ts: z.string(), value: z.number() }).nullable().optional(),
+  metrics: z
+    .object({
+      total_return_so_far: z.number().nullable().optional(),
+      max_drawdown_so_far: z.number().nullable().optional(),
+      sharpe_so_far: z.number().nullable().optional(),
+    })
+    .optional(),
   dropped: z.number().int().nonnegative(),
 })
 export type StreamFrameT = z.infer<typeof StreamFrameSchema>

@@ -42,6 +42,11 @@ export interface StreamFrameData {
   ohlc?: OHLCData | null       // OHLC bar data
   orders: OrderData[]          // array of orders for this timestamp
   equity?: EquityData | null   // equity curve data point
+  metrics?: {
+    total_return_so_far?: number | null
+    max_drawdown_so_far?: number | null
+    sharpe_so_far?: number | null
+  }
   dropped: number              // number of dropped frames
 }
 

@@ -17,14 +17,33 @@ def utc_now() -> datetime:
 
 
 def _to_datetime_utc(val: Union[str, int, float, datetime, pd.Timestamp]) -> datetime:
-    """Convert supported inputs to a timezone-aware UTC datetime."""
+    """Convert supported inputs to a timezone-aware UTC datetime.
+    - Supports epoch provided in seconds, milliseconds, or nanoseconds.
+    """
     if isinstance(val, datetime):
         # If naive, assume UTC
         return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
     if isinstance(val, pd.Timestamp):
         return val.tz_convert("UTC").to_pydatetime() if val.tzinfo else val.tz_localize("UTC").to_pydatetime()
     if isinstance(val, (int, float)):
-        return datetime.fromtimestamp(float(val), tz=timezone.utc)
+        # Detect unit by magnitude. Fallback avoids OverflowError on very large integers.
+        try:
+            if isinstance(val, int):
+                a = abs(val)
+                # Heuristics: ns >= 1e15, ms >= 1e12
+                if a >= 1_000_000_000_000_000:  # nanoseconds
+                    v = val / 1_000_000_000
+                elif a >= 1_000_000_000_000:  # milliseconds
+                    v = val / 1_000
+                else:  # seconds
+                    v = float(val)
+            else:
+                # For floats assume seconds
+                v = float(val)
+            return datetime.fromtimestamp(v, tz=timezone.utc)
+        except Exception:
+            # Last resort: interpret as nanoseconds
+            return datetime.fromtimestamp(float(val) / 1_000_000_000, tz=timezone.utc)
     if isinstance(val, str):
         # Preserve exact 'Z' formatting when input uses it by returning the string later
         return pd.to_datetime(val, utc=True).to_pydatetime()
