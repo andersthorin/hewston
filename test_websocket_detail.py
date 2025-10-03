@@ -18,7 +18,7 @@ async def test_run_detail_websocket():
     for run_id in test_runs:
         print(f"\n=== Testing WebSocket for run: {run_id} ===")
         
-        uri = f"ws://127.0.0.1:8001/api/v1/runs/{run_id}/stream"
+        uri = f"ws://127.0.0.1:8001/api/v1/backtests/{run_id}/stream"
         
         try:
             async with websockets.connect(uri) as websocket:

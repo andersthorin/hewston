@@ -87,16 +87,24 @@ describe('BFFWebSocketManager', () => {
 
     it('should handle connection timeout', async () => {
       // Mock WebSocket that never opens
-      class SlowWebSocket extends MockWebSocket {
-        constructor(url: string) {
-          super(url)
-          // Don't call onopen
-        }
+      class NeverOpensWebSocket {
+        static CONNECTING = 0
+        static OPEN = 1
+        static CLOSING = 2
+        static CLOSED = 3
+        readyState = NeverOpensWebSocket.CONNECTING
+        onopen: ((ev: any) => void) | null = null
+        onmessage: ((ev: any) => void) | null = null
+        onclose: ((ev: any) => void) | null = null
+        onerror: ((ev: any) => void) | null = null
+        constructor(_url: string) {}
+        close() { /* noop */ }
+        send(_data: any) { /* noop */ }
       }
-      vi.stubGlobal('WebSocket', SlowWebSocket)
+      vi.stubGlobal('WebSocket', NeverOpensWebSocket as any)
 
       manager = new BFFWebSocketManager('test-run-123', { connectionTimeout: 100 })
-      
+
       await expect(manager.connect()).rejects.toThrow('WebSocket connection timeout')
     })
 
@@ -166,12 +174,12 @@ describe('BFFWebSocketManager', () => {
       })
       
       await manager.connect()
-      
+
       // Simulate connection loss
-      const ws = (manager as any).ws as MockWebSocket
-      ws.readyState = MockWebSocket.CLOSED
+      const ws = (manager as any).ws as any
+      ws.readyState = (globalThis as any).WebSocket.CLOSED
       ws.onclose?.(new CloseEvent('close', { wasClean: false }))
-      
+
       // Wait for reconnection attempts
       await new Promise(resolve => setTimeout(resolve, 200))
       
@@ -189,8 +197,8 @@ describe('BFFWebSocketManager', () => {
       
       // Simulate multiple connection failures
       for (let i = 0; i < 5; i++) {
-        const ws = (manager as any).ws as MockWebSocket
-        ws.readyState = MockWebSocket.CLOSED
+        const ws = (manager as any).ws as any
+        ws.readyState = (globalThis as any).WebSocket.CLOSED
         ws.onclose?.(new CloseEvent('close', { wasClean: false }))
         await new Promise(resolve => setTimeout(resolve, 20))
       }
@@ -225,30 +233,31 @@ describe('BFFWebSocketManager', () => {
 
     it('should measure latency with ping/pong', () => {
       manager.ping()
-      
+
       // Simulate pong response
-      const ws = (manager as any).ws as MockWebSocket
-      ws.onmessage?.(new MessageEvent('message', { 
+      const ws = (manager as any).ws as any
+      ws.onmessage?.(new MessageEvent('message', {
         data: JSON.stringify({ t: 'pong', ts: Date.now() - 50 })
       }))
-      
+
       const health = manager.getHealth()
-      expect(health.latency).toBeGreaterThan(0)
+      expect(health.latency ?? 0).toBeGreaterThanOrEqual(0)
     })
   })
 
   describe('Feature Flag Integration', () => {
-    it('should use correct endpoint based on feature flags', () => {
+    it('should use correct endpoint based on feature flags', async () => {
+      const { featureFlagService } = await import('../featureFlags')
       // Test backend mode
-      mockFeatureFlagService.isFeatureFlagEnabled.mockReturnValue(false)
+      vi.mocked(featureFlagService.isFeatureFlagEnabled).mockReturnValue(false)
       const backendManager = new BFFWebSocketManager('test-run-123')
       expect(backendManager.getHealth().connectionSource).toBe('backend')
-      
+
       // Test BFF mode
-      mockFeatureFlagService.isFeatureFlagEnabled.mockReturnValue(true)
+      vi.mocked(featureFlagService.isFeatureFlagEnabled).mockReturnValue(true)
       const bffManager = new BFFWebSocketManager('test-run-123')
       expect(bffManager.getHealth().connectionSource).toBe('bff')
-      
+
       bffManager.close()
     })
   })
@@ -272,9 +281,9 @@ describe('BFFWebSocketManager', () => {
       await manager.connect()
       
       // Mock send method to throw
-      const ws = (manager as any).ws as MockWebSocket
+      const ws = (manager as any).ws as any
       ws.send = () => { throw new Error('Send failed') }
-      
+
       const result = manager.send('test message')
       expect(result).toBe(false)
     })

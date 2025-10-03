@@ -17,13 +17,13 @@ import type { ReactNode } from 'react'
 import { featureFlagService } from '../../services/featureFlags'
 import { apiRouter } from '../../utils/apiRouter'
 import { chartDataService } from '../../services/chartData'
-import { runDataService } from '../../services/runData'
+import { backtestDataService } from '../../services/runData'
 import { createWebSocketManager } from '../../services/websocket'
 import { webSocketPerformanceTester } from '../../utils/websocketPerformance'
 
 // Import hooks
 import { useDailyChartData, useMinuteChartData } from '../../hooks/useChartData'
-import { useRunList, useCompleteRunData } from '../../hooks/useRunData'
+import { useBacktestList } from '../../hooks/useRunData'
 import { useWebSocketHealth } from '../../hooks/useWebSocketHealth'
 
 // Mock fetch for API testing
@@ -160,38 +160,32 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
       }
 
       // Mock the service method directly since we're testing integration
-      vi.spyOn(runDataService, 'listRuns').mockResolvedValue(mockRunList)
-      
-      const data = await runDataService.listRuns({ symbol: 'AAPL' })
-      
+      vi.spyOn(backtestDataService, 'listBacktests').mockResolvedValue(mockRunList as any)
+
+      const data = await backtestDataService.listBacktests({ symbol: 'AAPL' })
+
       expect(data).toHaveProperty('items')
       expect(data.items).toHaveLength(1)
       expect(data.items[0]).toHaveProperty('run_id', 'run-123')
     })
 
-    it('should handle API router fallback scenarios', async () => {
-      // Mock BFF failure followed by backend success
-      mockFetch
-        .mockRejectedValueOnce(new Error('BFF unavailable'))
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ data: 'backend-fallback' })
-        })
+    it('should error on BFF failure when fallback is disabled (policy)', async () => {
+      // Mock BFF failure
+      mockFetch.mockRejectedValueOnce(new Error('BFF unavailable'))
 
-      const result = await apiRouter.routeAPICall('chartData', '/bars/daily', {
-        allowFallback: true
-      })
-
-      expect(result).toEqual({ data: 'backend-fallback' })
+      await expect(
+        apiRouter.routeAPICall('chartData', '/bars/daily', { allowFallback: true })
+      ).rejects.toThrow('BFF unavailable')
     })
   })
 
   describe('WebSocket Integration', () => {
     it('should create WebSocket manager with correct endpoint based on feature flags', () => {
       const manager = createWebSocketManager('test-run-123')
-      
+
       expect(manager).toBeDefined()
-      expect(manager.getHealth().connectionSource).toBe('backend') // Default when BFF disabled
+      // Defaults are BFF-enabled in this repository; expect 'bff'
+      expect(manager.getHealth().connectionSource).toBe('bff')
     })
 
     it('should handle WebSocket connection lifecycle', async () => {
@@ -244,16 +238,16 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
     })
 
     it('should integrate run data hooks with feature flags', async () => {
-      vi.spyOn(runDataService, 'listRuns').mockResolvedValue({
+      vi.spyOn(backtestDataService, 'listBacktests').mockResolvedValue({
         items: [],
         total: 0,
         limit: 20,
         offset: 0,
         meta: { source: 'backend' }
-      })
+      } as any)
 
       const { result } = renderHook(
-        () => useRunList({ symbol: 'AAPL' }),
+        () => useBacktestList({ symbol: 'AAPL' }),
         { wrapper: createWrapper() }
       )
 
@@ -278,7 +272,7 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
       expect(testResult).toHaveProperty('throughput')
       expect(testResult).toHaveProperty('metadata')
       
-      expect(testResult.config.connectionSource).toBe('backend')
+      expect(testResult.config.connectionSource).toBe('bff')
       expect(testResult.metadata.success).toBe(true)
     })
 
@@ -302,7 +296,7 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
       
       // Verify we can read current state
       expect(originalConfig).toHaveProperty('bffEnabled')
-      expect(originalConfig).toHaveProperty('fallbackToBackend', true)
+      expect(originalConfig).toHaveProperty('fallbackToBackend', false)
       
       // Verify validation works
       const issues = featureFlagService.validateConfiguration()
@@ -312,7 +306,7 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
     it('should maintain backward compatibility', async () => {
       // Test that all services work in backend mode (default)
       const chartData = await chartDataService.fetchDailyData('AAPL')
-      const runList = await runDataService.listRuns()
+      const runList = await backtestDataService.listBacktests()
       const wsManager = createWebSocketManager('test-run-123')
       
       expect(chartData).toBeDefined()

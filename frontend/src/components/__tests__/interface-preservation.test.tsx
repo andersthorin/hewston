@@ -1,6 +1,7 @@
+import React from 'react'
 /**
  * Component Interface Preservation Tests
- * 
+ *
  * These tests validate that component interfaces remain unchanged during BFF migration.
  * Critical for ensuring backward compatibility and zero-risk migration.
  */
@@ -15,6 +16,11 @@ import FiltersBar from '../FiltersBar'
 import BacktestDetailView from '../../views/BacktestDetail'
 
 // Mock the services to prevent actual API calls
+// Stub ChartOHLC to avoid heavy lightweight-charts rendering in tests
+vi.mock('../ChartOHLC', () => ({
+  default: () => <div data-testid="chart-ohlc" />
+}))
+
 vi.mock('../../services/chartData', () => ({
   chartDataService: {
     fetchDailyData: vi.fn(),
@@ -24,9 +30,9 @@ vi.mock('../../services/chartData', () => ({
 }))
 
 vi.mock('../../services/runData', () => ({
-  runDataService: {
-    listRuns: vi.fn(),
-    getCompleteRunData: vi.fn(),
+  backtestDataService: {
+    listBacktests: vi.fn(),
+    getCompleteBacktest: vi.fn(),
   }
 }))
 
@@ -49,12 +55,21 @@ vi.mock('../../services/featureFlags', () => ({
     })
   }
 }))
+vi.mock('../../services/ws', () => ({
+  useBacktestPlayback: () => ({
+    state: { status: 'ws', playing: false },
+    subscribe: () => () => {},
+    onPlay: vi.fn(), onPause: vi.fn(), onSpeedChange: vi.fn(), onSeek: vi.fn(),
+    sendReady: vi.fn(), getConnectionHealth: vi.fn(() => ({ state: 'connected', reconnectAttempts: 0 }))
+  })
+}))
+
 
 describe('Component Interface Preservation', () => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } }
   })
-  
+
   const wrapper = ({ children }: { children: React.ReactNode }) => (
     <QueryClientProvider client={queryClient}>
       {children}
@@ -71,7 +86,7 @@ describe('Component Interface Preservation', () => {
         height: 400,
         width: 800
       }
-      
+
       expect(() => {
         render(<ChartOHLC {...props} />, { wrapper })
       }).not.toThrow()
@@ -91,22 +106,24 @@ describe('Component Interface Preservation', () => {
 
   describe('Data Display Components', () => {
     it('should preserve RunsTable props interface', () => {
-      const mockRuns = [
+      const items = [
         {
-          run_id: 'run-1',
-          symbol: 'AAPL',
+          backtest_id: 'bt-1',
           created_at: '2023-01-01T00:00:00Z',
-          status: 'completed' as const
+          strategy_id: 'strat-1',
+          status: 'COMPLETED' as const,
+          symbol: 'AAPL',
+          run_from: '2023-01-01',
+          run_to: '2023-01-31',
+          duration_ms: 0,
         }
       ]
 
       const props = {
-        runs: mockRuns,
-        loading: false,
-        onRunSelect: vi.fn(),
-        onRunDelete: vi.fn()
+        items,
+        onView: vi.fn(),
       }
-      
+
       expect(() => {
         render(<RunsTable {...props} />, { wrapper })
       }).not.toThrow()
@@ -122,7 +139,7 @@ describe('Component Interface Preservation', () => {
         },
         onDateRangeChange: vi.fn()
       }
-      
+
       expect(() => {
         render(<FiltersBar {...props} />, { wrapper })
       }).not.toThrow()
@@ -141,7 +158,7 @@ describe('Component Interface Preservation', () => {
         onSeek: vi.fn(),
         onSpeedChange: vi.fn()
       }
-      
+
       expect(() => {
         render(<PlaybackControls {...props} />, { wrapper })
       }).not.toThrow()
@@ -162,7 +179,7 @@ describe('Component Interface Preservation', () => {
         onSeek: vi.fn(),
         onSpeedChange: vi.fn()
       }
-      
+
       expect(() => {
         render(<PlaybackControls {...playingProps} />, { wrapper })
       }).not.toThrow()
@@ -174,7 +191,7 @@ describe('Component Interface Preservation', () => {
       const props = {
         runId: 'test-run-123'
       }
-      
+
       expect(() => {
         render(<BacktestDetailView {...props} />, { wrapper })
       }).not.toThrow()
@@ -203,14 +220,12 @@ describe('Component Interface Preservation', () => {
 
     it('should maintain TypeScript type safety for table props', () => {
       const tableProps: React.ComponentProps<typeof RunsTable> = {
-        runs: [],
-        loading: false,
-        onRunSelect: vi.fn(),
-        onRunDelete: vi.fn()
+        items: [],
+        onView: vi.fn(),
       }
 
-      expect(Array.isArray(tableProps.runs)).toBe(true)
-      expect(typeof tableProps.loading).toBe('boolean')
+      expect(Array.isArray(tableProps.items)).toBe(true)
+      expect(typeof tableProps.onView).toBe('function')
     })
 
     it('should maintain TypeScript type safety for control props', () => {

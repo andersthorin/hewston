@@ -15,7 +15,7 @@ async def test_websocket_connection(run_id: str, test_name: str):
     """Test WebSocket connection with different message patterns."""
     print(f"\n=== {test_name} for run: {run_id} ===")
     
-    uri = f"ws://127.0.0.1:8001/api/v1/runs/{run_id}/stream"
+    uri = f"ws://127.0.0.1:8001/api/v1/backtests/{run_id}/stream"
     
     try:
         async with websockets.connect(uri) as websocket:
@@ -82,7 +82,7 @@ async def test_multiple_connections(run_id: str):
     """Test multiple simultaneous connections to the same run."""
     print(f"\n=== Testing multiple connections to run: {run_id} ===")
     
-    uri = f"ws://127.0.0.1:8001/api/v1/runs/{run_id}/stream"
+    uri = f"ws://127.0.0.1:8001/api/v1/backtests/{run_id}/stream"
     connections = []
     
     try:
@@ -120,7 +120,7 @@ async def test_rapid_messages(run_id: str):
     """Test rapid message sending that might overwhelm the server."""
     print(f"\n=== Testing rapid messages for run: {run_id} ===")
     
-    uri = f"ws://127.0.0.1:8001/api/v1/runs/{run_id}/stream"
+    uri = f"ws://127.0.0.1:8001/api/v1/backtests/{run_id}/stream"
     
     try:
         async with websockets.connect(uri) as websocket:

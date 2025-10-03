@@ -97,7 +97,7 @@ describe('BFF Performance Validation', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({
-          run_id: 'test-run',
+          backtest_id: 'test-backtest',
           strategy_id: 'test-strategy',
           status: 'completed',
           metrics: {},
@@ -107,8 +107,8 @@ describe('BFF Performance Validation', () => {
         })
       } as Response)
 
-      const { runDataService } = await import('../../services/runData')
-      await runDataService.getCompleteRunData('test-run')
+      const { backtestDataService } = await import('../../services/runData')
+      await backtestDataService.getCompleteBacktest('test-backtest')
       
       // Should make only 1 API call instead of multiple calls for run + metrics + equity + orders
       expect(mockFetch).toHaveBeenCalledTimes(1)
@@ -128,7 +128,7 @@ describe('BFF Performance Validation', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({
-          run_id: 'test-run',
+          backtest_id: 'test-backtest',
           strategy_id: 'test-strategy',
           status: 'completed',
           metrics: {},
@@ -138,10 +138,10 @@ describe('BFF Performance Validation', () => {
         })
       } as Response)
 
-      const { runDataService } = await import('../../services/runData')
-      
+      const { backtestDataService } = await import('../../services/runData')
+
       const startTime = Date.now()
-      await runDataService.getCompleteRunData('test-run')
+      await backtestDataService.getCompleteBacktest('test-backtest')
       const duration = Date.now() - startTime
       
       // Should be reasonably fast with aggregated data
@@ -195,26 +195,26 @@ describe('BFF Performance Validation', () => {
       mockFetch.mockResolvedValue({
         ok: true,
         json: () => Promise.resolve({
-          run_id: 'test-run',
+          backtest_id: 'test-backtest',
           strategy_id: 'test-strategy',
           status: 'completed',
           metrics: { totalReturn: 0.15, sharpeRatio: 1.2 },
-          equity: [{ timestamp: '2023-01-01', value: 10000 }],
-          orders: [{ id: 1, symbol: 'AAPL', quantity: 100 }],
+          equity: [{ ts: '2023-01-01', value: 10000 }],
+          orders: [{ ts: '2023-01-01T09:30:00Z', side: 'buy', quantity: 100, price: 150 }],
           meta: { aggregated: true, source: 'bff' }
         })
       } as Response)
 
-      const { runDataService } = await import('../../services/runData')
-      
+      const { backtestDataService } = await import('../../services/runData')
+
       const startTime = Date.now()
-      const result = await runDataService.getCompleteRunData('test-run')
+      const result = await backtestDataService.getCompleteBacktest('test-backtest')
       const processingTime = Date.now() - startTime
-      
+
       // Should be fast with pre-aggregated data
       expect(processingTime).toBeLessThan(500) // Should be faster than 500ms
-      expect(result.meta.aggregated).toBe(true)
-      expect(result.meta.source).toBe('bff')
+      expect(result?.meta?.aggregated).toBe(true)
+      expect(result?.meta?.source).toBe('bff')
     })
   })
 

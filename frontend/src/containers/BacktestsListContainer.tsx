@@ -17,10 +17,9 @@ function CreateBacktestForm({ onCreated, creating, setCreating }: { onCreated: (
       const symbol = String(form.get('symbol') || 'AAPL')
       const run_from = String(form.get('run_from') || '')
       const run_to = String(form.get('run_to') || '')
-      type CreateReq = CreateBacktestRequest & { from?: string; to?: string }
-      const request: Partial<CreateReq> = { strategy_id, symbol }
-      if (run_from) request.from = run_from
-      if (run_to) request.to = run_to
+      const request: Partial<CreateBacktestRequest> = { strategy_id, symbol }
+      if (run_from) request.run_from = run_from
+      if (run_to) request.run_to = run_to
 
       const resp = await createBacktest.mutateAsync({
         request,

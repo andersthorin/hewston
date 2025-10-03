@@ -66,11 +66,11 @@ def list_backtests_service(
             if mp and os.path.isfile(mp):
                 with open(mp, "r") as f:
                     m = _json.load(f)
-                rf = m.get("run_from") or m.get("from") or m.get("from_date")
-                rt = m.get("run_to") or m.get("to") or m.get("to_date")
-                if rf:
+                rf = m.get("run_from")
+                rt = m.get("run_to")
+                if rf is not None:
                     d["run_from"] = rf
-                if rt:
+                if rt is not None:
                     d["run_to"] = rt
         except Exception:
             # Best-effort enrichment; if missing, leave as None
@@ -97,11 +97,11 @@ def get_backtest_service(run_id: str) -> Optional[dict]:
             if os.path.isfile(mp):
                 with open(mp, "r") as f:
                     m = _json.load(f)
-                rf = m.get("run_from") or m.get("from") or m.get("from_date")
-                rt = m.get("run_to") or m.get("to") or m.get("to_date")
-                if rf:
+                rf = m.get("run_from")
+                rt = m.get("run_to")
+                if rf is not None:
                     run["run_from"] = rf
-                if rt:
+                if rt is not None:
                     run["run_to"] = rt
     except Exception:
         # Best-effort; ignore enrichment errors
@@ -136,8 +136,8 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
     seed = int(body.get("seed", 42))
     speed = int(body.get("speed", 60))
     slippage_fees = body.get("slippage_fees", {})
-    from_date = body.get("from")
-    to_date = body.get("to")
+    run_from = body.get("run_from")
+    run_to = body.get("run_to")
 
     # strategy_id is required; params are optional (defaults provided)
     if not strategy_id:
@@ -156,10 +156,10 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
         except Exception:
             return False
 
-    if from_date and not _parse_iso8601(from_date):
-        return {"error": {"code": "BAD_REQUEST", "message": "Invalid date format in run_from/run_to fields: 'from' is not ISO 8601"}}, 400
-    if to_date and not _parse_iso8601(to_date):
-        return {"error": {"code": "BAD_REQUEST", "message": "Invalid date format in run_from/run_to fields: 'to' is not ISO 8601"}}, 400
+    if run_from and not _parse_iso8601(run_from):
+        return {"error": {"code": "BAD_REQUEST", "message": "Invalid date format in 'run_from' (expected ISO 8601 YYYY-MM-DD)"}}, 400
+    if run_to and not _parse_iso8601(run_to):
+        return {"error": {"code": "BAD_REQUEST", "message": "Invalid date format in 'run_to' (expected ISO 8601 YYYY-MM-DD)"}}, 400
 
     dataset_id = body.get("dataset_id")
     symbol = body.get("symbol")
@@ -180,8 +180,8 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
             catalog.upsert_dataset({
                 "dataset_id": dataset_id,
                 "symbol": symbol,
-                "from_date": from_date,
-                "to_date": to_date,
+                "from_date": run_from,
+                "to_date": run_to,
                 "products": [],
                 "raw_dbn": [],
                 "bars_parquet": [],
@@ -202,8 +202,8 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
         "seed": seed,
         "slippage_fees": slippage_fees,
         "speed": speed,
-        "from": from_date,
-        "to": to_date,
+        "run_from": run_from,
+        "run_to": run_to,
     }
     input_hash = _canonical_inputs_hash(inputs_for_hash)
 
@@ -268,8 +268,8 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
                 "seed": seed,
                 "slippage_fees": slippage_fees,
                 "speed": speed,
-                "run_from": from_date,
-                "run_to": to_date,
+                "run_from": run_from,
+                "run_to": run_to,
                 "code_hash": "unknown",
                 "created_at": created_at,
                 "tz": "America/New_York",
@@ -307,8 +307,8 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
             "speed": speed,
             "slippage_fees": slippage_fees,
             "run_id": run_id,
-            "from_date": from_date,
-            "to_date": to_date,
+            "from_date": run_from,
+            "to_date": run_to,
         },
         daemon=True,
     ).start()

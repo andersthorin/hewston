@@ -78,8 +78,8 @@ async def list_backtests(
     offset: int = 0,
     symbol: str | None = None,
     strategy_id: str | None = None,
-    from_date: str | None = Query(None, alias="from"),
-    to_date: str | None = Query(None, alias="to"),
+    run_from: str | None = Query(None, alias="run_from"),
+    run_to: str | None = Query(None, alias="run_to"),
     order: str | None = None,
 ):
     logger.info(
@@ -87,8 +87,8 @@ async def list_backtests(
         extra={
             "symbol": symbol,
             "strategy_id": strategy_id,
-            "from": from_date,
-            "to": to_date,
+            "run_from": run_from,
+            "run_to": run_to,
             "limit": limit,
             "offset": offset,
             "order": order,
@@ -97,8 +97,8 @@ async def list_backtests(
     return list_backtests_ctrl(
         symbol=symbol,
         strategy_id=strategy_id,
-        from_date=from_date,
-        to_date=to_date,
+        from_date=run_from,
+        to_date=run_to,
         limit=limit,
         offset=offset,
         order=order,

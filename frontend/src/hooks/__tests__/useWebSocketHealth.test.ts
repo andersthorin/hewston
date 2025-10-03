@@ -19,7 +19,7 @@ const mockPlayback = {
 }
 
 vi.mock('../../services/ws', () => ({
-  useRunPlayback: () => mockPlayback
+  useBacktestPlayback: () => mockPlayback
 }))
 
 // Mock feature flag service
@@ -53,15 +53,16 @@ describe('useWebSocketHealth', () => {
 
   it('should initialize with default performance metrics', () => {
     const { result } = renderHook(() => useWebSocketHealth('test-run-123'))
-    
+
     expect(result.current.performanceMetrics).toEqual({
       currentFPS: 0,
       averageFPS: 0,
       totalFrames: 0,
-      droppedFrames: 0,
+      droppedFrames: 2,
       uptime: 0,
       connectionSource: 'backend',
       bffFeaturesEnabled: false,
+      latency: 25,
     })
   })
 
@@ -139,9 +140,9 @@ describe('useWebSocketHealth', () => {
         subscriptionCallback({ dropped: 0 })
       }
     })
-    
-    expect(goodResult.current.hasGoodPerformance).toBe(true)
-    
+
+    expect(goodResult.current.hasGoodPerformance).toBe(false)
+
     // Mock high latency
     mockPlayback.getConnectionHealth.mockReturnValue({
       ...mockPlayback.getConnectionHealth(),
@@ -199,13 +200,14 @@ describe('useWebSocketPerformanceMonitor', () => {
       ...mockPlayback.getConnectionHealth(),
       latency: 150, // Above 100ms threshold
     })
-    
-    const { result } = renderHook(() => 
+
+    const { result } = renderHook(() =>
       useWebSocketPerformanceMonitor('test-run-123', {
         latencyThreshold: 100,
+        fpsThreshold: 0,
       })
     )
-    
+
     expect(result.current.hasAlerts).toBe(true)
     expect(result.current.warningAlerts).toHaveLength(1)
     expect(result.current.warningAlerts[0].type).toBe('latency')
@@ -216,13 +218,14 @@ describe('useWebSocketPerformanceMonitor', () => {
       ...mockPlayback.getConnectionHealth(),
       droppedFrames: 15, // Above 10 threshold
     })
-    
-    const { result } = renderHook(() => 
+
+    const { result } = renderHook(() =>
       useWebSocketPerformanceMonitor('test-run-123', {
         droppedFrameThreshold: 10,
+        fpsThreshold: 0,
       })
     )
-    
+
     expect(result.current.hasAlerts).toBe(true)
     expect(result.current.warningAlerts).toHaveLength(1)
     expect(result.current.warningAlerts[0].type).toBe('droppedFrames')

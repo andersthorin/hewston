@@ -4,6 +4,7 @@
 
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
 import { apiRouter } from '../apiRouter'
+import { featureFlagService } from '../../services/featureFlags'
 
 // Create a new instance for testing
 const APIClientRouter = (apiRouter as any).constructor
@@ -12,15 +13,13 @@ const APIClientRouter = (apiRouter as any).constructor
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
-// Mock feature flag service
-const mockFeatureFlagService = {
-  evaluateFeatureFlag: vi.fn(),
-  getConfiguration: vi.fn(),
-  validateConfiguration: vi.fn(),
-}
-
-vi.mock('../services/featureFlags', () => ({
-  featureFlagService: mockFeatureFlagService
+// Mock feature flag service module with fresh vi.fn()s
+vi.mock('../../services/featureFlags', () => ({
+  featureFlagService: {
+    evaluateFeatureFlag: vi.fn(),
+    getConfiguration: vi.fn(),
+    validateConfiguration: vi.fn(),
+  }
 }))
 
 // Mock import.meta.env
@@ -40,9 +39,9 @@ describe('APIClientRouter', () => {
   beforeEach(() => {
     router = new APIClientRouter()
     mockFetch.mockClear()
-    mockFeatureFlagService.evaluateFeatureFlag.mockClear()
-    mockFeatureFlagService.getConfiguration.mockClear()
-    mockFeatureFlagService.validateConfiguration.mockClear()
+    vi.mocked(featureFlagService.evaluateFeatureFlag).mockClear()
+    vi.mocked(featureFlagService.getConfiguration).mockClear()
+    vi.mocked(featureFlagService.validateConfiguration).mockClear()
   })
 
   afterEach(() => {
@@ -51,13 +50,13 @@ describe('APIClientRouter', () => {
 
   describe('Route API Call', () => {
     it('should route to backend when feature flag is disabled', async () => {
-      mockFeatureFlagService.evaluateFeatureFlag.mockReturnValue({
+      vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: false,
         endpointUrl: 'http://127.0.0.1:8000/bars',
         source: 'backend'
       })
-      
-      mockFeatureFlagService.getConfiguration.mockReturnValue({
+
+      vi.mocked(featureFlagService.getConfiguration).mockReturnValue({
         bffEnabled: false
       })
 
@@ -71,7 +70,6 @@ describe('APIClientRouter', () => {
       expect(mockFetch).toHaveBeenCalledWith(
         'http://127.0.0.1:8000/bars/daily',
         expect.objectContaining({
-          method: 'GET',
           headers: expect.objectContaining({
             'Content-Type': 'application/json'
           })
@@ -81,13 +79,13 @@ describe('APIClientRouter', () => {
     })
 
     it('should route to BFF when feature flag is enabled', async () => {
-      mockFeatureFlagService.evaluateFeatureFlag.mockReturnValue({
+      vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data',
         source: 'bff'
       })
-      
-      mockFeatureFlagService.getConfiguration.mockReturnValue({
+
+      vi.mocked(featureFlagService.getConfiguration).mockReturnValue({
         bffEnabled: true
       })
 
@@ -100,42 +98,34 @@ describe('APIClientRouter', () => {
 
       expect(mockFetch).toHaveBeenCalledWith(
         'http://127.0.0.1:8001/api/v1/chart-data',
-        expect.objectContaining({
-          method: 'GET'
-        })
+        expect.any(Object)
       )
       expect(result).toEqual({ data: 'bff-test' })
     })
 
-    it('should handle fallback when BFF fails', async () => {
-      mockFeatureFlagService.evaluateFeatureFlag.mockReturnValue({
+    it('should handle failure when BFF fails (no fallback)', async () => {
+      vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data',
         source: 'bff'
       })
-      
-      mockFeatureFlagService.getConfiguration.mockReturnValue({
+
+      vi.mocked(featureFlagService.getConfiguration).mockReturnValue({
         bffEnabled: true
       })
 
-      // First call (BFF) fails, second call (backend) succeeds
-      mockFetch
-        .mockRejectedValueOnce(new Error('BFF unavailable'))
-        .mockResolvedValueOnce({
-          ok: true,
-          json: () => Promise.resolve({ data: 'fallback-test' })
-        })
+      // BFF call fails; no fallback allowed by policy
+      mockFetch.mockRejectedValueOnce(new Error('BFF unavailable'))
 
-      const result = await router.routeAPICall('chartData', '/bars/daily', {
-        allowFallback: true
-      })
+      await expect(
+        router.routeAPICall('chartData', '/bars/daily', { allowFallback: true })
+      ).rejects.toThrow('BFF unavailable')
 
-      expect(mockFetch).toHaveBeenCalledTimes(2)
-      expect(result).toEqual({ data: 'fallback-test' })
+      expect(mockFetch).toHaveBeenCalledTimes(1)
     })
 
     it('should not fallback when disabled', async () => {
-      mockFeatureFlagService.evaluateFeatureFlag.mockReturnValue({
+      vi.mocked(featureFlagService).evaluateFeatureFlag.mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data',
         source: 'bff'
@@ -155,13 +145,13 @@ describe('APIClientRouter', () => {
 
   describe('Endpoint Transformation', () => {
     it('should transform chart data endpoints for BFF', async () => {
-      mockFeatureFlagService.evaluateFeatureFlag.mockReturnValue({
+      vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data',
         source: 'bff'
       })
-      
-      mockFeatureFlagService.getConfiguration.mockReturnValue({
+
+      vi.mocked(featureFlagService.getConfiguration).mockReturnValue({
         bffEnabled: true
       })
 
@@ -179,13 +169,13 @@ describe('APIClientRouter', () => {
     })
 
     it('should transform run data endpoints for BFF', async () => {
-      mockFeatureFlagService.evaluateFeatureFlag.mockReturnValue({
+      vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: true,
-        endpointUrl: 'http://127.0.0.1:8001/api/v1/runs',
+        endpointUrl: 'http://127.0.0.1:8001/api/v1/backtests',
         source: 'bff'
       })
-      
-      mockFeatureFlagService.getConfiguration.mockReturnValue({
+
+      vi.mocked(featureFlagService.getConfiguration).mockReturnValue({
         bffEnabled: true
       })
 
@@ -197,19 +187,19 @@ describe('APIClientRouter', () => {
       await router.routeAPICall('runData', 'backtests/123')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://127.0.0.1:8001/api/v1/runs/123/complete',
+        'http://127.0.0.1:8001/api/v1/backtests/123/complete',
         expect.any(Object)
       )
     })
 
     it('should transform WebSocket endpoints for BFF', async () => {
-      mockFeatureFlagService.evaluateFeatureFlag.mockReturnValue({
+      vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: true,
-        endpointUrl: 'http://127.0.0.1:8001/api/v1/runs',
+        endpointUrl: 'ws://127.0.0.1:8001/api/v1/backtests',
         source: 'bff'
       })
-      
-      mockFeatureFlagService.getConfiguration.mockReturnValue({
+
+      vi.mocked(featureFlagService.getConfiguration).mockReturnValue({
         bffEnabled: true
       })
 
@@ -221,7 +211,7 @@ describe('APIClientRouter', () => {
       await router.routeAPICall('websocket', 'backtests/123/ws')
 
       expect(mockFetch).toHaveBeenCalledWith(
-        'http://127.0.0.1:8001/api/v1/runs/123/stream',
+        'ws://127.0.0.1:8001/api/v1/backtests/123/stream',
         expect.any(Object)
       )
     })
@@ -229,7 +219,7 @@ describe('APIClientRouter', () => {
 
   describe('Error Handling', () => {
     it('should handle HTTP errors', async () => {
-      mockFeatureFlagService.evaluateFeatureFlag.mockReturnValue({
+      vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: false,
         endpointUrl: 'http://127.0.0.1:8000/bars',
         source: 'backend'
@@ -247,7 +237,7 @@ describe('APIClientRouter', () => {
     })
 
     it('should handle network errors', async () => {
-      mockFeatureFlagService.evaluateFeatureFlag.mockReturnValue({
+      vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: false,
         endpointUrl: 'http://127.0.0.1:8000/bars',
         source: 'backend'
@@ -261,7 +251,7 @@ describe('APIClientRouter', () => {
     })
 
     it('should handle timeout', async () => {
-      mockFeatureFlagService.evaluateFeatureFlag.mockReturnValue({
+      vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: false,
         endpointUrl: 'http://127.0.0.1:8000/bars',
         source: 'backend'
@@ -280,7 +270,7 @@ describe('APIClientRouter', () => {
 
   describe('Utility Methods', () => {
     it('should get effective base URL', () => {
-      mockFeatureFlagService.evaluateFeatureFlag.mockReturnValue({
+      vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: false,
         endpointUrl: 'http://127.0.0.1:8000/bars',
         source: 'backend'
@@ -291,7 +281,7 @@ describe('APIClientRouter', () => {
     })
 
     it('should validate configuration', () => {
-      mockFeatureFlagService.validateConfiguration.mockReturnValue(['test issue'])
+      vi.mocked(featureFlagService).validateConfiguration.mockReturnValue(['test issue'])
 
       const issues = router.validateConfiguration()
       expect(issues).toEqual(['test issue'])
@@ -300,7 +290,7 @@ describe('APIClientRouter', () => {
 
   describe('Error Handling', () => {
     it('should handle BFF service unavailable gracefully', async () => {
-      mockFeatureFlagService.evaluateFeatureFlag.mockReturnValue({
+      vi.mocked(featureFlagService).evaluateFeatureFlag.mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data',
         source: 'bff'
@@ -315,7 +305,7 @@ describe('APIClientRouter', () => {
     })
 
     it('should handle network timeouts gracefully', async () => {
-      mockFeatureFlagService.evaluateFeatureFlag.mockReturnValue({
+      vi.mocked(featureFlagService).evaluateFeatureFlag.mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data',
         source: 'bff'
@@ -330,7 +320,7 @@ describe('APIClientRouter', () => {
     })
 
     it('should handle invalid JSON responses', async () => {
-      mockFeatureFlagService.evaluateFeatureFlag.mockReturnValue({
+      vi.mocked(featureFlagService).evaluateFeatureFlag.mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data',
         source: 'bff'

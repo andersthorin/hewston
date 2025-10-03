@@ -54,7 +54,7 @@ describe('FeatureFlagService', () => {
       expect(config.chartDataEnabled).toBe(false)
       expect(config.runDataEnabled).toBe(false)
       expect(config.websocketEnabled).toBe(false)
-      expect(config.fallbackToBackend).toBe(true)
+      expect(config.fallbackToBackend).toBe(false)
     })
 
     it('should use backend URLs when BFF is disabled', () => {
@@ -157,8 +157,8 @@ describe('FeatureFlagService', () => {
       const endpointConfig = testService.getEndpointConfiguration()
 
       expect(endpointConfig.endpointMappings.chartData).toContain('/api/v1/chart-data')
-      expect(endpointConfig.endpointMappings.runData).toContain('/api/v1/runs')
-      expect(endpointConfig.endpointMappings.websocket).toContain('/api/v1/runs')
+      expect(endpointConfig.endpointMappings.runData).toContain('/api/v1/backtests')
+      expect(endpointConfig.endpointMappings.websocket).toContain('/api/v1/backtests')
     })
   })
 
