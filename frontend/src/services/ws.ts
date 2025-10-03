@@ -240,7 +240,9 @@ export function useBacktestPlayback(backtestId: string) {
 
   const sendReady = useCallback(() => {
     wsManagerRef.current?.send(JSON.stringify({ t: 'ready' }))
-    console.debug('[ws] ready signal sent to backend')
+    // Auto-start playback when ready signal is sent
+    setState((s) => ({ ...s, playing: true }))
+    console.debug('[ws] ready signal sent to backend, autoplay enabled')
   }, [])
 
   // Additional BFF-specific functions
