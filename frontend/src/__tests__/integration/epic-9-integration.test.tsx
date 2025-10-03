@@ -15,6 +15,8 @@ import { useDailyChartData } from '../../hooks/useChartData'
 import { useBacktestList, useBacktestDetail } from '../../hooks/useRunData'
 import { useWebSocketHealth } from '../../hooks/useWebSocketHealth'
 import { WebSocketTestHarness } from '../utils/websocket-test-harness'
+import type { ReactNode } from 'react'
+
 
 // Mock fetch to track API calls
 const mockFetch = vi.fn()
@@ -92,7 +94,11 @@ describe('Epic 9: Complete BFF Integration', () => {
         websocket: 'ws://127.0.0.1:8001/ws',
         health: 'http://127.0.0.1:8001/health'
       },
-      lastEvaluations: {},
+      lastEvaluations: {
+        chartData: { enabled: true, endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data', source: 'bff' },
+        runData: { enabled: true, endpointUrl: 'http://127.0.0.1:8001/api/v1/backtests', source: 'bff' },
+        websocket: { enabled: true, endpointUrl: 'ws://127.0.0.1:8001/api/v1/backtests/{id}/stream', source: 'bff' }
+      },
       lastUpdated: Date.now()
     })
   })
@@ -102,7 +108,7 @@ describe('Epic 9: Complete BFF Integration', () => {
     vi.unstubAllEnvs()
   })
 
-  const wrapper = ({ children }: { children: React.ReactNode }) => (
+  const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
       {children}
     </QueryClientProvider>
