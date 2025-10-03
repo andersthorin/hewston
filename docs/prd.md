@@ -108,7 +108,9 @@ Authoritative source for architecture choices is docs/brief.md (Technical Consid
 - Epic 9: Frontend BFF Integration — Migrate frontend to use BFF service with enhanced data aggregation.
 - Epic 10: Nautilus Trader Full Implementation — Replace stub with real Nautilus Trader engine, multiple strategies, and comprehensive metrics.
 
-Note: Stories live under docs/stories/, and epic documents live under docs/prd/ (files epic-1-*.md through epic-10-*.md).
+- Epic 12: Code Cleanup and Architectural Alignment — Align repo with Hexagonal + modular architecture; component-/feature-centric frontend; ADRs and incremental migration. See: docs/prd/epic-12-code-cleanup-and-architectural-alignment.md
+
+Note: Stories live under docs/stories/, and epic documents live under docs/prd/ (files epic-1-*.md through epic-12-*.md).
 
 ## 6. Next Steps
 ### Immediate Actions
