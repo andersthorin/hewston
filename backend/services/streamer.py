@@ -6,6 +6,7 @@ import logging
 from pathlib import Path
 from datetime import datetime as _dt
 from typing import AsyncGenerator, Dict, List, Optional, Tuple
+import math
 
 import polars as pl
 import pandas as pd
@@ -135,17 +136,146 @@ def _calculate_decimation_stride(total_frames: int, fps: int, realtime: bool) ->
         return 1
 
 
+def _precompute_metrics_from_equity(equity_rows: List[dict]) -> Dict[str, List[Optional[float]]]:
+    """Compute per-index running metrics for finished runs.
+    Returns dict of arrays aligned to equity_rows order with possible None entries.
+    Metrics:
+      - total_return_so_far: equity[i]/equity[0] - 1
+      - max_drawdown_so_far: max_{tau<=i} (peak_to_date - equity[tau]) / peak_to_date
+      - sharpe_so_far: mean(r[1..i]) / std(r[1..i]) with r_t = equity[t]/equity[t-1]-1, r_f=0 (no annualization)
+    """
+    n = len(equity_rows)
+    if n == 0:
+        return {"total_return_so_far": [], "max_drawdown_so_far": [], "sharpe_so_far": []}
+
+    vals = [float(er.get("value", float("nan"))) for er in equity_rows]
+    base = vals[0]
+
+    trs: List[Optional[float]] = [None] * n
+    mdd: List[Optional[float]] = [None] * n
+    shp: List[Optional[float]] = [None] * n
+
+    # total return so far
+    for i in range(n):
+        v = vals[i]
+        if base and base != 0.0 and math.isfinite(v):
+            trs[i] = (v / base) - 1.0
+        else:
+            trs[i] = None
+
+    # max drawdown so far
+    peak = -float("inf")
+    cur_mdd = 0.0
+    for i in range(n):
+        v = vals[i]
+        if math.isfinite(v):
+            if v > peak:
+                peak = v
+            if peak and peak > 0.0:
+                dd = (peak - v) / peak
+                if dd > cur_mdd:
+                    cur_mdd = dd
+                mdd[i] = cur_mdd
+            else:
+                mdd[i] = None
+        else:
+            mdd[i] = None
+
+    # sharpe so far (run-to-date, r_f=0, no annualization)
+    sum_r = 0.0
+    sum_r2 = 0.0
+    count = 0
+    prev = vals[0]
+    shp[0] = None
+    for i in range(1, n):
+        v = vals[i]
+        if math.isfinite(v) and math.isfinite(prev) and prev != 0.0:
+            r = (v / prev) - 1.0
+            sum_r += r
+            sum_r2 += r * r
+            count += 1
+            mean = sum_r / count
+            var = (sum_r2 / count) - (mean * mean)
+            std = math.sqrt(var) if var > 0 else 0.0
+            if std > 0:
+                shp[i] = mean / std
+            else:
+                shp[i] = None
+        else:
+            shp[i] = None
+        prev = v
+
+    return {
+        "total_return_so_far": trs,
+        "max_drawdown_so_far": mdd,
+        "sharpe_so_far": shp,
+    }
+
+
+
+
+def _select_hourly_indices(equity_rows: List[dict], rth_only: bool = False) -> List[int]:
+    """Return indices of the last equity point within each UTC hour.
+    Optionally filter to Regular Trading Hours (RTH) in America/New_York (09:30–16:00), Mon–Fri.
+    Uses epoch seconds from normalize_timestamp(ts_utc) to bucket by hour.
+    """
+    hour_to_idx: Dict[int, int] = {}
+
+    def _is_rth(epoch_sec: int) -> bool:
+        if not rth_only:
+            return True
+        try:
+            from datetime import datetime, timezone
+            try:
+                from zoneinfo import ZoneInfo  # Python 3.9+
+            except Exception:
+                # Fallback: treat as always RTH if zoneinfo missing
+                return True
+            dt_utc = _dt.fromtimestamp(epoch_sec, tz=_dt.timezone.utc) if hasattr(_dt, 'timezone') else datetime.fromtimestamp(epoch_sec, tz=timezone.utc)
+            ny = dt_utc.astimezone(ZoneInfo("America/New_York"))
+            # Weekday 0=Mon..4=Fri
+            if ny.weekday() > 4:
+                return False
+            h, m = ny.hour, ny.minute
+            # RTH: 09:30 <= time < 16:00 local
+            if h < 9 or h > 15:
+                # allow 9:30+ and any 10..15; exclude 16:xx
+                return (h == 9 and m >= 30) if h == 9 else False
+            if h == 9:
+                return m >= 30
+            return True
+        except Exception:
+            return True
+
+    for i, er in enumerate(equity_rows):
+        try:
+            epoch, _ = normalize_timestamp(er.get("ts_utc"))
+            if not _is_rth(int(epoch)):
+                continue
+            hour_bucket = int(epoch) // 3600
+            # Keep last index encountered for this hour
+            hour_to_idx[hour_bucket] = i
+        except Exception:
+            # Skip rows with invalid timestamps
+            continue
+    # Return indices ordered by hour
+    return [hour_to_idx[h] for h in sorted(hour_to_idx.keys())]
+
+
 async def produce_frames(
     *,
     run_id: str,
     fps: int = DEFAULT_FPS,
     speed: float = 1.0,
     realtime: bool = False,
+    cadence: str = "1m",
+    rth_only: bool = True,
 ) -> AsyncGenerator[StreamFrame, None]:
     """
-    Async generator producing StreamFrame from run artifacts, decimated to ~fps.
+    Async generator producing StreamFrame from run artifacts, optionally resampled to cadence, with optional RTH-only filtering, and paced to ~fps.
+    - cadence: "1m" (default) emits every equity point; "1h" emits last point per UTC hour.
+    - rth_only: when True, include only points within 09:30-16:00 America/New_York, Mon-Fri.
     - If realtime=True, sleeps between frames according to fps and speed; else yields as fast as possible (test mode).
-    - Decimation: selects approximately ceil(N / max_frames) stride.
     """
     # Load and validate artifacts
     artifacts, dataset_id = _resolve_artifacts(run_id)
@@ -156,26 +286,38 @@ async def produce_frames(
     equity_rows = _iter_parquet_dicts(artifacts["equity"], select=["ts_utc", "value"]) if artifacts.get("equity") else []
     orders_rows = _iter_parquet_dicts(artifacts["orders"]) if artifacts.get("orders") else []
 
+    # Precompute metrics from equity for finished runs
+    metrics_arrays = _precompute_metrics_from_equity(equity_rows)
+
     # Prepare data structures
     bars_map = _load_bars_data(dataset_id)
     orders_by_ts = _organize_orders_by_timestamp(orders_rows)
 
-    total = len(equity_rows)
+    # Determine indices to emit based on cadence
+    n_equity = len(equity_rows)
+    if cadence == "1h":
+        indices = _select_hourly_indices(equity_rows, rth_only=rth_only)
+    else:
+        indices = list(range(n_equity))
+
+    total = len(indices)
     if total == 0:
         return
-    # Decimation stride
-    if realtime:
-        target = fps  # logical target; we stride if needed
-        stride = max(1, total // target) if total > target else 1
-    else:
-        # Option A: no decimation in non-realtime mode — emit all frames
-        stride = 1
+
+    # Decimation stride (applied on selected indices)
+    # In realtime mode we pace using asyncio.sleep per frame; do not decimate based on total.
+    # Always emit all selected frames in order.
+    stride = 1
 
     dropped = 0
     produced = 0
+    # TEMP DEBUG: limit logging of first 20 produced frames per run
+    debug_count = 0
+
     # Produce frames
     try:
-        for i in range(0, total, stride):
+        for pos in range(0, total, stride):
+            i = indices[pos]
             er = equity_rows[i]
             key, iso = normalize_timestamp(er["ts_utc"])
             ohlc = bars_map.get(key)
@@ -192,14 +334,38 @@ async def produce_frames(
                     except Exception:
                         pass
                 orders_payload.append(o2)
+            # Metrics attachment for this original equity index (may contain None values)
+            mi = {
+                "total_return_so_far": metrics_arrays.get("total_return_so_far", [None]*n_equity)[i],
+                "max_drawdown_so_far": metrics_arrays.get("max_drawdown_so_far", [None]*n_equity)[i],
+                "sharpe_so_far": metrics_arrays.get("sharpe_so_far", [None]*n_equity)[i],
+            }
             frame = StreamFrame(
                 t="frame",
                 ts=iso,
                 ohlc=ohlc,
                 orders=orders_payload,
                 equity={"ts": iso, "value": er["value"]},
+                metrics=mi,
                 dropped=dropped,
             )
+            # Include total_frames on the first emitted frame for UI progress
+            if produced == 0:
+                try:
+                    # dataclass has optional field; attach if available
+                    frame.total_frames = total  # type: ignore[attr-defined]
+                except Exception:
+                    pass
+
+            # TEMP DEBUG: log first 20 backend frames with ts and equity
+            if debug_count < 20:
+                try:
+                    logger.info(
+                        f"TEMP_DEBUG.backend.frame run_id={run_id} n={debug_count + 1} ts={iso} eq={float(er['value'])}"
+                    )
+                except Exception:
+                    pass
+                debug_count += 1
             yield frame
             produced += 1
             if realtime:

@@ -38,6 +38,8 @@ export interface TimeScaleApi {
 export interface CandlestickSeriesApi extends ISeriesApi<'Candlestick'> {
   setData: (data: CandlestickData[]) => void
   update: (data: CandlestickData) => void
+  // Lightweight Charts supports markers on series; type kept loose for simplicity
+  setMarkers?: (markers: Array<any>) => void
 }
 
 export interface LineSeriesApi extends ISeriesApi<'Line'> {
@@ -66,6 +68,7 @@ export interface CandlestickChartAPI {
   scrollToLatest: () => void
   setVisibleRange: (from: Time, to: Time) => void
   setBarSpacing: (px: number) => void
+  setMarkers: (markers: Array<any>) => void
 }
 
 

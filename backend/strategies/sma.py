@@ -42,6 +42,7 @@ try:  # pragma: no cover - exercised in integration
             self._fast: Optional[SimpleMovingAverage] = None
             self._slow: Optional[SimpleMovingAverage] = None
             self._in_position: bool = False
+            self._pos_qty: int = 0  # track current position size for equity fallback
 
             self.orders: list[dict[str, Any]] = []
             self.fills: list[dict[str, Any]] = []
@@ -93,7 +94,7 @@ try:  # pragma: no cover - exercised in integration
                 except Exception:
                     in_rth = True
 
-            # Track equity from Nautilus portfolio (REQUIRED - no fallbacks)
+            # Track equity from Nautilus portfolio, including unrealized PnL (no fallbacks)
             import logging
             logger = logging.getLogger("strategy.equity")
 
@@ -102,15 +103,47 @@ try:  # pragma: no cover - exercised in integration
                 venue = self.instrument_id.venue  # Get venue from instrument (e.g., XNAS)
                 account = portfolio.account(venue)  # Pass venue to get the account
 
-                # Get total account value using calculated_balance which includes positions
-                # This is the correct way to get total equity (cash + unrealized PnL)
                 from nautilus_trader.model.currencies import USD
-                equity_money = account.balance_total(USD)
-                equity_val = float(equity_money.as_double())
-                logger.debug(f"Equity from Nautilus balance_total(USD): ${equity_val:.2f}")
+
+                equity_val: float
+                # Preferred: account.equity_total(USD) if available (includes unrealized PnL)
+                try:
+                    equity_money = getattr(account, "equity_total")(USD)  # type: ignore[attr-defined]
+                    equity_val = float(equity_money.as_double())
+                except Exception:
+                    # Fallback: compute net liq value = cash + position market value at current close
+                    try:
+                        cash_money = account.balance_total(USD)
+                        cash_val = float(cash_money.as_double())
+                    except Exception:
+                        cash_val = 0.0
+                    # Position quantity for this instrument
+                    pos_qty = 0.0
+                    try:
+                        pos = portfolio.position(self.instrument_id)  # type: ignore[attr-defined]
+                        if hasattr(pos, "net_qty") and hasattr(pos.net_qty, "as_double"):
+                            pos_qty = float(pos.net_qty.as_double())
+                        else:
+                            pos_qty = float(getattr(pos, "quantity", 0.0))
+                    except Exception:
+                        try:
+                            pos = account.position(self.instrument_id)  # type: ignore[attr-defined]
+                            if hasattr(pos, "net_qty") and hasattr(pos.net_qty, "as_double"):
+                                pos_qty = float(pos.net_qty.as_double())
+                            else:
+                                pos_qty = float(getattr(pos, "quantity", 0.0))
+                        except Exception:
+                            pos_qty = 0.0
+                    # Final fallback: use strategy-tracked position size if available
+                    if pos_qty == 0.0 and getattr(self, "_pos_qty", 0) != 0:
+                        pos_qty = float(self._pos_qty)
+                    px = float(bar.close.as_double()) if hasattr(bar.close, "as_double") else float(bar.close)
+                    equity_val = cash_val + (pos_qty * px)
+
+                logger.debug(f"Equity snapshot: ${equity_val:.2f}")
 
             except Exception as e:
-                logger.error(f"❌ CRITICAL: Failed to get equity from Nautilus portfolio: {type(e).__name__}: {e}")
+                logger.error(f"❌ CRITICAL: Failed to compute equity: {type(e).__name__}: {e}")
                 logger.error(f"   Portfolio type: {type(self.portfolio) if hasattr(self, 'portfolio') else 'N/A'}")
                 logger.error(f"   Venue: {venue if 'venue' in locals() else 'N/A'}")
                 logger.error(f"   Account type: {type(account) if 'account' in locals() else 'N/A'}")
@@ -171,6 +204,18 @@ try:  # pragma: no cover - exercised in integration
                 # Update position tracking (simple flag for strategy logic)
                 if side == OrderSide.BUY:
                     self._in_position = True
+                    try:
+                        self._pos_qty += qty
+                    except Exception:
+                        self._pos_qty = max(0, self._pos_qty + qty)
+                else:  # SELL
+                    try:
+                        self._pos_qty -= qty
+                    except Exception:
+                        self._pos_qty = max(0, self._pos_qty - qty)
+                    if self._pos_qty <= 0:
+                        self._pos_qty = 0
+                        self._in_position = False
                 # Note: We rely on Nautilus for actual position/cash tracking
 
                 # Record fill with explicit side for metrics

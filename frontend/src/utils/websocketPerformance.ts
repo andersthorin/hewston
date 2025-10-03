@@ -170,9 +170,10 @@ export class WebSocketPerformanceTester {
     let isConnected = false
 
     // Track connection state changes
-    this.wsManager.addEventListener('stateChange', ({ newState }) => {
+    this.wsManager.addEventListener('stateChange', (event: { oldState: string; newState: string; health: unknown }) => {
       const now = Date.now()
-      
+      const { newState } = event
+
       if (newState === 'connected') {
         if (!isConnected) {
           connectionDowntime += now - lastConnectionTime
@@ -183,12 +184,12 @@ export class WebSocketPerformanceTester {
         connectionUptime += now - lastConnectionTime
         isConnected = false
         lastConnectionTime = now
-        
+
         if (newState === 'reconnecting') {
           result.connection.reconnections++
         }
       }
-      
+
       result.connection.totalUptime = connectionUptime
       result.connection.totalDowntime = connectionDowntime
     })
@@ -224,7 +225,7 @@ export class WebSocketPerformanceTester {
           result.streaming.totalFrames = frameCount
           result.streaming.droppedFrames = msg.dropped || 0
         }
-      } catch (error) {
+      } catch {
         // Ignore parsing errors
       }
     }
@@ -266,13 +267,11 @@ export class WebSocketPerformanceTester {
 
     const latencySamples: number[] = []
     const pingInterval = 1000 // Ping every second
-    let pingCount = 0
 
     const pingTimer = setInterval(() => {
       const pingTime = Date.now()
       this.wsManager!.send(JSON.stringify({ t: 'ping', ts: pingTime }))
       result.throughput.messagesSent++
-      pingCount++
     }, pingInterval)
 
     // Listen for pong responses
@@ -283,7 +282,7 @@ export class WebSocketPerformanceTester {
           const latency = Date.now() - msg.ts
           latencySamples.push(latency)
         }
-      } catch (error) {
+      } catch {
         // Ignore parsing errors
       }
     }
@@ -350,12 +349,9 @@ export class WebSocketPerformanceTester {
    */
   public async comparePerformance(runId: string, duration: number = 30000): Promise<PerformanceComparison> {
     // Test with BFF enabled
-    const originalBFFSetting = featureFlagService.isFeatureFlagEnabled('websocket')
-    
-    // Force BFF mode
     // Note: In a real implementation, we'd need a way to temporarily override feature flags
     // For now, we'll test with current settings and document the limitation
-    
+
     const bffResult = await this.runPerformanceTest(runId, duration, 'streaming')
     
     // Test with backend mode

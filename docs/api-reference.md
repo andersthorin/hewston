@@ -1,6 +1,6 @@
 # API Reference Guide
 
-**Status**: v0.1 — Consolidated API documentation for Hewston trading platform  
+**Status**: v0.1 — Consolidated API documentation for Hewston trading platform
 **Last Updated**: 2025-01-27
 
 ## Table of Contents
@@ -168,6 +168,34 @@ WHERE b.backtest_id = ?;
 ```json
 { "t":"frame", "ts":"ISO-UTC", "ohlc": { ... }, "orders": [ ... ], "equity": number, "dropped": integer }
 ```
+
+
+#### Frame (E11 delta: streaming metrics)
+In Epic 11, streamed frames are extended to include backend-computed running metrics and optional aggregates. Equity shape is normalized to an object.
+
+```json
+{
+  "t": "frame",
+  "ts": "ISO-UTC",
+  "ohlc": { "o": 123.4, "h": 125.0, "l": 122.8, "c": 124.6, "symbol": "AAPL" },
+  "orders": [ { "ts": "ISO-UTC", "side": "BUY", "qty": 10, "price": 124.5, "symbol": "AAPL" } ],
+  "equity": { "ts": "ISO-UTC", "value": 123.456 },
+  "metrics": {
+    "total_return_so_far": 0.0345,
+    "max_drawdown_so_far": 0.0123,
+    "sharpe_so_far": 1.25
+  },
+  "portfolio": { "exposure": 0.65 },
+  "symbols": { "AAPL": { "position": 10, "exposure": 0.12 } },
+  "dropped": 0
+}
+```
+
+Field notes:
+- metrics: numeric fields computed by Nautilus/compatible backend; frontend does not recompute
+- equity: object form { ts, value }
+- portfolio: optional aggregate stats
+- symbols: optional per-symbol lightweight stats for symbol focus
 
 **Heartbeat**
 ```json

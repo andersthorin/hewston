@@ -1,11 +1,13 @@
 import { useParams } from 'react-router-dom'
 import { useBacktestDetail } from '../hooks/useRunData'
 import RunPlayerContainer from '../containers/RunPlayerContainer'
-import MetricsSummary from '../components/MetricsSummary'
+import ErrorBoundary from '../components/ErrorBoundary'
+import StreamingMetricsPanel from '../components/StreamingMetricsPanel'
+import SymbolFocus from '../components/SymbolFocus'
 
 export default function BacktestDetailView() {
-  const params = useParams()
-  const backtest_id = (params as any).backtest_id || ''
+  const params = useParams<{ backtest_id: string }>()
+  const backtest_id = params.backtest_id || ''
   const { data, isLoading, isError, error } = useBacktestDetail(backtest_id, !!backtest_id)
 
   const status = data?.status
@@ -51,17 +53,20 @@ export default function BacktestDetailView() {
 
       {!isErrorStatus && (
         <>
-          <MetricsSummary
-            metrics={(data as any)?.metrics ?? undefined}
-            equity={(data as any)?.equity ?? undefined}
-            loading={isLoading}
-          />
-          <RunPlayerContainer
-            backtest_id={backtest_id}
-            dataset_id={data?.dataset_id || undefined}
-            run_from={data?.run_from ?? undefined}
-            run_to={data?.run_to ?? undefined}
-          />
+          {/* Live streaming metrics (single panel) */}
+          <StreamingMetricsPanel />
+          {/* Symbol focus (E11.3) */}
+          <SymbolFocus />
+
+          <ErrorBoundary title="Playback viewer crashed">
+            <RunPlayerContainer
+              backtest_id={backtest_id}
+              dataset_id={data?.dataset_id || undefined}
+              run_from={data?.run_from ?? undefined}
+              run_to={data?.run_to ?? undefined}
+            />
+          </ErrorBoundary>
+
         </>
       )}
     </div>

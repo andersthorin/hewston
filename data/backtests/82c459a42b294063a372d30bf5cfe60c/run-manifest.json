@@ -1,0 +1,21 @@
+{
+  "run_id": "82c459a42b294063a372d30bf5cfe60c",
+  "dataset_id": "NVDA-warehouse-1m",
+  "strategy_id": "sma_crossover",
+  "params": {
+    "fast": 20,
+    "slow": 50,
+    "instrument_id": "NVDA.XNAS"
+  },
+  "seed": 42,
+  "slippage_fees": {},
+  "speed": 60,
+  "run_from": "2024-11-01",
+  "run_to": "2024-11-30",
+  "code_hash": "54d030f4ee1dd567daa182ac4d1e5d0fbc0c78ba",
+  "env_lock": null,
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-10-02T20:24:15.802681+00:00",
+  "status": "DONE"
+}

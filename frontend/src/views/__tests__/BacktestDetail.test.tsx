@@ -11,6 +11,11 @@ vi.mock('../../hooks/useRunData', () => ({
   }),
 }))
 
+vi.mock('../../containers/RunPlayerContainer', () => ({
+  default: () => <div data-testid="player-stub" />,
+}))
+
+
 import BacktestDetailView from '../BacktestDetail'
 
 function renderAt(path: string) {
