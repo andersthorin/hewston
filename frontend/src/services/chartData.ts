@@ -79,7 +79,7 @@ export class ChartDataService {
     if (request.target !== undefined) params.set('target_points', String(request.target))
     if (request.rth_only !== undefined) params.set('rth_only', String(request.rth_only))
 
-    const raw = await apiGetWithFlags(
+    const raw: any = await apiGetWithFlags<any>(
       `/chart-data?${params.toString()}`,
       'chartData',
       undefined,

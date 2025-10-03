@@ -9,7 +9,7 @@ import pandas as pd
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from backend.services.backtests import list_backtests_service, get_backtest_service
+from backend.modules.backtests.adapters.http.controllers import list_backtests as list_backtests_ctrl, get_backtest as get_backtest_ctrl, create_backtest as create_backtest_ctrl
 
 from uuid import uuid4
 from fastapi import Body, Header, HTTPException, Request, status, Query
@@ -62,9 +62,10 @@ async def create_backtest(
             content={"error": {"code": "BAD_REQUEST", "message": "invalid JSON"}},
         )
 
-    from backend.services.backtests import create_backtest_service
+    # Delegate to module controller (pilot exemplar)
+    from backend.modules.backtests.adapters.http.controllers import create_backtest as create_backtest_ctrl
 
-    payload, code = create_backtest_service(body if isinstance(body, dict) else {}, idempotency_key)
+    payload, code = create_backtest_ctrl(body if isinstance(body, dict) else {}, idempotency_key)
     if 200 <= code < 300:
         return JSONResponse(status_code=code, content=payload)
     # Error branch
@@ -93,7 +94,7 @@ async def list_backtests(
             "order": order,
         },
     )
-    return list_backtests_service(
+    return list_backtests_ctrl(
         symbol=symbol,
         strategy_id=strategy_id,
         from_date=from_date,
@@ -106,7 +107,7 @@ async def list_backtests(
 
 @router.get("/backtests/{run_id}")
 async def get_backtest(run_id: str):
-    data = get_backtest_service(run_id)
+    data = get_backtest_ctrl(run_id)
     if not data:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -155,7 +156,7 @@ async def get_backtest_equity(run_id: str):
     """Return equity curve as list of points: { equity: [{timestamp, equity, drawdown?}] }.
     Parquet schema expected: columns ['ts_utc', 'value'] where ts_utc is datetime-like.
     """
-    run = get_backtest_service(run_id)
+    run = get_backtest_ctrl(run_id)
     if not run:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -210,7 +211,7 @@ async def get_backtest_orders(run_id: str):
     Parquet schema suggested in docs: ts_utc, side, qty, price, order_id, type, time_in_force, symbol?
     Response maps to aggregator-friendly shape.
     """
-    run = get_backtest_service(run_id)
+    run = get_backtest_ctrl(run_id)
     if not run:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,

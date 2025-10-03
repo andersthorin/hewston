@@ -9,10 +9,10 @@ import { describe, it, expect, vi } from 'vitest'
 import { render } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import ChartOHLC from '../ChartOHLC'
-import RunsTable from '../RunsTable'
-import PlaybackControls from '../PlaybackControls'
+import { RunsTable } from '../runs-table'
+import { PlaybackControls } from '../playback-controls'
 import FiltersBar from '../FiltersBar'
-import RunDetailView from '../../views/RunDetail'
+import BacktestDetailView from '../../views/BacktestDetail'
 
 // Mock the services to prevent actual API calls
 vi.mock('../../services/chartData', () => ({
@@ -176,13 +176,13 @@ describe('Component Interface Preservation', () => {
       }
       
       expect(() => {
-        render(<RunDetailView {...props} />, { wrapper })
+        render(<BacktestDetailView {...props} />, { wrapper })
       }).not.toThrow()
     })
 
     it('should handle undefined runId gracefully', () => {
       expect(() => {
-        render(<RunDetailView runId={undefined} />, { wrapper })
+        render(<BacktestDetailView runId={undefined} />, { wrapper })
       }).not.toThrow()
     })
   })

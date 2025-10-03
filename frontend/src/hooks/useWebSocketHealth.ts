@@ -75,8 +75,7 @@ export function useWebSocketHealth(backtestId: string) {
   // Track frame rate
   useEffect(() => {
     let frameCount = 0
-    const startTime = Date.now()
-    
+
     const unsubscribe = playback.subscribe((frame) => {
       frameCount++
       const now = Date.now()
@@ -116,14 +115,14 @@ export function useWebSocketHealth(backtestId: string) {
   // Monitor connection status
   useEffect(() => {
     const health = playback.getConnectionHealth?.()
-    
+
     setConnectionStatus(prev => ({
       ...prev,
       state: health?.state || 'idle',
       isReady: health?.state === 'connected',
       reconnectAttempts: health?.reconnectAttempts || 0,
       lastConnected: health?.lastConnected,
-      health,
+      health: health ?? undefined,
     }))
 
     // Track connection start time
@@ -142,7 +141,7 @@ export function useWebSocketHealth(backtestId: string) {
         droppedFrames: health.droppedFrames,
       }))
     }
-  }, [playback.state, connectionStartTime])
+  }, [playback, connectionStartTime])
 
   // Manual reconnection
   const reconnect = useCallback(async () => {

@@ -94,7 +94,7 @@ export class BacktestDataService {
     for (const [k, v] of Object.entries(query)) {
       if (v !== undefined && v !== null && v !== '') params.set(k, String(v))
     }
-    const response = await apiGetWithFlags(`/backtests?${params.toString()}`, 'runData')
+    const response: any = await apiGetWithFlags<any>(`/backtests?${params.toString()}`, 'runData')
     // Normalize any legacy/nested shapes to ensure backtest_id is present before Zod parsing
     if (response && Array.isArray(response.items)) {
       response.items = response.items.map((it: any) => {
@@ -116,7 +116,7 @@ export class BacktestDataService {
   }
 
   public async getCompleteBacktest(backtest_id: string): Promise<BFFAggregatedBacktestResponse> {
-    const response = await apiGetWithFlags(`/backtests/${backtest_id}/complete`, 'runData')
+    const response: any = await apiGetWithFlags<any>(`/backtests/${backtest_id}/complete`, 'runData')
     // Normalize any legacy keys in case of fallback/misroute
     if (response && typeof response === 'object') {
       const r: any = response

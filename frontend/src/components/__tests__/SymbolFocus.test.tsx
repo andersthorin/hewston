@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
 import { render, fireEvent, screen } from '@testing-library/react'
-import SymbolFocus from '../SymbolFocus'
+import React from 'react'
+
+import { SymbolFocus } from '../symbol-focus'
 import playbackStore, { PlaybackProvider } from '../../store/playbackClock'
 
 describe('SymbolFocus', () => {

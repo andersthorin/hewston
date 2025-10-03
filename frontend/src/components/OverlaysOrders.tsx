@@ -6,13 +6,16 @@ export default function OverlaysOrders({ chartRef }: { chartRef: React.MutableRe
   const frame = usePlaybackSelector(selectors.frame)
   const focus = usePlaybackSelector(selectors.focusedSymbol)
 
-  const accRef = useRef<Map<string, any>>(new Map())
+  type OrderMarker = { time: string; position: string; color: string; shape: string; text: string; price?: number }
+  const accRef = useRef<Map<string, OrderMarker>>(new Map())
 
   const frameOrders = frame?.orders || []
   const filtered = useMemo(() => {
-    return frameOrders.filter((o: any) => {
+    type OrderLike = { symbol?: string; sym?: string; instrument?: string; inst?: string; ts_utc?: unknown; ts?: unknown; order_id?: unknown; price?: unknown; side?: unknown }
+    return frameOrders.filter((o) => {
+      const ord = o as OrderLike
       if (!focus) return true
-      const sym = o.symbol || o.sym || o.instrument || o.inst
+      const sym = ord.symbol || ord.sym || ord.instrument || ord.inst
       return sym ? sym === focus : false
     })
   }, [frameOrders, focus])

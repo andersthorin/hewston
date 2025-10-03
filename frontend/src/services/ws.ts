@@ -51,7 +51,7 @@ export function useBacktestPlayback(backtestId: string) {
       } catch {}
     }
     subsRef.current.forEach((cb) => cb(f))
-    setState((s) => ({ ...s, dropped: f.dropped }))
+    setState((s) => ({ ...s, dropped: (f as any).dropped ?? s.dropped }))
   }, [])
 
   const updateHealthInfo = useCallback((health: WebSocketHealth) => {

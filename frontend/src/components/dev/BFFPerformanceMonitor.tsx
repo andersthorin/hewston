@@ -5,7 +5,7 @@
  * Only rendered in development mode with feature flag debugging enabled.
  */
 
-import React, { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useWebSocketHealth, useWebSocketPerformanceMonitor } from '../../hooks/useWebSocketHealth'
 import { useChartDataMetrics } from '../../hooks/useChartData'
 import { useBacktestDataMetrics as useRunDataMetrics } from '../../hooks/useRunData'
@@ -69,7 +69,7 @@ export function BFFPerformanceMonitor({ runId, className = '' }: BFFPerformanceM
       <div className="flex justify-between items-center mb-3">
         <h3 className="text-lg font-semibold">🎛️ BFF Performance Monitor</h3>
         <button
-          onClick={() => setIsVisible(false)}
+          onClick={() => console.log('Hide monitor not implemented') }
           className="text-gray-400 hover:text-white"
         >
           ✕

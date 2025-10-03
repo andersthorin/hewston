@@ -7,7 +7,7 @@
  */
 
 import { featureFlagService } from './featureFlags'
-import { WS_BASE_URL, BFF_WS_URL, BACKEND_WS_URL } from '../constants'
+import { BFF_WS_URL, BACKEND_WS_URL } from '../constants'
 
 /**
  * WebSocket connection state.
@@ -74,13 +74,14 @@ export class BFFWebSocketManager {
   private messageQueue: string[] = []
   private eventListeners: Map<string, Set<Function>> = new Map()
   private lastPingTime: number = 0
-  private connectionStartTime: number = 0
+  private backtestId: string
 
   constructor(
-    private backtestId: string,
+    backtestId: string,
     options: WebSocketOptions = {}
   ) {
     this.options = { ...DEFAULT_OPTIONS, ...options }
+    this.backtestId = backtestId
     this.health = {
       state: 'idle',
       reconnectAttempts: 0,
@@ -191,8 +192,6 @@ export class BFFWebSocketManager {
       }
 
       this.setState('connecting')
-      this.connectionStartTime = Date.now()
-      
       const url = this.getWebSocketUrl()
       this.health.connectionSource = this.getConnectionSource()
       

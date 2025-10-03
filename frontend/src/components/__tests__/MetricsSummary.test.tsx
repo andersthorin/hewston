@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import MetricsSummary from '../MetricsSummary'
+import React from 'react'
+
+import { MetricsSummary } from '../metrics-summary'
 
 describe('MetricsSummary', () => {
   it('renders key metrics with formatting', () => {

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useCallback, useEffect } from 'react'
-import { usePlaybackSelector, usePlaybackStore, selectors } from '../store/playbackClock'
+import { usePlaybackSelector, usePlaybackStore, selectors } from '../../store/playbackClock'
 
 export type TimelineScrubberProps = {
   stepSeconds?: number // keyboard step size
@@ -97,4 +97,5 @@ function Marker({ ts, range }: { ts: string; range: { start: string | null; end:
   }, [ts, range.start, range.end])
   return <div className="absolute top-0 h-3 w-0.5 bg-slate-600 opacity-60" style={{ left: `${left}%` }} />
 }
+
 

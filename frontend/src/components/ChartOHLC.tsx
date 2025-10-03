@@ -39,10 +39,11 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
         console.warn('Failed to update chart data:', error)
       }
     },
-    setMarkers: (markers: Array<any>) => {
+    setMarkers: (markers: Array<{ time: Time; text?: string; position?: 'aboveBar'|'belowBar'|'inBar'; color?: string; shape?: string; }>) => {
       try {
         const series = seriesRef.current as CandlestickSeriesApi | null
-        ;(series as any)?.setMarkers?.(markers)
+        const s = series as unknown as { setMarkers?: (m: Array<{ time: Time; text?: string; position?: 'aboveBar'|'belowBar'|'inBar'; color?: string; shape?: string; }>) => void }
+        s?.setMarkers?.(markers)
       } catch (error) {
         console.warn('Failed to set markers:', error)
       }
