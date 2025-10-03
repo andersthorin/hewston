@@ -6,7 +6,7 @@ import type { WorkerInMessage, WorkerOutMessage } from '../types/streaming'
 type InMsg = WorkerInMessage
 type OutMsg = WorkerOutMessage
 
-let dropped = 0
+const dropped = 0
 
 let seen = 0
 function handleFrame(payload: unknown) {
@@ -14,30 +14,38 @@ function handleFrame(payload: unknown) {
   if (!parsed.success) {
     // drop invalid
     if (seen < 50) {
-      const obj: any = payload && typeof payload === 'object' ? (payload as any) : null
+      const obj = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null
       const keys = obj ? Object.keys(obj) : []
-      const hasTs = !!(obj && (obj.ts || obj?.equity?.ts))
-      console.debug('[worker] drop invalid frame', { t: obj?.t, hasTs, keys, errors: parsed.error?.errors, sample: obj })
+      const hasTs = !!(obj && (obj.ts || (obj.equity as Record<string, unknown> | undefined)?.ts))
+      console.debug('[worker] drop invalid frame', { t: obj?.t, hasTs, keys, issues: parsed.error?.issues, sample: obj })
     }
     return
   }
-  let f = parsed.data as any
+  let f: StreamFrameT = parsed.data
   // Fill missing ts from equity.ts if needed
   if (!f.ts && f?.equity?.ts) {
     f = { ...f, ts: f.equity.ts }
   }
   seen += 1
   if (seen <= 50) {
-    try { console.debug('[worker] handleFrame', { n: seen, ts: (f as any)?.equity?.ts || (f as any)?.ts }) } catch {}
+    try {
+      console.debug('[worker] handleFrame', { n: seen, ts: f?.equity?.ts || f?.ts })
+    } catch {
+      // Ignore logging errors
+    }
   }
   // Attach cumulative dropped count from the worker perspective
-  const baseDropped = (f as any)?.dropped ?? 0
+  const baseDropped = f?.dropped ?? 0
   const withDropped: StreamFrameT = { ...f, dropped: baseDropped + dropped }
   const message: OutMsg = { type: 'frame', data: withDropped }
   // Emit immediately to avoid any timer throttling in background tabs
   postMessage(message)
   if (seen <= 50) {
-    try { console.debug('[worker] postMessage', { n: seen }) } catch {}
+    try {
+      console.debug('[worker] postMessage', { n: seen })
+    } catch {
+      // Ignore logging errors
+    }
   }
 }
 

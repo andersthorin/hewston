@@ -38,17 +38,17 @@ export interface OrderData {
 // Stream frame structure
 export interface StreamFrameData {
   t: 'frame'                    // frame type identifier
-  ts: string                    // timestamp in ISO format
+  ts?: string                   // timestamp in ISO format (optional, may be inferred from equity.ts)
   ohlc?: OHLCData | null       // OHLC bar data
-  orders: OrderData[]          // array of orders for this timestamp
+  orders?: OrderData[]         // array of orders for this timestamp
   equity?: EquityData | null   // equity curve data point
   metrics?: {
     total_return_so_far?: number | null
     max_drawdown_so_far?: number | null
     sharpe_so_far?: number | null
-  }
-  total_frames?: number        // total number of frames to expect (optional, first frame)
-  dropped: number              // number of dropped frames
+  } | null
+  total_frames?: number | null // total number of frames to expect (optional, first frame)
+  dropped?: number             // number of dropped frames
 }
 
 // WebSocket message types

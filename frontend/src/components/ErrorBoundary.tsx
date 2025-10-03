@@ -18,7 +18,7 @@ export default class ErrorBoundary extends React.Component<{
     // Minimal logging in dev
     try {
       console.warn('[ErrorBoundary] caught', error, info)
-    } catch (e) {
+    } catch {
       // Ignore logging errors
     }
   }
@@ -26,7 +26,7 @@ export default class ErrorBoundary extends React.Component<{
   handleReload = () => {
     try {
       location.reload()
-    } catch (e) {
+    } catch {
       // Ignore reload errors
     }
   }
