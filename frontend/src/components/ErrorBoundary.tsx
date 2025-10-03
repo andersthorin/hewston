@@ -1,25 +1,34 @@
 import React from 'react'
 
 export default class ErrorBoundary extends React.Component<{
+  children?: React.ReactNode
   fallback?: React.ReactNode
   title?: string
-}, { hasError: boolean; error?: any }>{
-  constructor(props: any) {
+}, { hasError: boolean; error?: Error }>{
+  constructor(props: { children?: React.ReactNode; fallback?: React.ReactNode; title?: string }) {
     super(props)
     this.state = { hasError: false }
   }
 
-  static getDerivedStateFromError(error: any) {
+  static getDerivedStateFromError(error: Error) {
     return { hasError: true, error }
   }
 
-  componentDidCatch(error: any, info: any) {
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
     // Minimal logging in dev
-    try { console.warn('[ErrorBoundary] caught', error, info) } catch {}
+    try {
+      console.warn('[ErrorBoundary] caught', error, info)
+    } catch (e) {
+      // Ignore logging errors
+    }
   }
 
   handleReload = () => {
-    try { location.reload() } catch {}
+    try {
+      location.reload()
+    } catch (e) {
+      // Ignore reload errors
+    }
   }
 
   render() {

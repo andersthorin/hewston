@@ -8,18 +8,7 @@ import TimelineScrubber from '../components/TimelineScrubber'
 import OverlaysOrders from '../components/OverlaysOrders'
 import playbackStore from '../store/playbackClock'
 import type { CandlestickData, Time } from 'lightweight-charts'
-import type { StreamFrameData } from '../types/streaming'
-
-// Dev logging helper (only logs in Vite dev)
-const devLog = (...args: unknown[]) => {
-  try {
-    if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) {
-      console.debug('[RunPlayer]', ...args)
-    }
-  } catch (error) {
-    console.warn('Failed to log debug message:', error)
-  }
-}
+import type { StreamFrameT } from '../schemas/stream'
 
 export type RunPlayerContainerProps = { backtest_id: string; dataset_id?: string; run_from?: string; run_to?: string }
 
@@ -71,19 +60,18 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
 
   // Subscribe to frames to infer run window only if props not provided
   useEffect(() => {
-    const unsub = subscribe((frame: StreamFrameData) => {
+    const unsub = subscribe((frame: StreamFrameT) => {
       try {
         recvCountRef.current += 1
         if (recvCountRef.current <= 50) {
-          const t = (frame as any)?.equity?.ts || (frame as any)?.ts
+          const t = frame?.equity?.ts || frame?.ts
           console.debug('[RunPlayer] subscribe: frame received', { n: recvCountRef.current, ts: t })
         }
         // Always forward frame to playback store
-        // @ts-ignore using compatible types
-        playbackStore._setFrame(frame as any)
+        playbackStore._setFrame(frame)
 
         const tsStr: string | undefined = frame?.equity?.ts || frame?.ts
-        const ohlc = (frame as any).ohlc as { o?: number; h?: number; l?: number; c?: number } | undefined
+        const ohlc = frame.ohlc as { o?: number; h?: number; l?: number; c?: number } | undefined | null
         const hasOhlc = !!(ohlc && ohlc.o != null && ohlc.h != null && ohlc.l != null && ohlc.c != null)
         const hasSnapshots = !!(dailySnapshotsRef.current && dayKeysRef.current && dayKeysRef.current.length > 0)
 
@@ -117,11 +105,11 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
               let idx = snaps.length - 1
               const tms = new Date(tsStr).getTime()
               for (let i = snaps.length - 1; i >= 0; i--) {
-                const si: any = snaps[i]
+                const si = snaps[i]
                 const sms = new Date(si.t).getTime()
                 if (sms <= tms) { idx = i; break }
               }
-              const s: any = snaps[idx]
+              const s = snaps[idx]
               if (s) {
                 const timeVal: Time = (viewMode === 'daily')
                   ? ({ year: y, month: m, day: d } as Time)
@@ -144,7 +132,7 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
       }
     })
     return unsub
-  }, [subscribe, run_from, run_to, viewMode])
+  }, [subscribe, run_from, run_to, runFrom, runTo, viewMode])
 
   // Imperative chart refs
   const ohlcRef = useRef<CandlestickChartAPI>(null)
@@ -167,7 +155,7 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   }, [runFrom, runTo])
 
 
-  const dailySnapshotsRef = useRef<Map<string, Array<{ o: number, h: number, l: number, c: number }>> | null>(null)
+  const dailySnapshotsRef = useRef<Map<string, Array<{ o: number, h: number, l: number, c: number, t: string }>> | null>(null)
 
 
   useEffect(() => {
@@ -193,7 +181,8 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
     // bars are sorted by time; build cumulative OHLC per calendar day
     let curDay: string | null = null
     let o: number | null = null, h = -Infinity, l = Infinity, c: number | null = null
-    for (const b of hourResp.bars) {
+    const bars = hourResp.bars
+    for (const b of bars) {
       const tsDate = new Date(b.t)
       const day = tsDate.toISOString().slice(0, 10)
       if (curDay !== day) {
@@ -210,7 +199,7 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
       keys = keys.filter((d) => d >= runFrom && d <= runTo)
     }
 
-    const filtered = new Map<string, Array<{ o: number, h: number, l: number, c: number }>>()
+    const filtered = new Map<string, Array<{ o: number, h: number, l: number, c: number, t: string }>>()
     for (const k of keys) {
       const v = byDay.get(k)
       if (v) filtered.set(k, v)
@@ -282,7 +271,7 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
       </div>
       <div className="grid grid-cols-1 gap-4">
         <ChartOHLC ref={ohlcRef} formatTime={formatTime} />
-        <OverlaysOrders chartRef={ohlcRef as any} />
+        <OverlaysOrders chartRef={ohlcRef} />
         <TimelineScrubber />
         {!runFrom || !runTo ? <div className="text-sm text-slate-500">Waiting for frames…</div> : null}
         {isHourLoading ? <div className="text-sm text-slate-500">Loading hourly data…</div> : null}
