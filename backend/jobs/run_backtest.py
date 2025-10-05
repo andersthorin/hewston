@@ -10,6 +10,7 @@ from typing import Any, Dict
 import polars as pl
 
 from backend.adapters.nautilus import NautilusBacktestRunner
+from backend.utils.metrics import compute_cumulative_metrics
 from backend.adapters.sqlite_catalog import SqliteCatalog
 from backend.services.backtests import get_catalog
 from backend.utils.datetime import utc_now
@@ -118,9 +119,45 @@ def run_backtest_and_persist(
         _write_parquet(result.get("equity", []), equity_path)
         _write_parquet(result.get("orders", []), orders_path)
         _write_parquet(result.get("fills", []), fills_path)
-        metrics = result.get("metrics", {})
+        # Build metrics artifact: precompute cumulative series aligned to equity timestamps
+        nautilus = result.get("nautilus", {}) or {}
+        realized = []
+        try:
+            rp = (nautilus.get("series") or {}).get("realized_pnl") or []
+            # Expect [[iso,value], ...]
+            realized = [(str(a[0]), float(a[1])) for a in rp if isinstance(a, (list, tuple)) and len(a) >= 2]
+        except Exception:
+            realized = []
+
+        # Derive bar interval (minutes). Prefer runner result → params → default 1m.
+        try:
+            bar_interval_minutes = int(result.get("bar_interval_minutes") or params.get("bar_interval_minutes") or 1)
+        except Exception:
+            bar_interval_minutes = 1
+
+        metrics_series = compute_cumulative_metrics(
+            result.get("equity", []) or [],
+            realized,
+            bar_minutes=bar_interval_minutes,
+        )
+
+        # Annualization factor (P) disclosure for transparency
+        try:
+            minutes_per_session = 390
+            sessions_per_year = 252
+            periods_per_session = max(1, int(minutes_per_session / max(1, int(bar_interval_minutes))))
+            annualization_P = float(periods_per_session * sessions_per_year)
+        except Exception:
+            annualization_P = float(252 * 390)
+
+        metrics_artifact = {
+            "stats": {"raw": nautilus.get("stats", {})},
+            "series": metrics_series,
+            "bar_interval_minutes": bar_interval_minutes,
+            "annualization_P": annualization_P,
+        }
         ensure_dir(out_dir)
-        metrics_path.write_text(json.dumps(metrics, indent=2))
+        metrics_path.write_text(json.dumps(metrics_artifact, indent=2))
         logger.info(f"Artifacts written to {out_dir}")
 
         # Write manifest
@@ -138,6 +175,7 @@ def run_backtest_and_persist(
             "env_lock": None,
             "calendar_version": "NAZDAQ-v1",
             "tz": "America/New_York",
+            "bar_interval_minutes": bar_interval_minutes,
             "created_at": created_at_iso,
             "status": "DONE",
         }
@@ -153,7 +191,7 @@ def run_backtest_and_persist(
             orders_path=str(orders_path),
             fills_path=str(fills_path),
         )
-        cat.upsert_backtest_metrics(run_id, metrics)
+        # NOTE: DB metrics upsert deprecated for this epic; metrics are served via metrics_path artifact.
 
         return {
             "run_id": run_id,

@@ -8,11 +8,14 @@ export default function StreamingMetricsPanel() {
   const frame = usePlaybackSelector(selectors.frame)
   const live = usePlaybackSelector(selectors.metricsLive)
 
-  const m = frame?.metrics
+  const m = frame?.metrics as any
   const mapped = {
-    total_return: (m?.total_return_so_far ?? live?.total_return_so_far) ?? undefined,
-    max_drawdown: (m?.max_drawdown_so_far ?? live?.max_drawdown_so_far) ?? undefined,
-    sharpe_ratio: (m?.sharpe_so_far ?? live?.sharpe_so_far) ?? undefined,
+    total_return: (m?.total_return ?? m?.total_return_so_far ?? live?.total_return_so_far) ?? undefined,
+    return: m?.return ?? undefined,
+    max_drawdown: (m?.drawdown ?? m?.max_drawdown_so_far ?? live?.max_drawdown_so_far) ?? undefined,
+    sharpe_ratio: (m?.sharpe ?? m?.sharpe_so_far ?? live?.sharpe_so_far) ?? undefined,
+    win_rate: m?.win_rate ?? undefined,
+    realized_pnl: m?.realized_pnl ?? undefined,
   }
   const eq = frame?.equity
   const equityList = eq ? [{ ts: eq.ts, value: eq.value }] : null

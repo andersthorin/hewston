@@ -5,6 +5,7 @@ import { useBacktestPlayback } from '../services/ws'
 import { PlaybackControls } from '../components/playback-controls'
 import ChartOHLC, { type CandlestickChartAPI } from '../components/ChartOHLC'
 import { TimelineScrubber } from '../components/timeline-scrubber'
+import { StreamingMetricsPanel } from '../components/streaming-metrics-panel'
 import OverlaysOrders from '../components/OverlaysOrders'
 import playbackStore from '../store/playbackClock'
 import type { CandlestickData, Time } from 'lightweight-charts'
@@ -319,6 +320,7 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
       <div className="grid grid-cols-1 gap-4">
         <ChartOHLC ref={ohlcRef} formatTime={formatTime} />
         <OverlaysOrders chartRef={ohlcRef} />
+        <StreamingMetricsPanel />
         <TimelineScrubber />
         {!runFrom || !runTo ? <div className="text-sm text-slate-500">Waiting for frames…</div> : null}
         {isHourLoading ? <div className="text-sm text-slate-500">Loading hourly data…</div> : null}

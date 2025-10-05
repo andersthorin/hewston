@@ -168,7 +168,61 @@ class NautilusBacktestRunner:
         # Extract metrics from Nautilus engine state
         metrics = self._extract_metrics_from_engine(engine, equity, fills)
 
-        return {"orders": orders, "fills": fills, "equity": equity, "metrics": metrics}
+        # Also capture raw Nautilus analyzer stats and time series (for post-run precompute)
+        nautilus_stats: Dict[str, Any] = {"pnls": {}, "returns": {}, "general": {}}
+        nautilus_series: Dict[str, list] = {"returns": [], "realized_pnl": []}
+        try:
+            analyzer = getattr(engine, "portfolio").analyzer  # type: ignore[attr-defined]
+            # Raw stats (opaque pass-through)
+            try:
+                nautilus_stats["pnls"] = analyzer.get_performance_stats_pnls()
+            except Exception:
+                pass
+            try:
+                nautilus_stats["returns"] = analyzer.get_performance_stats_returns()
+            except Exception:
+                pass
+            try:
+                nautilus_stats["general"] = analyzer.get_performance_stats_general()
+            except Exception:
+                pass
+            # Time series
+            try:
+                # Returns series (pd.Series)
+                s = getattr(analyzer, "returns", None)
+                if callable(s):
+                    s = s()
+                import pandas as pd  # type: ignore
+                if s is not None and isinstance(s, pd.Series):
+                    nautilus_series["returns"] = [
+                        [pd.Timestamp(k).tz_convert("UTC").isoformat(), float(v)] for k, v in s.items()  # type: ignore
+                    ]
+            except Exception:
+                pass
+            try:
+                # Realized PnL series in USD
+                from nautilus_trader.model.currencies import USD  # type: ignore
+                rp = None
+                if hasattr(analyzer, "realized_pnls"):
+                    rp = analyzer.realized_pnls(USD)
+                import pandas as pd  # type: ignore
+                if rp is not None and isinstance(rp, pd.Series):
+                    nautilus_series["realized_pnl"] = [
+                        [pd.Timestamp(k).tz_convert("UTC").isoformat(), float(v)] for k, v in rp.items()  # type: ignore
+                    ]
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+        return {
+            "orders": orders,
+            "fills": fills,
+            "equity": equity,
+            "metrics": metrics,
+            "nautilus": {"stats": nautilus_stats, "series": nautilus_series},
+            "bar_interval_minutes": 1,
+        }
 
     def _extract_metrics_from_engine(
         self,

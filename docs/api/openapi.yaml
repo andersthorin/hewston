@@ -307,7 +307,22 @@ components:
         ts: { type: string, format: date-time }
         ohlc: { type: object }
         orders: { type: array, items: { type: object } }
-        equity: { type: number }
+        equity:
+          type: object
+          description: Current equity point
+          properties:
+            ts: { type: string, format: date-time }
+            value: { type: number }
+        metrics:
+          type: object
+          description: Optional cumulative metrics attached per frame (additive/backward-compatible)
+          properties:
+            return: { type: number, nullable: true, description: Per-bar return at this frame }
+            realized_pnl: { type: number, nullable: true, description: Cumulative realized PnL (USD) }
+            total_return: { type: number, nullable: true, description: Cumulative total return to date }
+            drawdown: { type: number, nullable: true, description: Current drawdown to date (0..1) }
+            sharpe: { type: number, nullable: true, description: Cumulative Sharpe ratio (annualized by P) }
+            win_rate: { type: number, nullable: true, description: Cumulative win rate to date (0..1) }
         dropped: { type: integer }
       required: [t, ts]
 

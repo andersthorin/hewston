@@ -287,8 +287,33 @@ async def produce_frames(
     equity_rows = _iter_parquet_dicts(artifacts["equity"], select=["ts_utc", "value"]) if artifacts.get("equity") else []
     orders_rows = _iter_parquet_dicts(artifacts["orders"]) if artifacts.get("orders") else []
 
-    # Precompute metrics from equity for finished runs
+    # Precompute basic metrics from equity for finished runs (fallback; Sharpe not annualized)
     metrics_arrays = _precompute_metrics_from_equity(equity_rows)
+
+    # Load metrics artifact (optional) for precomputed cumulative metrics series
+    metrics_lookup: List[Tuple[int, dict]] = []
+    try:
+        mpath = artifacts.get("metrics")
+        if mpath and Path(mpath).exists():
+            with open(mpath, "r") as f:
+                mj = json.load(f)
+            # Expect series as [[iso, {..metrics..}], ...]
+            series_items = mj.get("series") or []
+            for item in series_items:
+                try:
+                    if isinstance(item, list) and len(item) >= 2:
+                        epoch, _ = normalize_timestamp(item[0])
+                        metrics_obj = item[1] if isinstance(item[1], dict) else {}
+                        metrics_lookup.append((int(epoch), metrics_obj))
+                    elif isinstance(item, dict) and "ts" in item:
+                        epoch, _ = normalize_timestamp(item.get("ts"))
+                        metrics_obj = item.get("metrics", {}) or {}
+                        metrics_lookup.append((int(epoch), metrics_obj))
+                except Exception:
+                    continue
+            metrics_lookup.sort(key=lambda x: x[0])
+    except Exception:
+        metrics_lookup = []
 
     # Prepare data structures
     bars_map = _load_bars_data(dataset_id)
@@ -337,12 +362,41 @@ async def produce_frames(
                     except Exception:
                         pass
                 orders_payload.append(o2)
-            # Metrics attachment for this original equity index (may contain None values)
-            mi = {
-                "total_return_so_far": metrics_arrays.get("total_return_so_far", [None]*n_equity)[i],
-                "max_drawdown_so_far": metrics_arrays.get("max_drawdown_so_far", [None]*n_equity)[i],
-                "sharpe_so_far": metrics_arrays.get("sharpe_so_far", [None]*n_equity)[i],
-            }
+            # Prefer precomputed metrics if available; otherwise fallback to on-the-fly estimates
+            if 'm_idx' not in locals():
+                m_idx = -1
+                last_metrics = None
+            if metrics_lookup:
+                while (m_idx + 1) < len(metrics_lookup) and metrics_lookup[m_idx + 1][0] <= key:
+                    last_metrics = metrics_lookup[m_idx + 1][1]
+                    m_idx += 1
+                mi = last_metrics or {}
+            else:
+                # Fallback path (legacy): compute minimal metrics from equity
+                r_cur = None
+                try:
+                    v_cur = float(er["value"])
+                    if 'prev_equity_val' not in locals():
+                        prev_equity_val = v_cur
+                    if prev_equity_val and prev_equity_val != 0.0:
+                        r_cur = (v_cur / prev_equity_val) - 1.0
+                    prev_equity_val = v_cur
+                except Exception:
+                    pass
+
+                # Annualize Sharpe from fallback computation assuming 1-minute bars (P = 252*390)
+                P = 252 * 390
+                shp_raw = metrics_arrays.get("sharpe_so_far", [None]*n_equity)[i]
+                shp_ann = (math.sqrt(P) * shp_raw) if (isinstance(shp_raw, float) or isinstance(shp_raw, int)) and shp_raw is not None else (math.sqrt(P) * shp_raw if shp_raw is not None else None)
+
+                mi = {
+                    "return": r_cur,
+                    "realized_pnl": None,
+                    "total_return": metrics_arrays.get("total_return_so_far", [None]*n_equity)[i],
+                    "drawdown": metrics_arrays.get("max_drawdown_so_far", [None]*n_equity)[i],
+                    "sharpe": shp_ann,
+                    "win_rate": None,
+                }
             frame = StreamFrame(
                 t="frame",
                 ts=iso,
