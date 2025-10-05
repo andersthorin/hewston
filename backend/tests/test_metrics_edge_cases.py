@@ -7,10 +7,10 @@ from backend.utils.metrics import compute_cumulative_metrics
 def test_sharpe_null_when_std_zero():
     # Equity flat -> all returns zero -> std = 0 => sharpe is None
     equity = [
-        {"ts": "2024-01-01T00:00:00Z", "value": 100.0},
-        {"ts": "2024-01-01T00:01:00Z", "value": 100.0},
-        {"ts": "2024-01-01T00:02:00Z", "value": 100.0},
-        {"ts": "2024-01-01T00:03:00Z", "value": 100.0},
+        {"ts_utc": "2024-01-01T00:00:00Z", "value": 100.0},
+        {"ts_utc": "2024-01-01T00:01:00Z", "value": 100.0},
+        {"ts_utc": "2024-01-01T00:02:00Z", "value": 100.0},
+        {"ts_utc": "2024-01-01T00:03:00Z", "value": 100.0},
     ]
     series = compute_cumulative_metrics(equity, realized_series=[], bar_minutes=1)
     # At last point, sharpe should be None
@@ -20,8 +20,8 @@ def test_sharpe_null_when_std_zero():
 
 def test_win_rate_ignores_zero_deltas():
     equity = [
-        {"ts": "2024-01-01T00:00:00Z", "value": 100.0},
-        {"ts": "2024-01-01T00:01:00Z", "value": 101.0},
+        {"ts_utc": "2024-01-01T00:00:00Z", "value": 100.0},
+        {"ts_utc": "2024-01-01T00:01:00Z", "value": 101.0},
     ]
     # Realized PnL goes 0 -> 0 -> 3 (one zero delta, then +3)
     realized = [("2024-01-01T00:00:00Z", 0.0), ("2024-01-01T00:00:30Z", 0.0), ("2024-01-01T00:01:00Z", 3.0)]

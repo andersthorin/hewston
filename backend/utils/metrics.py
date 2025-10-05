@@ -62,7 +62,8 @@ def compute_cumulative_metrics(
     P = _annualization_factor(bar_minutes, minutes_per_session, sessions_per_year)
 
     for er in equity_rows:
-        ts = er.get("ts")
+        # Canonical: expect ts_utc only to avoid hidden fallbacks
+        ts = er.get("ts_utc")
         if ts is None:
             continue
         try:
@@ -98,15 +99,13 @@ def compute_cumulative_metrics(
         except Exception:
             pass
 
-        # Drawdown relative to running peak
-        if not hasattr(compute_cumulative_metrics, "_peak"):
-            compute_cumulative_metrics._peak = None  # type: ignore[attr-defined]
-        peak = getattr(compute_cumulative_metrics, "_peak")
+        # Drawdown relative to running peak (per-call state)
+        if 'peak' not in locals():
+            peak = None  # type: ignore[assignment]
         try:
             v_cur = float(er["value"])  # reuse
             if peak is None or v_cur > peak:
                 peak = v_cur
-                setattr(compute_cumulative_metrics, "_peak", peak)
             drawdown = None if peak in (None, 0) else max(0.0, (peak - v_cur) / peak)
         except Exception:
             drawdown = None

@@ -1,0 +1,34 @@
+{
+  "stats": {
+    "raw": {
+      "pnls": {
+        "PnL (total)": -228.94,
+        "PnL% (total)": -2.289400000000005,
+        "Max Winner": 0.83,
+        "Avg Winner": 0.7566666666666667,
+        "Min Winner": 0.61,
+        "Min Loser": 0.0,
+        "Avg Loser": -0.26190476190476186,
+        "Max Loser": -1.56,
+        "Expectancy": -0.13458333333333328,
+        "Win Rate": 0.125
+      },
+      "returns": {
+        "Returns Volatility (252 days)": 0.0015645553664728673,
+        "Average (Return)": -0.0006636890516048654,
+        "Average Loss (Return)": -0.0013351168330241535,
+        "Average Win (Return)": 0.003364877636910862,
+        "Sharpe Ratio (252 days)": -0.11225533451026995,
+        "Sortino Ratio (252 days)": -0.11225533451026995,
+        "Profit Factor": 0.42004783822165925,
+        "Risk Return Ratio": -0.28753569359594705
+      },
+      "general": {
+        "Long Ratio": "1.00"
+      }
+    }
+  },
+  "series": [],
+  "bar_interval_minutes": 1,
+  "annualization_P": 98280.0
+}

@@ -129,6 +129,45 @@ def run_backtest_and_persist(
         except Exception:
             realized = []
 
+        # Fallback: derive cumulative realized PnL from fills when Nautilus analyzer series is missing
+        if not realized:
+            try:
+                fills = result.get("fills", []) or []
+                # Accumulate position and cost; compute realized on SELLs (netting semantics)
+                pos_qty = 0
+                avg_cost = 0.0
+                realized_cum = 0.0
+                realized_pairs: list[tuple[str, float]] = []
+                from backend.utils.datetime import normalize_timestamp
+                for f in fills:
+                    qty = int(f.get("qty") or f.get("quantity") or 0)
+                    px = float(f.get("price") or 0.0)
+                    side = str(f.get("side") or "").upper()
+                    ts_raw = f.get("ts_utc") or f.get("timestamp") or f.get("ts")
+                    # Normalize ts to ISO (best-effort)
+                    try:
+                        _, ts_iso = normalize_timestamp(ts_raw)
+                    except Exception:
+                        ts_iso = str(ts_raw) if ts_raw is not None else None
+                    if side == "BUY":
+                        # Update weighted average cost
+                        new_qty = pos_qty + qty
+                        if new_qty > 0:
+                            avg_cost = ((avg_cost * pos_qty) + (px * qty)) / float(new_qty)
+                        pos_qty = new_qty
+                    elif side == "SELL":
+                        # Realize PnL for the quantity sold
+                        realized_cum += (px - avg_cost) * qty
+                        pos_qty = max(0, pos_qty - qty)
+                        # Emit a point when we have a timestamp
+                        if ts_iso:
+                            realized_pairs.append((ts_iso, float(realized_cum)))
+                # Use the derived series if we produced any points
+                if realized_pairs:
+                    realized = realized_pairs
+            except Exception:
+                pass
+
         # Derive bar interval (minutes). Prefer runner result → params → default 1m.
         try:
             bar_interval_minutes = int(result.get("bar_interval_minutes") or params.get("bar_interval_minutes") or 1)

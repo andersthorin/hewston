@@ -1,0 +1,21 @@
+{
+  "run_id": "b04236f077ef47e598351419a0ab28fd",
+  "dataset_id": "AAPL-warehouse-1m",
+  "strategy_id": "sma_crossover",
+  "params": {
+    "fast": 10,
+    "slow": 20
+  },
+  "seed": 42,
+  "slippage_fees": {},
+  "speed": 60,
+  "run_from": null,
+  "run_to": null,
+  "code_hash": "9da8a0070a5c431034ab4924959f488843359995",
+  "env_lock": null,
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "bar_interval_minutes": 1,
+  "created_at": "2025-10-05T19:42:05.024137+00:00",
+  "status": "DONE"
+}

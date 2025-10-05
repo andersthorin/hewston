@@ -111,7 +111,7 @@ class NautilusBacktestRunner:
             # Older Nautilus versions may not expose set_default_trading_client
             pass
 
-        engine.add_venue(Venue(venue), OmsType.HEDGING, AccountType.CASH, [Money.from_str("10000 USD")])
+        engine.add_venue(Venue(venue), OmsType.NETTING, AccountType.CASH, [Money.from_str("10000 USD")])
         # Ensure instrument is registered before adding bars
         instr = Equity.from_dict({
             "id": instrument_id,
@@ -194,8 +194,12 @@ class NautilusBacktestRunner:
                     s = s()
                 import pandas as pd  # type: ignore
                 if s is not None and isinstance(s, pd.Series):
+                    def _to_utc_iso(ts):
+                        t = pd.Timestamp(ts)
+                        # If tz-naive, localize to UTC; if tz-aware, convert to UTC
+                        return (t.tz_localize("UTC") if t.tzinfo is None or t.tz is None else t.tz_convert("UTC")).isoformat()
                     nautilus_series["returns"] = [
-                        [pd.Timestamp(k).tz_convert("UTC").isoformat(), float(v)] for k, v in s.items()  # type: ignore
+                        [_to_utc_iso(k), float(v)] for k, v in s.items()  # type: ignore
                     ]
             except Exception:
                 pass
@@ -207,8 +211,11 @@ class NautilusBacktestRunner:
                     rp = analyzer.realized_pnls(USD)
                 import pandas as pd  # type: ignore
                 if rp is not None and isinstance(rp, pd.Series):
+                    def _to_utc_iso(ts):
+                        t = pd.Timestamp(ts)
+                        return (t.tz_localize("UTC") if t.tzinfo is None or t.tz is None else t.tz_convert("UTC")).isoformat()
                     nautilus_series["realized_pnl"] = [
-                        [pd.Timestamp(k).tz_convert("UTC").isoformat(), float(v)] for k, v in rp.items()  # type: ignore
+                        [_to_utc_iso(k), float(v)] for k, v in rp.items()  # type: ignore
                     ]
             except Exception:
                 pass

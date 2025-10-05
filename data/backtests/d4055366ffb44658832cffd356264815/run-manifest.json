@@ -1,0 +1,22 @@
+{
+  "run_id": "d4055366ffb44658832cffd356264815",
+  "dataset_id": "MSFT-warehouse-1m",
+  "strategy_id": "sma_crossover",
+  "params": {
+    "fast": 20,
+    "slow": 50,
+    "instrument_id": "MSFT.XNAS"
+  },
+  "seed": 42,
+  "slippage_fees": {},
+  "speed": 60,
+  "run_from": "2025-02-01",
+  "run_to": "2025-02-28",
+  "code_hash": "9da8a0070a5c431034ab4924959f488843359995",
+  "env_lock": null,
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "bar_interval_minutes": 1,
+  "created_at": "2025-10-05T19:22:24.720247+00:00",
+  "status": "DONE"
+}
