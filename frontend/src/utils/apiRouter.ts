@@ -29,18 +29,13 @@ class APIClientRouter {
     endpoint: string,
     options: RequestInit & ApiRouterOptions = {}
   ): Promise<T> => {
-    const { allowFallback = false, timeout = 30000, ...requestOptions } = options
+    const { timeout = 30000, ...requestOptions } = options
     const evaluation = featureFlagService.evaluateFeatureFlag(endpointGroup)
 
     // Log routing decision for debugging
     this.logEndpointRouting(endpoint, evaluation.source, endpointGroup)
 
-    try {
-      return await this.makeRequest<T>(evaluation, endpoint, requestOptions, timeout)
-    } catch (error) {
-      // No backend fallback: propagate BFF error immediately
-      throw error
-    }
+    return await this.makeRequest<T>(evaluation, endpoint, requestOptions, timeout)
   };
 
   /**
@@ -128,7 +123,7 @@ class APIClientRouter {
         return `${baseUrl}/api/v1/backtests${tail}`
       }
       // Transform backtests/{id}[/*] to canonical BFF endpoints
-      const match = endpoint.match(/^backtests\/([^\/\?]+)(?:\/(.+))?$/)
+      const match = endpoint.match(/^backtests\/([^/?]+)(?:\/(.+))?$/)
       if (match) {
         const [, id, subpath] = match
         if (!subpath) {

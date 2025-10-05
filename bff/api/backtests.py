@@ -59,19 +59,18 @@ async def create_backtest_via_bff(
 
         strategy_id = incoming.get("strategy_id")
         symbol = incoming.get("symbol")
-        # Prefer canonical run_from/run_to if provided, fallback to from/to
-        run_from = incoming.get("run_from") or incoming.get("from")
-        run_to = incoming.get("run_to") or incoming.get("to")
+        run_from = incoming.get("run_from")
+        run_to = incoming.get("run_to")
 
         mapped: Dict[str, Any] = {}
         if strategy_id:
             mapped["strategy_id"] = strategy_id
         if symbol:
             mapped["symbol"] = symbol
-        if run_from:
-            mapped["from"] = run_from
-        if run_to:
-            mapped["to"] = run_to
+        if run_from is not None:
+            mapped["run_from"] = run_from
+        if run_to is not None:
+            mapped["run_to"] = run_to
         # Pass-through dataset_id if caller provided it (not in simplified form)
         if isinstance(incoming.get("dataset_id"), str) and incoming.get("dataset_id"):
             mapped["dataset_id"] = incoming["dataset_id"]
@@ -135,12 +134,12 @@ async def create_backtest_via_bff(
 
 @router.get("/backtests")
 async def list_backtests(
-    limit: int = Query(default=20, description="Maximum number of runs to return"),
-    offset: int = Query(default=0, description="Number of runs to skip"),
+    limit: int = Query(default=20, description="Maximum number of backtests to return"),
+    offset: int = Query(default=0, description="Number of backtests to skip"),
     symbol: Optional[str] = Query(default=None, description="Filter by trading symbol"),
     strategy_id: Optional[str] = Query(default=None, description="Filter by strategy ID"),
-    from_date: Optional[str] = Query(default=None, alias="from", description="Filter runs from this date"),
-    to_date: Optional[str] = Query(default=None, alias="to", description="Filter runs to this date"),
+    run_from: Optional[str] = Query(default=None, alias="run_from", description="Filter backtests from this date"),
+    run_to: Optional[str] = Query(default=None, alias="run_to", description="Filter backtests to this date"),
     order: Optional[str] = Query(default=None, description="Sort order (created_at, -created_at)"),
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
     redis_client = Depends(get_redis_client),
@@ -179,8 +178,8 @@ async def list_backtests(
             "offset": offset,
             "symbol": symbol,
             "strategy_id": strategy_id,
-            "from_date": from_date,
-            "to_date": to_date,
+            "run_from": run_from,
+            "run_to": run_to,
             "order": order,
         }
     )
@@ -200,10 +199,10 @@ async def list_backtests(
         params["symbol"] = symbol
     if strategy_id:
         params["strategy_id"] = strategy_id
-    if from_date:
-        params["from"] = from_date
-    if to_date:
-        params["to"] = to_date
+    if run_from:
+        params["run_from"] = run_from
+    if run_to:
+        params["run_to"] = run_to
     if order:
         params["order"] = order
 
@@ -258,15 +257,11 @@ async def list_backtests(
             )
             run_from = (
                 (item.get("run_from") if isinstance(item, dict) else None)
-                or (item.get("from_date") if isinstance(item, dict) else None)
                 or ((run_obj or {}).get("run_from") if isinstance(run_obj, dict) else None)
-                or ((run_obj or {}).get("from_date") if isinstance(run_obj, dict) else None)
             )
             run_to = (
                 (item.get("run_to") if isinstance(item, dict) else None)
-                or (item.get("to_date") if isinstance(item, dict) else None)
                 or ((run_obj or {}).get("run_to") if isinstance(run_obj, dict) else None)
-                or ((run_obj or {}).get("to_date") if isinstance(run_obj, dict) else None)
             )
             duration_ms = (
                 (item.get("duration_ms") if isinstance(item, dict) else None)

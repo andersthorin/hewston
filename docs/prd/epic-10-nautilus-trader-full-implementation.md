@@ -1,5 +1,11 @@
 # Epic 10 — Nautilus Trader Backtest Engine - Full Implementation
 
+
+## Documentation Package Overview
+- Architecture: [docs/architecture/nautilus-integration-architecture.md](../architecture/nautilus-integration-architecture.md)
+- User Stories: [docs/stories/10.1.story.md](../stories/10.1.story.md), [docs/stories/10.2.story.md](../stories/10.2.story.md), [docs/stories/10.3.story.md](../stories/10.3.story.md)
+- QA Acceptance Checklist: [docs/qa/epic-10-acceptance-checklist.md](../qa/epic-10-acceptance-checklist.md)
+
 ## Goal
 Replace the current stub Nautilus adapter with a full Nautilus Trader integration that provides realistic backtesting execution, supports multiple strategies, and delivers comprehensive trading metrics for AI-powered strategy development.
 
@@ -37,7 +43,7 @@ Replace the current stub Nautilus adapter with a full Nautilus Trader integratio
 - Maintain BacktestRunnerPort interface compatibility
 - Ensure artifact output format consistency
 
-### Story 10.2: Strategy Framework & Multiple Strategy Support  
+### Story 10.2: Strategy Framework & Multiple Strategy Support
 **Goal**: Create pluggable strategy architecture for multiple trading strategies
 - Implement strategy registry/factory pattern
 - Convert existing SMA crossover to proper Nautilus strategy
@@ -64,7 +70,7 @@ Replace the current stub Nautilus adapter with a full Nautilus Trader integratio
 - **Epic 6**: Frontend integration (must continue working)
 
 ## Risks & Mitigations
-- **Nautilus Integration Complexity**: 
+- **Nautilus Integration Complexity**:
   - *Risk*: Complex library integration breaking existing functionality
   - *Mitigation*: Incremental implementation, extensive testing, feature flags for rollback
 - **Performance Regression**:
@@ -90,7 +96,7 @@ Replace the current stub Nautilus adapter with a full Nautilus Trader integratio
 BacktestRunnerPort → NautilusBacktestRunner (stub) → Polars calculations → Basic metrics
 ```
 
-### Target State  
+### Target State
 ```
 BacktestRunnerPort → NautilusBacktestRunner (real) → Nautilus Engine → Strategy Framework → Enhanced metrics
 ```

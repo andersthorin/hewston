@@ -9,7 +9,7 @@ import pandas as pd
 from typing import Any
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from backend.services.backtests import list_backtests_service, get_backtest_service
+from backend.modules.backtests.adapters.http.controllers import list_backtests as list_backtests_ctrl, get_backtest as get_backtest_ctrl, create_backtest as create_backtest_ctrl
 
 from uuid import uuid4
 from fastapi import Body, Header, HTTPException, Request, status, Query
@@ -62,9 +62,10 @@ async def create_backtest(
             content={"error": {"code": "BAD_REQUEST", "message": "invalid JSON"}},
         )
 
-    from backend.services.backtests import create_backtest_service
+    # Delegate to module controller (pilot exemplar)
+    from backend.modules.backtests.adapters.http.controllers import create_backtest as create_backtest_ctrl
 
-    payload, code = create_backtest_service(body if isinstance(body, dict) else {}, idempotency_key)
+    payload, code = create_backtest_ctrl(body if isinstance(body, dict) else {}, idempotency_key)
     if 200 <= code < 300:
         return JSONResponse(status_code=code, content=payload)
     # Error branch
@@ -77,8 +78,8 @@ async def list_backtests(
     offset: int = 0,
     symbol: str | None = None,
     strategy_id: str | None = None,
-    from_date: str | None = Query(None, alias="from"),
-    to_date: str | None = Query(None, alias="to"),
+    run_from: str | None = Query(None, alias="run_from"),
+    run_to: str | None = Query(None, alias="run_to"),
     order: str | None = None,
 ):
     logger.info(
@@ -86,18 +87,18 @@ async def list_backtests(
         extra={
             "symbol": symbol,
             "strategy_id": strategy_id,
-            "from": from_date,
-            "to": to_date,
+            "run_from": run_from,
+            "run_to": run_to,
             "limit": limit,
             "offset": offset,
             "order": order,
         },
     )
-    return list_backtests_service(
+    return list_backtests_ctrl(
         symbol=symbol,
         strategy_id=strategy_id,
-        from_date=from_date,
-        to_date=to_date,
+        from_date=run_from,
+        to_date=run_to,
         limit=limit,
         offset=offset,
         order=order,
@@ -106,7 +107,7 @@ async def list_backtests(
 
 @router.get("/backtests/{run_id}")
 async def get_backtest(run_id: str):
-    data = get_backtest_service(run_id)
+    data = get_backtest_ctrl(run_id)
     if not data:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -121,7 +122,7 @@ async def get_backtest_metrics(run_id: str):
     """Return metrics.json for a run.
     Shape: a flat JSON object with numeric fields (arbitrary keys allowed).
     """
-    run = get_backtest_service(run_id)
+    run = get_backtest_ctrl(run_id)
     if not run:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -155,7 +156,7 @@ async def get_backtest_equity(run_id: str):
     """Return equity curve as list of points: { equity: [{timestamp, equity, drawdown?}] }.
     Parquet schema expected: columns ['ts_utc', 'value'] where ts_utc is datetime-like.
     """
-    run = get_backtest_service(run_id)
+    run = get_backtest_ctrl(run_id)
     if not run:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -198,6 +199,7 @@ async def get_backtest_equity(run_id: str):
                 except Exception:
                     pass
             points.append(pt)
+
         return JSONResponse(status_code=200, content={"equity": points})
     except Exception as e:
         logger.exception("get_equity.error", extra={"run_id": run_id, "error": str(e)[:200]})
@@ -210,7 +212,7 @@ async def get_backtest_orders(run_id: str):
     Parquet schema suggested in docs: ts_utc, side, qty, price, order_id, type, time_in_force, symbol?
     Response maps to aggregator-friendly shape.
     """
-    run = get_backtest_service(run_id)
+    run = get_backtest_ctrl(run_id)
     if not run:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -251,6 +253,7 @@ async def get_backtest_orders(run_id: str):
                 "status": str(r.get("status") or "FILLED"),
                 "commission": (float(r.get("commission")) if r.get("commission") is not None else None),
             })
+
         return JSONResponse(status_code=200, content={"orders": rows})
     except Exception as e:
         logger.exception("get_orders.error", extra={"run_id": run_id, "error": str(e)[:200]})

@@ -11,7 +11,7 @@ async def test_simple_connection():
     """Test a simple WebSocket connection with a few problematic messages."""
     print("🔍 Testing WebSocket message error fixes...")
     
-    uri = "ws://127.0.0.1:8001/api/v1/runs/demo-run/stream"
+    uri = "ws://127.0.0.1:8001/api/v1/backtests/demo-run/stream"
     
     try:
         async with websockets.connect(uri) as websocket:

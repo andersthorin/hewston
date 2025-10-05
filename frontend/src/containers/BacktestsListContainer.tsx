@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useBacktestList, useCreateBacktest } from '../hooks/useRunData'
-import type { BacktestListQuery } from '../services/api'
+import type { BacktestListQuery, CreateBacktestRequest } from '../services/api'
 import BacktestsTable from '../components/BacktestsTable'
 import FiltersBar, { type Filters } from '../components/FiltersBar'
 import { useNavigate } from 'react-router-dom'
@@ -17,15 +17,16 @@ function CreateBacktestForm({ onCreated, creating, setCreating }: { onCreated: (
       const symbol = String(form.get('symbol') || 'AAPL')
       const run_from = String(form.get('run_from') || '')
       const run_to = String(form.get('run_to') || '')
-      const request: any = { strategy_id, symbol }
-      if (run_from) request.from = run_from
-      if (run_to) request.to = run_to
+      const request: Partial<CreateBacktestRequest> = { strategy_id, symbol }
+      if (run_from) request.run_from = run_from
+      if (run_to) request.run_to = run_to
 
       const resp = await createBacktest.mutateAsync({
         request,
         idempotencyKey: `ui-${Date.now()}`,
       })
-      const id = (resp as any)?.backtest_id || (resp as any)?.run_id
+      const r = resp as { backtest_id?: string; run_id?: string }
+      const id = r.backtest_id ?? r.run_id
       if (!id) {
         throw new Error('Failed to create backtest: no id returned')
       }
@@ -90,7 +91,9 @@ export function BacktestsListContainer() {
         },
         idempotencyKey: `sample-${Date.now()}`
       })
-      navigate(`/backtests/${resp.backtest_id || resp.run_id}`)
+      const r = resp as { backtest_id?: string; run_id?: string }
+      const id = r.backtest_id ?? r.run_id
+      navigate(`/backtests/${id}`)
     } catch (e) {
       alert((e as Error).message)
     } finally {

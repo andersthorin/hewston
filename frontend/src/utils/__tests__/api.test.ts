@@ -343,7 +343,7 @@ describe('API Utilities', () => {
         '/bars/daily',
         expect.objectContaining({
           method: 'GET',
-          allowFallback: true
+          allowFallback: false
         })
       )
       expect(result).toEqual({ data: 'bff-test' })
@@ -364,7 +364,7 @@ describe('API Utilities', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ strategy: 'test' }),
-          allowFallback: true
+          allowFallback: false
         })
       )
       expect(result).toEqual({ id: 456 })

@@ -15,6 +15,18 @@ Decision: TBD (pending elicitation)
 | 2025-09-22 | 0.1     | Initialized architecture doc | Architect |
 
 
+## Related Architecture Modernization Documents
+- Architecture Review Report: [architecture/000-architecture-review-report.md](architecture/000-architecture-review-report.md)
+- Target Architecture & Conventions: [architecture/010-target-architecture-and-conventions.md](architecture/010-target-architecture-and-conventions.md)
+- Migration Plan & Governance: [architecture/020-migration-plan-and-governance.md](architecture/020-migration-plan-and-governance.md)
+- Epic 12 — Code Cleanup and Architectural Alignment: [prd/epic-12-code-cleanup-and-architectural-alignment.md](../prd/epic-12-code-cleanup-and-architectural-alignment.md)
+- ADR-001 (Directory Strategy & Hexagonal Boundaries): [architecture/ADR-001-directory-strategy-and-hexagonal-boundaries.md](architecture/ADR-001-directory-strategy-and-hexagonal-boundaries.md)
+- ADR-002 (Frontend Path Aliases & Boundary Enforcement): [architecture/ADR-002-frontend-path-aliases-and-boundary-enforcement.md](architecture/ADR-002-frontend-path-aliases-and-boundary-enforcement.md)
+- ADR-003 (Backend/BFF Module Extraction Strategy): [architecture/ADR-003-backend-bff-module-extraction-strategy.md](architecture/ADR-003-backend-bff-module-extraction-strategy.md)
+- RFC (folded into Epic 12): see Epic link above; legacy copy remains here: [architecture/RFC-repository-architecture-modernization.md](architecture/RFC-repository-architecture-modernization.md)
+- Review Checklist: [architecture/review-checklist.md](architecture/review-checklist.md)
+
+
 
 ## High Level Architecture
 

@@ -13,7 +13,7 @@ export class WebSocketTestHarness {
   private messageQueue: any[] = []
   private connectionState: WebSocketState = 'idle'
   private eventHandlers: Map<string, Function[]> = new Map()
-  private mockWebSocketInstance: MockWebSocket | null = null
+  private mockWebSocketInstance: any = null
 
   constructor() {
     this.setupMockWebSocket()
@@ -31,7 +31,7 @@ export class WebSocketTestHarness {
       url: string
       onopen: ((event: Event) => void) | null = null
       onmessage: ((event: MessageEvent) => void) | null = null
-      onclose: ((event: CloseEvent) => void) | null = null
+      onclose: ((event: Event) => void) | null = null
       onerror: ((event: Event) => void) | null = null
 
       constructor(url: string) {
@@ -59,7 +59,11 @@ export class WebSocketTestHarness {
       close() {
         this.readyState = MockWebSocket.CLOSED
         setTimeout(() => {
-          this.onclose?.(new CloseEvent('close'))
+          const evt = new Event('close') as any
+          evt.code = 1000
+          evt.reason = 'normal'
+          evt.wasClean = true
+          this.onclose?.(evt)
         }, 5)
       }
     }
@@ -90,8 +94,11 @@ export class WebSocketTestHarness {
     this.connectionState = 'closed'
     const mockInstance = (window as any).__mockWebSocketInstance
     if (mockInstance && mockInstance.onclose) {
-      const event = new CloseEvent('close')
-      mockInstance.onclose(event)
+      const evt = new Event('close') as any
+      evt.code = 1000
+      evt.reason = 'normal'
+      evt.wasClean = true
+      mockInstance.onclose(evt)
     }
   }
 

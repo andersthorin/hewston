@@ -9,8 +9,11 @@ type OutMsg = WorkerOutMessage
 const dropped = 0
 
 let seen = 0
+let lastOutTs = 0
 function handleFrame(payload: unknown) {
+  const tParse0 = performance.now()
   const parsed = StreamFrameSchema.safeParse(payload)
+  const tParse1 = performance.now()
   if (!parsed.success) {
     // drop invalid
     if (seen < 50) {
@@ -29,7 +32,12 @@ function handleFrame(payload: unknown) {
   seen += 1
   if (seen <= 50) {
     try {
-      console.debug('[worker] handleFrame', { n: seen, ts: f?.equity?.ts || f?.ts })
+      const parseMs = +(tParse1 - tParse0).toFixed(2)
+      console.debug('[worker] handleFrame', { n: seen, ts: f?.equity?.ts || f?.ts, parse_ms: parseMs })
+      if (parseMs > 5) {
+        // eslint-disable-next-line no-console
+        console.debug('[diag][worker.parse_ms]', { ms: parseMs })
+      }
     } catch {
       // Ignore logging errors
     }
@@ -39,6 +47,14 @@ function handleFrame(payload: unknown) {
   const withDropped: StreamFrameT = { ...f, dropped: baseDropped + dropped }
   const message: OutMsg = { type: 'frame', data: withDropped }
   // Emit immediately to avoid any timer throttling in background tabs
+  // Diagnostics: worker out delta
+  try {
+    const now = Date.now()
+    const dt = lastOutTs ? now - lastOutTs : 0
+    lastOutTs = now
+    // eslint-disable-next-line no-console
+    console.debug('[diag][worker.out]', { dt })
+  } catch {}
   postMessage(message)
   if (seen <= 50) {
     try {

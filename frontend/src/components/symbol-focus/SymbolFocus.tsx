@@ -1,15 +1,15 @@
 import { useMemo } from 'react'
-import { usePlaybackSelector, usePlaybackStore } from '../store/playbackClock'
+import { usePlaybackSelector, usePlaybackStore } from '../../store/playbackClock'
 
 export default function SymbolFocus() {
   const store = usePlaybackStore()
-  const focused = usePlaybackSelector((s) => (s as any).focusedSymbol ?? null)
-  const symbols = usePlaybackSelector((s) => (s as any).symbolsSeen ?? []) as string[]
+  const focused = usePlaybackSelector((s) => (s as { focusedSymbol?: string | null }).focusedSymbol ?? null)
+  const symbols = usePlaybackSelector((s) => (s as { symbolsSeen?: string[] }).symbolsSeen ?? []) as string[]
   const options = useMemo(() => ['All', ...symbols], [symbols])
 
   const onChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const v = e.target.value
-    // @ts-ignore store may have setFocus
+    // @ts-expect-error store may have setFocus
     store.setFocus?.(v === 'All' ? null : v)
   }
 
@@ -26,4 +26,5 @@ export default function SymbolFocus() {
     </div>
   )
 }
+
 

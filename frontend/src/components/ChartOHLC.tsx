@@ -25,7 +25,8 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
         // Only seed data; do NOT call fitContent here to avoid auto-zoom changing bar width
         const series = seriesRef.current as CandlestickSeriesApi | null
         series?.setData(initial)
-        console.debug('[ChartOHLC] reset (no fitContent)', { points: initial.length })
+        // Reduce noisy logging in dev to avoid jank
+        // if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) console.debug('[ChartOHLC] reset', { points: initial.length })
       } catch (error) {
         console.warn('Failed to reset chart data:', error)
       }
@@ -34,15 +35,16 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
       try {
         const series = seriesRef.current as CandlestickSeriesApi | null
         series?.update(dp)
-        console.debug('[ChartOHLC] update', dp)
+        // Suppress per-frame logging; it can cause jank at ~7fps
       } catch (error) {
         console.warn('Failed to update chart data:', error)
       }
     },
-    setMarkers: (markers: Array<any>) => {
+    setMarkers: (markers: Array<{ time: Time; text?: string; position?: 'aboveBar'|'belowBar'|'inBar'; color?: string; shape?: string; }>) => {
       try {
         const series = seriesRef.current as CandlestickSeriesApi | null
-        ;(series as any)?.setMarkers?.(markers)
+        const s = series as unknown as { setMarkers?: (m: Array<{ time: Time; text?: string; position?: 'aboveBar'|'belowBar'|'inBar'; color?: string; shape?: string; }>) => void }
+        s?.setMarkers?.(markers)
       } catch (error) {
         console.warn('Failed to set markers:', error)
       }

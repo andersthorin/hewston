@@ -264,13 +264,17 @@ async def get_hour(
         _to = to_date
         raise HTTPException(status_code=404, detail=f"No 1-hour warehouse data available for {symbol} in date range {_from} to {_to}. Run warehouse backfill first.")
 
+
     qh = pl.scan_parquet(paths).filter((pl.col("t") >= pl.lit(ts_from)) & (pl.col("t") <= pl.lit(ts_to)))
     qh = qh.select(["t", "o", "h", "l", "c", "v"])  # minimal set for chart
+
     dfh = qh.collect()
+
     if dfh.height == 0:
         raise HTTPException(status_code=404, detail="No data rows in requested window")
     items = [
         {"t": _isoz(t), "o": float(o), "h": float(h), "l": float(l), "c": float(c), "v": int(v)}
         for t, o, h, l, c, v in zip(dfh["t"], dfh["o"], dfh["h"], dfh["l"], dfh["c"], dfh["v"])
     ]
+
     return JSONResponse(content={"symbol": symbol, "bars": items})

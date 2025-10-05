@@ -3,8 +3,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { render, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import playbackStore from '../store/playbackClock'
-import PlaybackControls from '../components/PlaybackControls'
-import TimelineScrubber from '../components/TimelineScrubber'
+import { PlaybackControls } from '../components/playback-controls'
+import TimelineScrubber from '../components/timeline-scrubber'
 import React, { useEffect } from 'react'
 
 // Mock lightweight-charts to avoid DOM/canvas deps

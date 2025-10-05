@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
 import { render } from '@testing-library/react'
-import StreamingMetricsPanel from '../StreamingMetricsPanel'
+import React from 'react'
+
+import { StreamingMetricsPanel } from '../streaming-metrics-panel'
 import playbackStore, { PlaybackProvider } from '../../store/playbackClock'
 
 function seedFrameWithMetrics() {

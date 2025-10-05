@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { useHourChartData } from '../hooks/useChartData'
 
 import { useBacktestPlayback } from '../services/ws'
-import PlaybackControls from '../components/PlaybackControls'
+import { PlaybackControls } from '../components/playback-controls'
 import ChartOHLC, { type CandlestickChartAPI } from '../components/ChartOHLC'
-import TimelineScrubber from '../components/TimelineScrubber'
+import { TimelineScrubber } from '../components/timeline-scrubber'
 import OverlaysOrders from '../components/OverlaysOrders'
 import playbackStore from '../store/playbackClock'
 import type { CandlestickData, Time } from 'lightweight-charts'
@@ -49,6 +49,11 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   const recvCountRef = useRef(0)
   const readySentRef = useRef(false) // Track if ready signal has been sent
 
+  // Diagnostics: frame render counters for FPS and totals
+  const renderedRef = useRef(0)
+  const [renderedCount, setRenderedCount] = useState(0)
+  const [fps, setFps] = useState(0)
+
   // Track the actual run window; prefer props (from manifest) and fall back to streaming inference
   const [runFrom, setRunFrom] = useState<string | null>(run_from ?? null)
   const [runTo, setRunTo] = useState<string | null>(run_to ?? null)
@@ -67,8 +72,18 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
           const t = frame?.equity?.ts || frame?.ts
           console.debug('[RunPlayer] subscribe: frame received', { n: recvCountRef.current, ts: t })
         }
+        // Diagnostics: render delta
+        {
+          const now = Date.now()
+          const dt = lastRenderAtRef.current ? now - lastRenderAtRef.current : 0
+          lastRenderAtRef.current = now
+          // eslint-disable-next-line no-console
+          console.debug('[diag][render]', { dt })
+        }
         // Always forward frame to playback store
         playbackStore._setFrame(frame)
+        renderedRef.current += 1
+        setRenderedCount(renderedRef.current)
 
         const tsStr: string | undefined = frame?.equity?.ts || frame?.ts
         const ohlc = frame.ohlc as { o?: number; h?: number; l?: number; c?: number } | undefined | null
@@ -92,10 +107,15 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
               : (Math.floor(new Date(tsStr).getTime() / 1000) as unknown as Time)
             const dp: CandlestickData = { time: timeVal, open: ohlc!.o!, high: ohlc!.h!, low: ohlc!.l!, close: ohlc!.c! }
             console.debug('[RunPlayer] frame branch=streaming-ohlc', { ts: tsStr, dp, seeded: seededRef.current, viewMode })
+            const t0 = performance.now()
             if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
-            ohlcRef.current?.scrollToLatest()
+            const t1 = performance.now()
+            // eslint-disable-next-line no-console
+            console.debug('[diag][chart.update_ms]', { ms: +(t1 - t0).toFixed(2) })
+            const dayCur = tsStr.slice(0,10)
+            if (dayCur !== lastDayRef.current || !seededRef.current) { ohlcRef.current?.scrollToLatest() }
             seededRef.current = true
-            lastDayRef.current = tsStr.slice(0,10)
+            lastDayRef.current = dayCur
           } else if (hasSnapshots) {
             const day = tsStr.slice(0, 10)
             const snaps = dailySnapshotsRef.current!.get(day) || []
@@ -116,7 +136,11 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
                   : (Math.floor(new Date(s.t).getTime() / 1000) as unknown as Time)
                 const dp: CandlestickData = { time: timeVal, open: s.o, high: s.h, low: s.l, close: s.c }
                 console.debug('[RunPlayer] apply snapshot dp', { ts: tsStr, dp })
+                const t0 = performance.now()
                 if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
+                const t1 = performance.now()
+                // eslint-disable-next-line no-console
+                console.debug('[diag][chart.update_ms]', { ms: +(t1 - t0).toFixed(2) })
                 if (day !== lastDayRef.current || !seededRef.current) { ohlcRef.current?.scrollToLatest() }
                 seededRef.current = true
                 lastDayRef.current = day
@@ -131,6 +155,7 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
         console.warn('Failed to process frame:', error)
       }
     })
+
     return unsub
   }, [subscribe, run_from, run_to, runFrom, runTo, viewMode])
 
@@ -147,7 +172,21 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   const lastDayRef = useRef<string | null>(null)
 
 
+  // Diagnostics: render timing delta
+  const lastRenderAtRef = useRef<number>(0)
+
   // Group hourly bars by day and precompute cumulative daily snapshots per hour
+  // Diagnostics sampler: update visible counters and 1-second FPS
+  useEffect(() => {
+    let last = 0
+    const id = setInterval(() => {
+      const total = renderedRef.current
+      setFps(total - last)
+      last = total
+    }, 1000)
+    return () => clearInterval(id)
+  }, [])
+
   const [snapshotsVersion, setSnapshotsVersion] = useState(0)
   // Keep playback store range in sync with inferred/known run window
   useEffect(() => {
@@ -261,8 +300,16 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <PlaybackControls playing={state.playing} onPlay={onPlay} onPause={onPause} />
-        <div className="flex items-center gap-2">
-          <div className="text-slate-500">Transport: {state.status}</div>
+        <div className="flex items-center gap-3">
+          <div className="text-slate-500 text-sm">
+            Transport: {state.status}
+            <span className="mx-2">•</span>
+            Frames: {renderedCount}
+            <span className="mx-2">•</span>
+            FPS: {fps}
+            <span className="mx-2">•</span>
+            Dropped: {state.dropped}
+          </div>
           <div className="inline-flex rounded border border-slate-300 overflow-hidden text-xs">
             <button className={`px-2 py-1 ${viewMode==='daily'?'bg-slate-200':''}`} onClick={() => setViewMode('daily')}>Daily</button>
             <button className={`px-2 py-1 ${viewMode==='hourly'?'bg-slate-200':''}`} onClick={() => setViewMode('hourly')}>Hourly</button>

@@ -2,8 +2,8 @@ import { useParams } from 'react-router-dom'
 import { useBacktestDetail } from '../hooks/useRunData'
 import RunPlayerContainer from '../containers/RunPlayerContainer'
 import ErrorBoundary from '../components/ErrorBoundary'
-import StreamingMetricsPanel from '../components/StreamingMetricsPanel'
-import SymbolFocus from '../components/SymbolFocus'
+import { StreamingMetricsPanel } from '../components/streaming-metrics-panel'
+import { SymbolFocus } from '../components/symbol-focus'
 
 export default function BacktestDetailView() {
   const params = useParams<{ backtest_id: string }>()

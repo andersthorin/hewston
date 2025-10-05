@@ -45,9 +45,6 @@ class WebSocketConnectionManager:
 
         # Connection metadata
         self.connection_metadata: Dict[str, Dict[str, Any]] = {}
-        # TEMP DEBUG counters for first-N logging per run
-        self._debug_recv_counts: Dict[str, int] = {}
-        self._debug_send_counts: Dict[str, int] = {}
 
 
     async def connect_client(self, websocket: WebSocket, connection_id: str) -> None:
@@ -439,18 +436,6 @@ class WebSocketConnectionManager:
                     # Parse and forward message to subscribers
                     message_dict = json.loads(message)
 
-                    # TEMP DEBUG: log first 20 frames received from backend
-                    if isinstance(message_dict, dict) and message_dict.get("t") == "frame":
-                        c = self._debug_recv_counts.get(run_id, 0)
-                        if c < 20:
-                            eq_obj = message_dict.get("equity") or {}
-                            ts = message_dict.get("ts") or eq_obj.get("ts")
-                            eq = eq_obj.get("value")
-                            try:
-                                self.logger.info("TEMP_DEBUG.bff.recv", extra={"run_id": run_id, "n": c + 1, "ts": ts, "eq": eq})
-                            except Exception:
-                                pass
-                            self._debug_recv_counts[run_id] = c + 1
 
                     await self._broadcast_to_run_subscribers(run_id, message_dict)
 
@@ -513,18 +498,6 @@ class WebSocketConnectionManager:
         if run_id not in self.run_subscriptions:
             return
 
-        # TEMP DEBUG: log first 20 frames being sent to clients from BFF
-        try:
-            if isinstance(message, dict) and message.get("t") == "frame":
-                c = self._debug_send_counts.get(run_id, 0)
-                if c < 20:
-                    eq_obj = message.get("equity") or {}
-                    ts = message.get("ts") or eq_obj.get("ts")
-                    eq = eq_obj.get("value")
-                    self.logger.info("TEMP_DEBUG.bff.send", extra={"run_id": run_id, "n": c + 1, "ts": ts, "eq": eq})
-                    self._debug_send_counts[run_id] = c + 1
-        except Exception:
-            pass
 
         subscribers = self.run_subscriptions[run_id].copy()
         for connection_id in subscribers:

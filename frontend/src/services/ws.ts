@@ -43,6 +43,18 @@ export function useBacktestPlayback(backtestId: string) {
   // TEMP DEBUG: limit first 20 raw WS frame logs
   const feRawDebugRef = useRef<number>(0)
 
+  // Buffered smooth-render state
+  const frameBufferRef = useRef<StreamFrameT[]>([])
+  const lastPaintRef = useRef<number>(0)
+  const rafIdRef = useRef<number | null>(null)
+  const targetMsRef = useRef<number>(Math.max(16, Math.round(1000 / DEFAULT_FPS)))
+  const playingRef = useRef<boolean>(false)
+  // Diagnostics timing refs
+  const lastWsRawTimeRef = useRef<number>(0)
+  const lastWorkerOutTimeRef = useRef<number>(0)
+  const lastConsumeTimeRef = useRef<number>(0)
+
+
   const notify = useCallback((f: StreamFrameT) => {
     if (framesSeenRef.current <= 20) {
       try {
@@ -51,7 +63,7 @@ export function useBacktestPlayback(backtestId: string) {
       } catch {}
     }
     subsRef.current.forEach((cb) => cb(f))
-    setState((s) => ({ ...s, dropped: f.dropped }))
+    setState((s) => ({ ...s, dropped: (f as any).dropped ?? s.dropped }))
   }, [])
 
   const updateHealthInfo = useCallback((health: WebSocketHealth) => {
@@ -77,7 +89,19 @@ export function useBacktestPlayback(backtestId: string) {
             console.debug('[fe-worker->main]', { n: framesSeenRef.current, ts: (msg.data as any)?.equity?.ts || (msg.data as any)?.ts })
           } catch {}
         }
-        notify(msg.data as StreamFrameT)
+        // Buffer frame and drop-oldest if buffer grows too large
+        frameBufferRef.current.push(msg.data as StreamFrameT)
+        if (frameBufferRef.current.length > 100) {
+          frameBufferRef.current.splice(0, frameBufferRef.current.length - 100)
+        }
+        // Diagnostics: worker -> main delta and buffer size
+        try {
+          const now = Date.now()
+          const dt = lastWorkerOutTimeRef.current ? now - lastWorkerOutTimeRef.current : 0
+          lastWorkerOutTimeRef.current = now
+          // eslint-disable-next-line no-console
+          console.debug('[diag][worker.out]', { dt, buf: frameBufferRef.current.length })
+        } catch {}
       } else if (msg.type === 'error') {
         console.warn('Worker error:', msg.error)
         setState((s) => ({ ...s, status: 'error', playing: false }))
@@ -124,6 +148,16 @@ export function useBacktestPlayback(backtestId: string) {
       try {
         const msg = JSON.parse(event.data)
         if (msg.t === 'frame') {
+          // Diagnostics: raw WS arrival delta
+          try {
+            const now = Date.now()
+            const dt = lastWsRawTimeRef.current ? now - lastWsRawTimeRef.current : 0
+            lastWsRawTimeRef.current = now
+            const ts = msg.ts || msg?.equity?.ts
+            // eslint-disable-next-line no-console
+            console.debug('[diag][ws.raw]', { dt, ts })
+          } catch {}
+
           // TEMP DEBUG: log first 20 raw frames from WS before any transformation
           if (feRawDebugRef.current < 20) {
             try {
@@ -168,6 +202,33 @@ export function useBacktestPlayback(backtestId: string) {
       updateHealthInfo(wsManager.getHealth())
     })
 
+    // Start render scheduler (decouple render cadence from arrival cadence)
+    const startScheduler = () => {
+      if (rafIdRef.current !== null) return
+      const tick = (t: number) => {
+        try {
+          if (t - lastPaintRef.current >= targetMsRef.current) {
+            if (playingRef.current && frameBufferRef.current.length) {
+              const bufBefore = frameBufferRef.current.length
+              const now = Date.now()
+              const dt = lastConsumeTimeRef.current ? now - lastConsumeTimeRef.current : 0
+              lastConsumeTimeRef.current = now
+              const next = frameBufferRef.current.shift()!
+              const bufAfter = frameBufferRef.current.length
+              // eslint-disable-next-line no-console
+              console.debug('[diag][raf.consume]', { dt, buf_before: bufBefore, buf_after: bufAfter })
+              notify(next)
+            }
+            lastPaintRef.current = t
+          }
+        } finally {
+          rafIdRef.current = requestAnimationFrame(tick)
+        }
+      }
+      rafIdRef.current = requestAnimationFrame(tick)
+    }
+    startScheduler()
+
     const unsubscribeStateChange = wsManager.addEventListener('stateChange', () => {
       updateHealthInfo(wsManager.getHealth())
     })
@@ -175,6 +236,7 @@ export function useBacktestPlayback(backtestId: string) {
     const unsubscribeHealthUpdate = wsManager.addEventListener('healthUpdate', (health: WebSocketHealth) => {
       updateHealthInfo(health)
     })
+
 
     const connect = () => {
       if (closed) return
@@ -199,6 +261,12 @@ export function useBacktestPlayback(backtestId: string) {
       unsubscribeStateChange()
       unsubscribeHealthUpdate()
 
+      // Cancel render scheduler
+      if (rafIdRef.current !== null) {
+        cancelAnimationFrame(rafIdRef.current)
+        rafIdRef.current = null
+      }
+
       // Close WebSocket manager
       if (wsManagerRef.current) {
         wsManagerRef.current.close()
@@ -214,6 +282,11 @@ export function useBacktestPlayback(backtestId: string) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backtestId])
 
+  // Keep a ref in sync with playing state (covers error/close transitions)
+  useEffect(() => {
+    playingRef.current = state.playing
+  }, [state.playing])
+
   const subscribe = useCallback((cb: Subscription) => {
     subsRef.current.add(cb)
     return () => { subsRef.current.delete(cb) }
@@ -221,11 +294,13 @@ export function useBacktestPlayback(backtestId: string) {
 
   const onPlay = useCallback(() => {
     wsManagerRef.current?.send(JSON.stringify({ t: 'ctrl', cmd: 'play' }))
+    playingRef.current = true
     setState((s) => ({ ...s, playing: true }))
   }, [])
 
   const onPause = useCallback(() => {
     wsManagerRef.current?.send(JSON.stringify({ t: 'ctrl', cmd: 'pause' }))
+    playingRef.current = false
     setState((s) => ({ ...s, playing: false }))
   }, [])
 
@@ -241,6 +316,7 @@ export function useBacktestPlayback(backtestId: string) {
   const sendReady = useCallback(() => {
     wsManagerRef.current?.send(JSON.stringify({ t: 'ready' }))
     // Auto-start playback when ready signal is sent
+    playingRef.current = true
     setState((s) => ({ ...s, playing: true }))
     console.debug('[ws] ready signal sent to backend, autoplay enabled')
   }, [])

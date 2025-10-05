@@ -31,6 +31,7 @@ class BacktestDataAggregator:
     def __init__(self):
         self.logger = logging.getLogger("bff.backtest_aggregator")
 
+
     async def aggregate_run_data(
         self,
         run_id: str,
@@ -352,45 +353,45 @@ class BacktestDataAggregator:
         data: Dict[str, Any],
         correlation_id: Optional[str],
     ) -> List[BacktestEquityPoint]:
-        """Transform backend equity data to frontend contract {ts, value, drawdown?}."""
-        equity_points: List[BacktestEquityPoint] = []
-        for point in (data.get("equity", []) if data else []) or []:
-            ts = point.get("ts") or point.get("timestamp") or point.get("ts_utc") or ""
-            val = point.get("value") if point.get("value") is not None else point.get("equity")
-            if ts in (None, "") or val is None:
+        """Transform backend equity data to frontend contract {ts, value, drawdown?}.
+        Avoid per-row pandas conversions; backend already emits ISO timestamps.
+        """
+        out: List[BacktestEquityPoint] = []
+        items = (data.get("equity", []) if data else []) or []
+        for point in items:
+            ts = point.get("timestamp") or point.get("ts") or point.get("ts_utc") or ""
+            if not ts:
+                continue
+            # Trust backend ISO strings; otherwise fallback to simple str()
+            ts_iso = ts if isinstance(ts, str) else str(ts)
+            val = point.get("equity") if point.get("equity") is not None else point.get("value")
+            if val is None:
                 continue
             try:
-                import pandas as pd
-                ts_iso = pd.to_datetime(ts, utc=True).strftime("%Y-%m-%dT%H:%M:%SZ")
+                val_f = float(val)
             except Exception:
-                ts_iso = str(ts)
+                continue
             dd = point.get("drawdown")
             try:
                 dd_val = float(dd) if dd is not None else None
             except Exception:
                 dd_val = None
-            try:
-                val_f = float(val)
-            except Exception:
-                continue
-            equity_points.append(BacktestEquityPoint(ts=ts_iso, value=val_f, drawdown=dd_val))
-        return equity_points
+            out.append(BacktestEquityPoint(ts=ts_iso, value=val_f, drawdown=dd_val))
+        return out
 
     def _transform_orders(
         self,
         data: Dict[str, Any],
         correlation_id: Optional[str],
     ) -> List[BacktestOrderData]:
-        """Transform backend order data to frontend contract with {ts, side, quantity, price, ...}."""
-        orders: List[BacktestOrderData] = []
-        for order in (data.get("orders", []) if data else []) or []:
-            ts = order.get("ts") or order.get("timestamp") or order.get("ts_utc") or ""
-            try:
-                import pandas as pd
-                ts_iso = pd.to_datetime(ts, utc=True).strftime("%Y-%m-%dT%H:%M:%SZ") if ts else ""
-            except Exception:
-                ts_iso = str(ts) if ts is not None else ""
-            # Normalize side to canonical uppercase BUY/SELL expected by frontend tests
+        """Transform backend order data to frontend contract with {ts, side, quantity, price, ...}.
+        Avoid per-row pandas conversions; backend already emits ISO timestamps.
+        """
+        out: List[BacktestOrderData] = []
+        items = (data.get("orders", []) if data else []) or []
+        for order in items:
+            ts = order.get("timestamp") or order.get("ts") or order.get("ts_utc") or ""
+            ts_iso = ts if isinstance(ts, str) else (str(ts) if ts is not None else "")
             side_out = str(order.get("side") or "").upper()
             qty = order.get("quantity") if order.get("quantity") is not None else order.get("qty")
             try:
@@ -401,7 +402,7 @@ class BacktestDataAggregator:
                 price_f = float(order.get("price", 0.0) or 0.0)
             except Exception:
                 price_f = 0.0
-            orders.append(
+            out.append(
                 BacktestOrderData(
                     order_id=str(order.get("order_id", "")),
                     ts=ts_iso,
@@ -414,7 +415,7 @@ class BacktestDataAggregator:
                     commission=(float(order.get("commission")) if order.get("commission") is not None else None),
                 )
             )
-        return orders
+        return out
 
 
 __all__ = ["BacktestDataAggregator"]

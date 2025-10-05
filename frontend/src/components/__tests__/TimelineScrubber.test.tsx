@@ -1,7 +1,9 @@
 // @vitest-environment happy-dom
 import { describe, it, expect } from 'vitest'
 import { render, fireEvent } from '@testing-library/react'
-import TimelineScrubber from '../TimelineScrubber'
+import React from 'react'
+
+import { TimelineScrubber } from '../timeline-scrubber'
 import playbackStore, { PlaybackProvider } from '../../store/playbackClock'
 
 describe('TimelineScrubber', () => {

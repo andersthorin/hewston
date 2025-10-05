@@ -8,6 +8,7 @@ from datetime import datetime as _dt
 from typing import AsyncGenerator, Dict, List, Optional, Tuple
 import math
 
+import time
 import polars as pl
 import pandas as pd
 
@@ -313,6 +314,8 @@ async def produce_frames(
     produced = 0
     # TEMP DEBUG: limit logging of first 20 produced frames per run
     debug_count = 0
+    last_emit = 0.0
+
 
     # Produce frames
     try:
@@ -357,6 +360,14 @@ async def produce_frames(
                 except Exception:
                     pass
 
+            # Diagnostics: backend emit delta
+            try:
+                now = time.perf_counter()
+                dt_ms = (now - last_emit) * 1000.0 if last_emit > 0.0 else 0.0
+                last_emit = now
+                logger.info("diag.backend.emit", extra={"run_id": run_id, "dt_ms": round(dt_ms, 2), "ts": iso})
+            except Exception:
+                pass
             # TEMP DEBUG: log first 20 backend frames with ts and equity
             if debug_count < 20:
                 try:

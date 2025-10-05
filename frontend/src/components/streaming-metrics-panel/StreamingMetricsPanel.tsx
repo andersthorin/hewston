@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
-import MetricsSummary from './MetricsSummary'
-import { usePlaybackSelector, selectors } from '../store/playbackClock'
+import { MetricsSummary } from '../metrics-summary'
+import { usePlaybackSelector, selectors } from '../../store/playbackClock'
 
 export default function StreamingMetricsPanel() {
   // Force a render on every frame by also subscribing to current timestamp
@@ -21,19 +21,18 @@ export default function StreamingMetricsPanel() {
   const lastRef = useRef<{ ts?: string|null, tr?: number|null, dd?: number|null, sh?: number|null }>({})
   const dbgCountRef = useRef(0)
   useEffect(() => {
-    if (!(import.meta as any).env?.DEV) return
+    if (!import.meta.env.DEV) return
     if (dbgCountRef.current >= 20) return
     const tr = mapped.total_return ?? null
     const dd = mapped.max_drawdown ?? null
     const sh = mapped.sharpe_ratio ?? null
     const changed = ts !== lastRef.current.ts || tr !== lastRef.current.tr || dd !== lastRef.current.dd || sh !== lastRef.current.sh
     if (changed) {
-      // eslint-disable-next-line no-console
       console.debug('[metrics-frame]', { ts, tr, dd, sh, hasEquity: !!eq, eq: eq?.value })
       lastRef.current = { ts, tr, dd, sh }
       dbgCountRef.current += 1
     }
-  }, [ts, mapped.total_return, mapped.max_drawdown, mapped.sharpe_ratio, eq?.value])
+  }, [ts, mapped.total_return, mapped.max_drawdown, mapped.sharpe_ratio, eq, eq?.value])
 
   return <MetricsSummary metrics={mapped} equity={equityList} />
 }

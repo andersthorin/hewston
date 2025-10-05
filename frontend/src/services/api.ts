@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import { apiGet, apiPost } from '../utils/api'
 import type { OrderData } from '../types/streaming'
 
 export const BacktestSummarySchema = z.object({
@@ -51,23 +50,14 @@ export type BacktestDetail = z.infer<typeof BacktestDetailSchema>
 export type BacktestListQuery = {
   symbol?: string
   strategy_id?: string
-  from?: string
-  to?: string
+  run_from?: string
+  run_to?: string
   limit?: number
   offset?: number
   order?: string
 }
 
-export async function listBacktests(query: BacktestListQuery = {}): Promise<BacktestListResponse> {
-  const params = new URLSearchParams()
-  for (const [k, v] of Object.entries(query)) {
-    if (v !== undefined && v !== null && v !== '') params.set(k, String(v))
-  }
-  const res = await fetch(`/api/v1/backtests?${params.toString()}`)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  const json = await res.json()
-  return BacktestListResponseSchema.parse(json)
-}
+
 
 export type StreamFrame = {
   t: 'frame'
@@ -78,10 +68,7 @@ export type StreamFrame = {
   dropped: number
 }
 
-export async function getBacktestDetail(backtest_id: string): Promise<BacktestDetail> {
-  const json = await apiGet(`/api/v1/backtests/${backtest_id}/complete`)
-  return BacktestDetailSchema.parse(json)
-}
+
 
 // --- Create Backtest ---
 export type CreateBacktestRequest = {
@@ -89,16 +76,10 @@ export type CreateBacktestRequest = {
   params?: Record<string, unknown>
   dataset_id?: string
   symbol?: string
-  from?: string
-  to?: string
+  run_from?: string
+  run_to?: string
   speed?: number
   seed?: number
 }
 export type CreateBacktestResponse = { backtest_id: string; status: string }
 
-export async function createBacktest(
-  req: CreateBacktestRequest,
-  idempotencyKey?: string,
-): Promise<CreateBacktestResponse> {
-  return apiPost<CreateBacktestResponse>('/api/v1/backtests', req, { idempotencyKey })
-}

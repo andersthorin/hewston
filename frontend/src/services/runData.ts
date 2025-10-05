@@ -94,7 +94,7 @@ export class BacktestDataService {
     for (const [k, v] of Object.entries(query)) {
       if (v !== undefined && v !== null && v !== '') params.set(k, String(v))
     }
-    const response = await apiGetWithFlags(`/backtests?${params.toString()}`, 'runData')
+    const response: any = await apiGetWithFlags<any>(`/backtests?${params.toString()}`, 'runData')
     // Normalize any legacy/nested shapes to ensure backtest_id is present before Zod parsing
     if (response && Array.isArray(response.items)) {
       response.items = response.items.map((it: any) => {
@@ -105,8 +105,8 @@ export class BacktestDataService {
           strategy_id: it?.strategy_id ?? run?.strategy_id ?? it?.strategyId,
           status: it?.status ?? run?.status,
           symbol: it?.symbol ?? run?.symbol,
-          run_from: it?.run_from ?? it?.from_date ?? run?.run_from ?? run?.from_date,
-          run_to: it?.run_to ?? it?.to_date ?? run?.run_to ?? run?.to_date,
+          run_from: it?.run_from ?? run?.run_from,
+          run_to: it?.run_to ?? run?.run_to,
           duration_ms: it?.duration_ms ?? run?.duration_ms ?? it?.durationMs,
         }
         return { ...it, ...normalized }
@@ -116,7 +116,7 @@ export class BacktestDataService {
   }
 
   public async getCompleteBacktest(backtest_id: string): Promise<BFFAggregatedBacktestResponse> {
-    const response = await apiGetWithFlags(`/backtests/${backtest_id}/complete`, 'runData')
+    const response: any = await apiGetWithFlags<any>(`/backtests/${backtest_id}/complete`, 'runData')
     // Normalize any legacy keys in case of fallback/misroute
     if (response && typeof response === 'object') {
       const r: any = response
@@ -125,8 +125,8 @@ export class BacktestDataService {
       r.strategy_id = r.strategy_id ?? run.strategy_id ?? r.strategyId
       r.status = r.status ?? run.status
       r.symbol = r.symbol ?? run.symbol
-      r.run_from = r.run_from ?? r.from_date ?? run.run_from ?? run.from_date
-      r.run_to = r.run_to ?? r.to_date ?? run.run_to ?? run.to_date
+      r.run_from = r.run_from ?? run.run_from
+      r.run_to = r.run_to ?? run.run_to
       r.duration_ms = r.duration_ms ?? run.duration_ms ?? r.durationMs
       r.params = r.params ?? run.params
       r.dataset_id = r.dataset_id ?? run.dataset_id

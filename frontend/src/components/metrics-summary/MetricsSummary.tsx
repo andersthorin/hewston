@@ -82,7 +82,9 @@ export default function MetricsSummary({ metrics, equity, loading }: MetricsSumm
 
         {/* Other metrics */}
         {metricDefs.map((def) => {
-          const raw = metrics ? (metrics as any)[def.key] : undefined
+          type M = NonNullable<MetricsSummaryProps['metrics']>
+          const m = metrics as M | undefined
+          const raw = m ? m[def.key] : undefined
           const val = loading ? null : (typeof raw === 'number' ? raw : undefined)
           return (
             <div key={String(def.key)} className="flex flex-col gap-1" title={def.title}>

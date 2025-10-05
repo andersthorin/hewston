@@ -1,3 +1,4 @@
+import React from 'react'
 /**
  * Tests for BFF-aware run data hooks.
  */
@@ -5,19 +6,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useRunList, useCompleteRunData, useCreateRun } from '../useRunData'
+import { useBacktestList, useBacktestDetail, useCreateBacktest } from '../useRunData'
 import type { ReactNode } from 'react'
 
 // Import the mocked services to access them in tests
-import { runDataService } from '../../services/runData'
+import { backtestDataService } from '../../services/runData'
 import { featureFlagService } from '../../services/featureFlags'
 
-// Mock the run data service
+// Mock the backtest data service
 vi.mock('../../services/runData', () => ({
-  runDataService: {
-    listRuns: vi.fn(),
-    getCompleteRunData: vi.fn(),
-    createRun: vi.fn(),
+  backtestDataService: {
+    listBacktests: vi.fn(),
+    getCompleteBacktest: vi.fn(),
+    createBacktest: vi.fn(),
     getPerformanceMetrics: vi.fn(),
     isUsingAggregation: vi.fn(),
   }
@@ -62,12 +63,12 @@ describe('Run Data Hooks', () => {
     })
   })
 
-  describe('useRunList', () => {
-    it('should fetch run list successfully', async () => {
+  describe('useBacktestList', () => {
+    it('should fetch backtest list successfully', async () => {
       const mockData = {
         items: [
           {
-            run_id: 'run-123',
+            backtest_id: 'run-123',
             created_at: '2023-01-01T00:00:00Z',
             strategy_id: 'sma_crossover',
             status: 'completed',
@@ -85,11 +86,11 @@ describe('Run Data Hooks', () => {
         offset: 0,
         meta: { source: 'backend' as const }
       }
-      
-      vi.mocked(runDataService.listRuns).mockResolvedValue(mockData)
+
+      vi.mocked(backtestDataService.listBacktests).mockResolvedValue(mockData as any)
 
       const { result } = renderHook(
-        () => useRunList({ symbol: 'AAPL' }),
+        () => useBacktestList({ symbol: 'AAPL' }),
         { wrapper: createWrapper() }
       )
 
@@ -97,27 +98,27 @@ describe('Run Data Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(vi.mocked(runDataService.listRuns)).toHaveBeenCalledWith({ symbol: 'AAPL' })
+      expect(vi.mocked(backtestDataService.listBacktests)).toHaveBeenCalledWith({ symbol: 'AAPL' })
       expect(result.current.data).toEqual(mockData)
     })
 
     it('should include BFF flag in query key', async () => {
       vi.mocked(featureFlagService.isFeatureFlagEnabled).mockReturnValue(true)
-      
+
       const { result } = renderHook(
-        () => useRunList(),
+        () => useBacktestList(),
         { wrapper: createWrapper() }
       )
-      
+
       // Query should be loading or successful
       expect(result.current.isLoading || result.current.isSuccess).toBe(true)
     })
   })
 
-  describe('useCompleteRunData', () => {
-    it('should fetch complete run data with aggregation', async () => {
+  describe('useBacktestDetail', () => {
+    it('should fetch complete backtest data with aggregation', async () => {
       const mockData = {
-        run_id: 'run-123',
+        backtest_id: 'run-123',
         strategy_id: 'sma_crossover',
         status: 'completed',
         dataset_id: 'AAPL-2023-1m',
@@ -144,11 +145,11 @@ describe('Run Data Hooks', () => {
           components_loaded: ['run', 'metrics', 'equity', 'orders'],
         }
       }
-      
-      vi.mocked(runDataService.getCompleteRunData).mockResolvedValue(mockData)
+
+      vi.mocked(backtestDataService.getCompleteBacktest).mockResolvedValue(mockData as any)
 
       const { result } = renderHook(
-        () => useCompleteRunData('run-123'),
+        () => useBacktestDetail('run-123'),
         { wrapper: createWrapper() }
       )
 
@@ -156,37 +157,37 @@ describe('Run Data Hooks', () => {
         expect(result.current.isSuccess).toBe(true)
       })
 
-      expect(vi.mocked(runDataService.getCompleteRunData)).toHaveBeenCalledWith('run-123')
+      expect(vi.mocked(backtestDataService.getCompleteBacktest)).toHaveBeenCalledWith('run-123')
       expect(result.current.data).toEqual(mockData)
     })
 
-    it('should not fetch when run_id is undefined', () => {
+    it('should not fetch when backtest_id is undefined', () => {
       renderHook(
-        () => useCompleteRunData(undefined),
+        () => useBacktestDetail(undefined),
         { wrapper: createWrapper() }
       )
-      
-      expect(vi.mocked(runDataService.getCompleteRunData)).not.toHaveBeenCalled()
+
+      expect(vi.mocked(backtestDataService.getCompleteBacktest)).not.toHaveBeenCalled()
     })
   })
 
-  describe('useCreateRun', () => {
-    it('should create run successfully', async () => {
-      const mockResponse = { run_id: 'run-456', status: 'created' }
-      vi.mocked(runDataService.createRun).mockResolvedValue(mockResponse)
-      
+  describe('useCreateBacktest', () => {
+    it('should create backtest successfully', async () => {
+      const mockResponse = { backtest_id: 'run-456', status: 'created' }
+      vi.mocked(backtestDataService.createBacktest).mockResolvedValue(mockResponse as any)
+
       const { result } = renderHook(
-        () => useCreateRun(),
+        () => useCreateBacktest(),
         { wrapper: createWrapper() }
       )
-      
+
       const request = {
         strategy_id: 'sma_crossover',
         params: { fast: 20, slow: 50 },
         symbol: 'AAPL',
         year: 2023,
       }
-      
+
       await act(async () => {
         const response = await result.current.mutateAsync({
           request,
@@ -194,19 +195,19 @@ describe('Run Data Hooks', () => {
         })
         expect(response).toEqual(mockResponse)
       })
-      
-      expect(vi.mocked(runDataService.createRun)).toHaveBeenCalledWith(request, 'test-key')
+
+      expect(vi.mocked(backtestDataService.createBacktest)).toHaveBeenCalledWith(request, 'test-key')
     })
 
     it('should handle creation errors', async () => {
       const error = new Error('Creation failed')
-      vi.mocked(runDataService.createRun).mockRejectedValue(error)
-      
+      vi.mocked(backtestDataService.createBacktest).mockRejectedValue(error)
+
       const { result } = renderHook(
-        () => useCreateRun(),
+        () => useCreateBacktest(),
         { wrapper: createWrapper() }
       )
-      
+
       await act(async () => {
         try {
           await result.current.mutateAsync({
@@ -224,17 +225,17 @@ describe('Run Data Hooks', () => {
       // Test backend mode
       vi.mocked(featureFlagService.isFeatureFlagEnabled).mockReturnValue(false)
       const { result: backendResult } = renderHook(
-        () => useCompleteRunData('run-123'),
+        () => useBacktestDetail('run-123'),
         { wrapper: createWrapper() }
       )
 
       // Test BFF mode
       vi.mocked(featureFlagService.isFeatureFlagEnabled).mockReturnValue(true)
       const { result: bffResult } = renderHook(
-        () => useCompleteRunData('run-123'),
+        () => useBacktestDetail('run-123'),
         { wrapper: createWrapper() }
       )
-      
+
       // Both should be loading or have data, but with different cache keys
       expect(backendResult.current.isLoading || backendResult.current.isSuccess).toBe(true)
       expect(bffResult.current.isLoading || bffResult.current.isSuccess).toBe(true)
@@ -244,17 +245,17 @@ describe('Run Data Hooks', () => {
   describe('Error Handling', () => {
     it('should handle fetch errors gracefully', async () => {
       const error = new Error('Network error')
-      vi.mocked(runDataService.listRuns).mockRejectedValue(error)
-      
+      vi.mocked(backtestDataService.listBacktests).mockRejectedValue(error as any)
+
       const { result } = renderHook(
-        () => useRunList(),
+        () => useBacktestList(),
         { wrapper: createWrapper() }
       )
-      
+
       await waitFor(() => {
         expect(result.current.isError).toBe(true)
       })
-      
+
       expect(result.current.error).toEqual(error)
     })
   })
