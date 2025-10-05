@@ -264,13 +264,23 @@ async def get_hour(
         _to = to_date
         raise HTTPException(status_code=404, detail=f"No 1-hour warehouse data available for {symbol} in date range {_from} to {_to}. Run warehouse backfill first.")
 
+    t0 = datetime.now(timezone.utc)
     qh = pl.scan_parquet(paths).filter((pl.col("t") >= pl.lit(ts_from)) & (pl.col("t") <= pl.lit(ts_to)))
     qh = qh.select(["t", "o", "h", "l", "c", "v"])  # minimal set for chart
+    t1 = datetime.now(timezone.utc)
     dfh = qh.collect()
+    t2 = datetime.now(timezone.utc)
     if dfh.height == 0:
         raise HTTPException(status_code=404, detail="No data rows in requested window")
     items = [
         {"t": _isoz(t), "o": float(o), "h": float(h), "l": float(l), "c": float(c), "v": int(v)}
         for t, o, h, l, c, v in zip(dfh["t"], dfh["o"], dfh["h"], dfh["l"], dfh["c"], dfh["v"])
     ]
+    t3 = datetime.now(timezone.utc)
+    try:
+        logger.info(
+            f"get_hour.timing symbol={symbol} from={from_date} to={to_date} paths={len(paths)} rows={int(dfh.height)} plan_ms={int((t1 - t0).total_seconds() * 1000)} collect_ms={int((t2 - t1).total_seconds() * 1000)} items_ms={int((t3 - t2).total_seconds() * 1000)} rth_only={rth_only}"
+        )
+    except Exception:
+        pass
     return JSONResponse(content={"symbol": symbol, "bars": items})

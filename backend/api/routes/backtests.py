@@ -178,7 +178,9 @@ async def get_backtest_equity(run_id: str):
                 content={"error": {"code": "ARTIFACT_NOT_FOUND", "message": f"equity file not found at {eq_path}"}},
             )
         import polars as pl
+        t0 = pd.Timestamp.utcnow()
         df = pl.read_parquet(eq_path)
+        t1 = pd.Timestamp.utcnow()
         # Accept legacy naming too; normalize to 'ts_utc'
         if "ts" in df.columns and "ts_utc" not in df.columns:
             df = df.rename({"ts": "ts_utc"})
@@ -199,6 +201,13 @@ async def get_backtest_equity(run_id: str):
                 except Exception:
                     pass
             points.append(pt)
+        t2 = pd.Timestamp.utcnow()
+        try:
+            logger.info(
+                f"get_equity.timing run_id={run_id} rows={len(points)} read_ms={int((t1 - t0).total_seconds()*1000)} transform_ms={int((t2 - t1).total_seconds()*1000)}"
+            )
+        except Exception:
+            pass
         return JSONResponse(status_code=200, content={"equity": points})
     except Exception as e:
         logger.exception("get_equity.error", extra={"run_id": run_id, "error": str(e)[:200]})
@@ -233,7 +242,9 @@ async def get_backtest_orders(run_id: str):
                 content={"error": {"code": "ARTIFACT_NOT_FOUND", "message": f"orders file not found at {path}"}},
             )
         import polars as pl
+        t0 = pd.Timestamp.utcnow()
         df = pl.read_parquet(path)
+        t1 = pd.Timestamp.utcnow()
         rows = []
         for r in df.to_dicts():
             ts = r.get("ts_utc") or r.get("timestamp") or r.get("ts")
@@ -252,6 +263,13 @@ async def get_backtest_orders(run_id: str):
                 "status": str(r.get("status") or "FILLED"),
                 "commission": (float(r.get("commission")) if r.get("commission") is not None else None),
             })
+        t2 = pd.Timestamp.utcnow()
+        try:
+            logger.info(
+                f"get_orders.timing run_id={run_id} rows={len(rows)} read_ms={int((t1 - t0).total_seconds()*1000)} transform_ms={int((t2 - t1).total_seconds()*1000)}"
+            )
+        except Exception:
+            pass
         return JSONResponse(status_code=200, content={"orders": rows})
     except Exception as e:
         logger.exception("get_orders.error", extra={"run_id": run_id, "error": str(e)[:200]})
