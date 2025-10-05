@@ -87,38 +87,43 @@ async def websocket_backtest_stream(
                 break
 
             except Exception as e:
-                # Log the error with details but avoid cascading error responses
+                # Minimal guard: if socket not connected/accepted, stop silently
+                try:
+                    from starlette.websockets import WebSocketState
+                    if getattr(websocket, "application_state", None) != WebSocketState.CONNECTED:
+                        break
+                except Exception:
+                    pass
+                msg = str(e)
+
+                # Log non-connection errors and attempt a single error reply
                 logger.error(
-                    f"websocket.message_error: {str(e)}",
+                    f"websocket.message_error: {msg}",
                     extra={
                         "connection_id": connection_id,
                         "run_id": run_id,
-                        "error": str(e),
+                        "error": msg,
                         "error_type": type(e).__name__,
                     }
                 )
 
-                # Only send error response for certain types of errors to avoid cascades
-                # Don't send error responses for connection-related issues that might cause more errors
                 if not isinstance(e, (ConnectionResetError, BrokenPipeError, OSError)):
                     try:
                         await connection_manager._send_error(
                             connection_id,
                             "MESSAGE_ERROR",
-                            f"Error processing message: {str(e)}"
+                            f"Error processing message: {msg}"
                         )
                     except Exception as send_error:
-                        # If sending the error response fails, just log it and continue
                         logger.debug(
                             "websocket.error_response_failed",
                             extra={
                                 "connection_id": connection_id,
                                 "run_id": run_id,
-                                "original_error": str(e),
+                                "original_error": msg,
                                 "send_error": str(send_error),
                             }
                         )
-                # Break to avoid tight error loop and terminal spam
                 break
 
     except Exception as e:
@@ -186,36 +191,40 @@ async def websocket_general_stream(websocket: WebSocket):
                 break
 
             except Exception as e:
-                # Log the error with details but avoid cascading error responses
+                # Minimal guard: if socket not connected/accepted, stop silently
+                try:
+                    from starlette.websockets import WebSocketState
+                    if getattr(websocket, "application_state", None) != WebSocketState.CONNECTED:
+                        break
+                except Exception:
+                    pass
+                msg = str(e)
+
                 logger.error(
-                    f"websocket.general_message_error: {str(e)}",
+                    f"websocket.general_message_error: {msg}",
                     extra={
                         "connection_id": connection_id,
-                        "error": str(e),
+                        "error": msg,
                         "error_type": type(e).__name__,
                     }
                 )
 
-                # Only send error response for certain types of errors to avoid cascades
-                # Don't send error responses for connection-related issues that might cause more errors
                 if not isinstance(e, (ConnectionResetError, BrokenPipeError, OSError)):
                     try:
                         await connection_manager._send_error(
                             connection_id,
                             "MESSAGE_ERROR",
-                            f"Error processing message: {str(e)}"
+                            f"Error processing message: {msg}"
                         )
                     except Exception as send_error:
-                        # If sending the error response fails, just log it and continue
                         logger.debug(
                             "websocket.general_error_response_failed",
                             extra={
                                 "connection_id": connection_id,
-                                "original_error": str(e),
+                                "original_error": msg,
                                 "send_error": str(send_error),
                             }
                         )
-                # Break to avoid tight error loop and terminal spam
                 break
 
     except Exception as e:

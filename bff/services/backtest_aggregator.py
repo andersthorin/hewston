@@ -31,18 +31,6 @@ class BacktestDataAggregator:
     def __init__(self):
         self.logger = logging.getLogger("bff.backtest_aggregator")
 
-    async def _timed(self, label: str, coro, correlation_id: Optional[str]):
-        start = time.perf_counter()
-        try:
-            return await coro
-        finally:
-            elapsed_ms = int((time.perf_counter() - start) * 1000)
-            try:
-                self.logger.info(
-                    f"aggregate.timing stage={label} ms={elapsed_ms} correlation_id={correlation_id}"
-                )
-            except Exception:
-                pass
 
     async def aggregate_run_data(
         self,
@@ -81,24 +69,24 @@ class BacktestDataAggregator:
         data_sources: List[str] = []
 
         # Always fetch backtest details
-        tasks.append(self._timed("details", self._fetch_run_details(backend_client, run_id, correlation_id), correlation_id))
+        tasks.append(self._fetch_run_details(backend_client, run_id, correlation_id))
         data_sources.append("/backtests/{id}")
 
         # Conditionally fetch other data
         if request_params.include_metrics:
-            tasks.append(self._timed("metrics", self._fetch_run_metrics(backend_client, run_id, correlation_id), correlation_id))
+            tasks.append(self._fetch_run_metrics(backend_client, run_id, correlation_id))
             data_sources.append("/backtests/{id}/metrics")
         else:
             tasks.append(asyncio.create_task(self._return_none()))
 
         if request_params.include_equity:
-            tasks.append(self._timed("equity", self._fetch_equity_curve(backend_client, run_id, correlation_id), correlation_id))
+            tasks.append(self._fetch_equity_curve(backend_client, run_id, correlation_id))
             data_sources.append("/backtests/{id}/equity")
         else:
             tasks.append(asyncio.create_task(self._return_none()))
 
         if request_params.include_orders:
-            tasks.append(self._timed("orders", self._fetch_order_data(backend_client, run_id, correlation_id), correlation_id))
+            tasks.append(self._fetch_order_data(backend_client, run_id, correlation_id))
             data_sources.append("/backtests/{id}/orders")
         else:
             tasks.append(asyncio.create_task(self._return_none()))
@@ -173,22 +161,11 @@ class BacktestDataAggregator:
                 failed_sources.append("/backtests/{id}/orders")
                 orders_data = None
 
-            # Transform data with timing
-            t_tx0 = time.perf_counter()
+            # Transform data
             run_detail = self._transform_run_details(run_details, correlation_id)
-            t_tx1 = time.perf_counter()
             metrics = self._transform_metrics(metrics_data, correlation_id) if metrics_data else None
-            t_tx2 = time.perf_counter()
             equity = self._transform_equity(equity_data, correlation_id) if equity_data else None
-            t_tx3 = time.perf_counter()
             orders = self._transform_orders(orders_data, correlation_id) if orders_data else None
-            t_tx4 = time.perf_counter()
-            try:
-                self.logger.info(
-                    f"aggregate.transform timings_ms details={int((t_tx1-t_tx0)*1000)} metrics={int((t_tx2-t_tx1)*1000)} equity={int((t_tx3-t_tx2)*1000)} orders={int((t_tx4-t_tx3)*1000)} correlation_id={correlation_id}"
-                )
-            except Exception:
-                pass
 
             # Create metadata
             load_time_ms = int((time.perf_counter() - start_time) * 1000)
