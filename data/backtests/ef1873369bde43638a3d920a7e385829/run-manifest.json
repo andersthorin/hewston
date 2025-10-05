@@ -1,0 +1,21 @@
+{
+  "run_id": "ef1873369bde43638a3d920a7e385829",
+  "dataset_id": "AAPL-warehouse-1m",
+  "strategy_id": "sma_crossover",
+  "params": {
+    "fast": 20,
+    "slow": 50,
+    "instrument_id": "AAPL.XNAS"
+  },
+  "seed": 42,
+  "slippage_fees": {},
+  "speed": 60,
+  "run_from": "2024-10-21",
+  "run_to": "2024-10-31",
+  "code_hash": "209d52f90b48d2174add21982c76475633c26229",
+  "env_lock": null,
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-10-05T16:07:24.262683+00:00",
+  "status": "DONE"
+}
