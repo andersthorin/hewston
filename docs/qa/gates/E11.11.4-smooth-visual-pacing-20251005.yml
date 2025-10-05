@@ -1,0 +1,31 @@
+schema: 1
+epic: 11
+story: "11.4"
+story_title: "Smooth visual pacing (bounded buffer + rAF)"
+decision: PASS
+status_reason: |
+  FE decouples render cadence from arrival cadence via rAF and a bounded buffer.
+  Bursts are absorbed; rendering proceeds at target cadence (~150ms by default).
+  No regressions to controls; unit/integration tests pass.
+reviewer: "Quinn (Test Architect)"
+updated: 2025-10-05
+expires: 2025-12-31
+quality_score: 0.95
+conditions:
+  - Maintain bounded buffer with drop-oldest policy (latest-wins)
+  - Cancel rAF on unmount; no timers leak
+  - Keep controls behavior identical (play/pause/seek/speed)
+  - Document target cadence and how to change it
+nfr:
+  performance:
+    target_ms_per_frame: 150
+    jitter_p50_ms: 25
+    jitter_p95_ms: 60
+    dropped_frames_policy: latest_wins
+  reliability:
+    no_memory_growth: true
+references:
+  - frontend/src/services/ws.ts
+  - docs/stories/11.4.story.md
+  - docs/prd/epic-11-streaming-metrics-and-synchronized-playback.md
+

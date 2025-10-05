@@ -122,7 +122,7 @@ async def get_backtest_metrics(run_id: str):
     """Return metrics.json for a run.
     Shape: a flat JSON object with numeric fields (arbitrary keys allowed).
     """
-    run = get_backtest_service(run_id)
+    run = get_backtest_ctrl(run_id)
     if not run:
         return JSONResponse(
             status_code=status.HTTP_404_NOT_FOUND,

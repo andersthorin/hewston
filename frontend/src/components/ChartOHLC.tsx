@@ -25,7 +25,8 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
         // Only seed data; do NOT call fitContent here to avoid auto-zoom changing bar width
         const series = seriesRef.current as CandlestickSeriesApi | null
         series?.setData(initial)
-        console.debug('[ChartOHLC] reset (no fitContent)', { points: initial.length })
+        // Reduce noisy logging in dev to avoid jank
+        // if ((import.meta as { env?: { DEV?: boolean } }).env?.DEV) console.debug('[ChartOHLC] reset', { points: initial.length })
       } catch (error) {
         console.warn('Failed to reset chart data:', error)
       }
@@ -34,7 +35,7 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
       try {
         const series = seriesRef.current as CandlestickSeriesApi | null
         series?.update(dp)
-        console.debug('[ChartOHLC] update', dp)
+        // Suppress per-frame logging; it can cause jank at ~7fps
       } catch (error) {
         console.warn('Failed to update chart data:', error)
       }

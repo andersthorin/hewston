@@ -10,20 +10,27 @@ export type Ctrl = z.infer<typeof CtrlSchema>
 
 export const EquitySchema = z.object({
   ts: z.string(),
-  value: z.number(),
+  // Be lenient: some transports may serialize numbers as strings; coerce to number
+  value: z.union([
+    z.number(),
+    z.string().transform((s) => Number(s)).refine((n) => Number.isFinite(n), { message: 'equity.value must be a number' })
+  ]),
 })
 
+// Be permissive about orders so we don't drop entire frames due to a single malformed order
 export const OrderSchema = z.object({
-  ts_utc: z.string(),
-  side: z.enum(['buy', 'sell']).optional(),
-  quantity: z.number().optional(),
-  price: z.number().optional(),
-  order_id: z.string().optional(),
-  symbol: z.string().optional(),
-  status: z.enum(['pending', 'filled', 'cancelled', 'rejected']).optional(),
-  fill_price: z.number().optional(),
-  fill_quantity: z.number().optional(),
-  commission: z.number().optional(),
+  // Accept either ts_utc or ts; both optional. Downstream uses ts_utc || ts || frame.ts
+  ts_utc: z.string().nullable().optional(),
+  ts: z.string().nullable().optional(),
+  side: z.enum(['buy', 'sell']).nullable().optional(),
+  quantity: z.number().nullable().optional(),
+  price: z.number().nullable().optional(),
+  order_id: z.string().nullable().optional(),
+  symbol: z.string().nullable().optional(),
+  status: z.enum(['pending', 'filled', 'cancelled', 'rejected']).nullable().optional(),
+  fill_price: z.number().nullable().optional(),
+  fill_quantity: z.number().nullable().optional(),
+  commission: z.number().nullable().optional(),
 }).passthrough() // Allow additional fields
 
 export const StreamFrameSchema = z.object({
@@ -33,7 +40,8 @@ export const StreamFrameSchema = z.object({
     .object({ o: z.number().optional(), h: z.number().optional(), l: z.number().optional(), c: z.number().optional(), v: z.number().optional() })
     .nullable()
     .optional(),
-  orders: z.array(OrderSchema).optional().default([]),
+  // Performance: avoid deep validation of every order item; accept any objects and default to []
+  orders: z.array(z.any()).optional().default([]),
   equity: EquitySchema.nullable().optional(),
   metrics: z
     .object({
