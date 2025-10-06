@@ -56,10 +56,16 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   const [fps, setFps] = useState(0)
 
   // Track the actual run window; prefer props (from manifest) and fall back to streaming inference
-  const [runFrom, setRunFrom] = useState<string | null>(run_from ?? null)
-  const [runTo, setRunTo] = useState<string | null>(run_to ?? null)
-  useEffect(() => { setRunFrom(run_from ?? null); }, [run_from])
-  useEffect(() => { setRunTo(run_to ?? null); }, [run_to])
+  const normalizeBound = (v: string | null | undefined, isEnd: boolean): string | null => {
+    if (!v) return null
+    if (v.includes('T')) return v
+    // Treat date-only inputs as UTC day bounds to avoid zero-length windows
+    return isEnd ? `${v}T23:59:59Z` : `${v}T00:00:00Z`
+  }
+  const [runFrom, setRunFrom] = useState<string | null>(normalizeBound(run_from, false))
+  const [runTo, setRunTo] = useState<string | null>(normalizeBound(run_to, true))
+  useEffect(() => { setRunFrom(normalizeBound(run_from, false)); }, [run_from])
+  useEffect(() => { setRunTo(normalizeBound(run_to, true)); }, [run_to])
 
   // View mode must be declared before effects that reference it
   const [viewMode, setViewMode] = useState<'daily'|'hourly'>('daily')
@@ -92,11 +98,11 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
         const hasSnapshots = !!(dailySnapshotsRef.current && dayKeysRef.current && dayKeysRef.current.length > 0)
 
         // Infer run window from frames only if not provided via props
-        // This ensures the timeline shows the correct range immediately
+        // Use exact ISO timestamps (UTC) for precise timeline math and avoid timezone drift
         if (tsStr && !runFrom && !runTo) {
-          const day = tsStr.slice(0, 10)
-          setRunFrom(prev => (prev && prev <= day ? prev : day))
-          setRunTo(prev => (prev && prev >= day ? prev : day))
+          const tsMs = new Date(tsStr).getTime()
+          setRunFrom(prev => (prev && new Date(prev).getTime() <= tsMs ? prev : tsStr))
+          setRunTo(prev => (prev && new Date(prev).getTime() >= tsMs ? prev : tsStr))
         }
 
         // Drive the chart from streaming frames first; fall back to hourly snapshots if needed
@@ -280,6 +286,7 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
 
 
   const formatTime = (t: Time, locale?: string) => {
+    const tz = 'America/New_York' // NASDAQ time zone for display
     try {
       let d: Date
       if (typeof t === 'number') d = new Date(t * 1000)
@@ -288,12 +295,11 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
         const timeObj = t as { year: number; month: number; day: number }
         d = new Date(Date.UTC(timeObj.year, timeObj.month - 1, timeObj.day))
       } else return String(t)
-      return new Intl.DateTimeFormat(locale || undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(d)
+      return new Intl.DateTimeFormat(locale || undefined, { timeZone: tz, month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(d)
     } catch (error) {
       console.warn('Failed to format time:', error)
       return String(t)
     }
-
   }
 
 
