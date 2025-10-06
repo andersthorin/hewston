@@ -18,6 +18,10 @@
         "/Users/andersthorin/Projects/hewston-app/version-03"
       ],
       "transport": "stdio"
+    },
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["chrome-devtools-mcp@latest"]
     }
   }
 }
