@@ -10,7 +10,7 @@ describe('MetricsSummary', () => {
     expect(screen.getByText('Performance')).toBeInTheDocument()
     expect(screen.getByText('Total return')).toBeInTheDocument()
     expect(screen.getByText('12.3%')).toBeInTheDocument()
-    expect(screen.getByText('Return (bar)')).toBeInTheDocument()
+    expect(screen.getByText('Daily return')).toBeInTheDocument()
     expect(screen.getByText('1.0%')).toBeInTheDocument()
     expect(screen.getByText('Win rate')).toBeInTheDocument()
     expect(screen.getByText('56.0%')).toBeInTheDocument()

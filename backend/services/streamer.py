@@ -317,6 +317,49 @@ def _select_daily_close_indices(equity_rows: List[dict], rth_only: bool = True) 
     return [day_to_idx[k] for k in sorted(day_to_idx.keys())]
 
 
+def _compute_daily_return_series_aligned(
+    equity_rows: List[dict], daily_close_indices: List[int]
+) -> List[Optional[float]]:
+    """Compute simple daily close-to-close returns aligned to each equity index.
+    For indices up to a daily close, fill with that day's close-to-close return.
+    Between close days, the last completed daily return is propagated.
+    """
+    n = len(equity_rows)
+    daily_ret_by_idx: List[Optional[float]] = [None] * n
+    if n == 0 or not daily_close_indices:
+        return daily_ret_by_idx
+
+    prev_close_val: Optional[float] = None
+    prev_close_idx: Optional[int] = None
+
+    for di in daily_close_indices:
+        try:
+            v = float(equity_rows[di].get("value", float("nan")))
+        except Exception:
+            v = float("nan")
+        r: Optional[float] = None
+        if (
+            prev_close_val is not None
+            and math.isfinite(prev_close_val)
+            and prev_close_val != 0.0
+            and math.isfinite(v)
+        ):
+            r = (v / prev_close_val) - 1.0
+        # Fill from previous close (exclusive) up to this close (inclusive)
+        start = (prev_close_idx + 1) if prev_close_idx is not None else 0
+        for i in range(start, di + 1):
+            daily_ret_by_idx[i] = r
+        prev_close_val = v
+        prev_close_idx = di
+
+    # Propagate last known daily return to the end
+    if prev_close_idx is not None:
+        last_val = daily_ret_by_idx[prev_close_idx]
+        for i in range(prev_close_idx + 1, n):
+            daily_ret_by_idx[i] = last_val
+
+    return daily_ret_by_idx
+
 def _compute_daily_sharpe_series_aligned(
     equity_rows: List[dict], daily_close_indices: List[int]
 ) -> List[Optional[float]]:
@@ -442,12 +485,14 @@ async def produce_frames(
     bars_map = _load_bars_data(dataset_id)
     orders_by_ts = _organize_orders_by_timestamp(orders_rows)
 
-    # Precompute daily Sharpe (based on daily closes, annualized with sqrt(252)) aligned to per-index
+    # Precompute daily series aligned to index
     try:
         daily_close_indices = _select_daily_close_indices(equity_rows, rth_only=rth_only)
         daily_sharpe_ann_by_index = _compute_daily_sharpe_series_aligned(equity_rows, daily_close_indices)
+        daily_return_by_index = _compute_daily_return_series_aligned(equity_rows, daily_close_indices)
     except Exception:
         daily_sharpe_ann_by_index = [None] * len(equity_rows)
+        daily_return_by_index = [None] * len(equity_rows)
 
 
     # Determine indices to emit based on cadence
@@ -508,7 +553,7 @@ async def produce_frames(
                 # Start with precomputed (may be sparse/partial), then fill missing keys from fallback computations
                 mi = dict(last_metrics or {})
 
-                # Compute per-frame return from equity
+                # Compute per-frame return (fallback) and prefer aligned daily return for UI
                 r_cur = None
                 try:
                     v_cur = float(er["value"])
@@ -520,7 +565,8 @@ async def produce_frames(
                 except Exception:
                     pass
                 if "return" not in mi:
-                    mi["return"] = r_cur
+                    daily_r = daily_return_by_index[i] if i < len(daily_return_by_index) else None
+                    mi["return"] = daily_r if daily_r is not None else r_cur
 
                 # Fill total_return / drawdown / sharpe from precomputed arrays (cheap, from equity)
                 if ("total_return" not in mi) or (mi.get("total_return") is None):
@@ -553,6 +599,7 @@ async def produce_frames(
                     prev_equity_val = v_cur
                 except Exception:
                     pass
+                daily_r = daily_return_by_index[i] if i < len(daily_return_by_index) else None
 
                 # Prefer daily-based Sharpe aligned to index (annualized sqrt(252)) to match Nautilus; fallback to per-frame running Sharpe
                 shp_daily = daily_sharpe_ann_by_index[i] if i < len(daily_sharpe_ann_by_index) else None
@@ -569,7 +616,7 @@ async def produce_frames(
                         shp_ann = shp_rt
 
                 mi = {
-                    "return": r_cur,
+                    "return": (daily_r if daily_r is not None else r_cur),
                     "realized_pnl": None,
                     "total_return": metrics_arrays.get("total_return_so_far", [None]*n_equity)[i],
                     "drawdown": metrics_arrays.get("max_drawdown_so_far", [None]*n_equity)[i],

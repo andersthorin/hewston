@@ -49,10 +49,10 @@ const metricDefs: Array<{
   title?: string
 }> = [
   { key: 'total_return', label: 'Total return', formatter: formatPercent, title: 'End-to-start equity change' },
-  { key: 'return', label: 'Return (bar)', formatter: formatPercent, title: 'Per-bar return at this frame' },
+  { key: 'return', label: 'Daily return', formatter: formatPercent, title: 'Close-to-close return (last completed day)' },
   { key: 'win_rate', label: 'Win rate', formatter: formatPercent, title: 'Winning trades / total trades' },
   { key: 'max_drawdown', label: 'Max drawdown', formatter: formatPercent, title: 'Peak-to-trough equity drawdown' },
-  { key: 'sharpe_ratio', label: 'Sharpe', formatter: (v) => formatRatio(v, 2), title: 'Return / volatility (unitless)' },
+  { key: 'sharpe_ratio', label: 'Sharpe', formatter: (v) => formatRatio(v, 2), title: 'Return / volatility (unitless), daily (√252)' },
   { key: 'realized_pnl', label: 'Realized PnL', formatter: formatCurrency, title: 'Cumulative realized PnL (USD)' },
 ]
 
