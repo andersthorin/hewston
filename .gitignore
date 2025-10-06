@@ -1,6 +1,7 @@
 data/raw/
 data/warehouse/
 data/derived/
+data/backtests/
 __pycache__/
 .idea/
 .pytest_cache/
@@ -8,3 +9,4 @@ __pycache__/
 .DS_Store
 .env
 data/catalog.sqlite
+data/catalog.sqlite*
