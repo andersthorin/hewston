@@ -180,6 +180,25 @@ def run_backtest_and_persist(
             bar_minutes=bar_interval_minutes,
         )
 
+        # Compact metrics series drastically: store only when realized_pnl or win_rate changes.
+        # Also store only those keys; fill others at stream time from equity (cheap) to keep artifact small.
+        compact_series: list = []
+        prev_rp = object()
+        prev_wr = object()
+        for ts_iso, m in metrics_series:
+            rp = m.get("realized_pnl")
+            wr = m.get("win_rate")
+            changed = (rp != prev_rp) or (wr != prev_wr)
+            if not compact_series or changed:
+                compact_series.append([ts_iso, {"realized_pnl": rp, "win_rate": wr}])
+                prev_rp, prev_wr = rp, wr
+        # Ensure the last timestamp is present (idempotent if unchanged)
+        if metrics_series:
+            last_ts = metrics_series[-1][0]
+            if not compact_series or compact_series[-1][0] != last_ts:
+                last_m = metrics_series[-1][1]
+                compact_series.append([last_ts, {"realized_pnl": last_m.get("realized_pnl"), "win_rate": last_m.get("win_rate")}])
+
         # Annualization factor (P) disclosure for transparency
         try:
             minutes_per_session = 390
@@ -191,12 +210,13 @@ def run_backtest_and_persist(
 
         metrics_artifact = {
             "stats": {"raw": nautilus.get("stats", {})},
-            "series": metrics_series,
+            "series": compact_series,
             "bar_interval_minutes": bar_interval_minutes,
             "annualization_P": annualization_P,
         }
         ensure_dir(out_dir)
-        metrics_path.write_text(json.dumps(metrics_artifact, indent=2))
+        # Write minified JSON to reduce file size further
+        metrics_path.write_text(json.dumps(metrics_artifact, separators=(",", ":")))
         logger.info(f"Artifacts written to {out_dir}")
 
         # Write manifest

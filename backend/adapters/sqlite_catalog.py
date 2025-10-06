@@ -69,7 +69,11 @@ class SqliteCatalog(CatalogPort):
             # Single shared in-memory connection so schema persists across operations
             self._conn = sqlite3.connect(":memory:", check_same_thread=False)
             self._conn.row_factory = sqlite3.Row
-            self._conn.execute("PRAGMA foreign_keys=ON;")
+            try:
+                self._conn.execute("PRAGMA foreign_keys=ON;")
+                self._conn.execute("PRAGMA busy_timeout=2000;")
+            except Exception:
+                pass
             # Initialize minimal schema in-memory for list/get operations in tests
             with self._conn:
                 self._conn.executescript(DDL)
@@ -80,7 +84,19 @@ class SqliteCatalog(CatalogPort):
             return self._conn
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA foreign_keys=ON;")
+        # Enable FK, WAL and set a reasonable busy timeout to reduce lock contention
+        try:
+            conn.execute("PRAGMA foreign_keys=ON;")
+        except Exception:
+            pass
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+        except Exception:
+            pass
+        try:
+            conn.execute("PRAGMA busy_timeout=2000;")  # 2 seconds
+        except Exception:
+            pass
         return conn
 
     def _bootstrap_if_missing(self) -> None:

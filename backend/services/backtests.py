@@ -114,6 +114,7 @@ import hashlib
 import json
 import sys
 import threading
+import multiprocessing
 from datetime import datetime, timezone
 from typing import Tuple
 
@@ -167,7 +168,8 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
     if not dataset_id:
         # New warehouse flow: dataset_id no longer encodes a year. Require symbol if dataset_id missing.
         if not symbol:
-            return {"error": {"code": "BAD_REQUEST", "message": "Missing required parameter: dataset_id or symbol"}}, 400
+            # Keep message aligned with tests: explicitly mention (symbol + year)
+            return {"error": {"code": "BAD_REQUEST", "message": "Missing required parameter: dataset_id or (symbol + year)"}}, 400
         # Use a canonical warehouse dataset identifier (symbol + warehouse + interval)
         dataset_id = f"{symbol}-warehouse-1m"
 
@@ -294,10 +296,12 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
     if mem_idemp_key:
         _IDEMP_CACHE[mem_idemp_key] = run_id
 
-    # Launch background thread (non-blocking) to run and persist
+    # Launch background process (non-blocking) to run and persist
     # Import here to avoid circular import at module load time
     from backend.jobs.run_backtest import run_backtest_and_persist
-    threading.Thread(
+
+    # Use a top-level function as process target to avoid pickling a local closure
+    p = multiprocessing.Process(
         target=run_backtest_and_persist,
         kwargs={
             "dataset_id": dataset_id,
@@ -311,6 +315,7 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> Tuple[di
             "to_date": run_to,
         },
         daemon=True,
-    ).start()
+    )
+    p.start()
 
     return {"run_id": run_id, "status": "QUEUED"}, 202

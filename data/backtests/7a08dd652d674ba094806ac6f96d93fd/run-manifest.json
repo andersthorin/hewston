@@ -1,0 +1,25 @@
+{
+  "run_id": "7a08dd652d674ba094806ac6f96d93fd",
+  "dataset_id": "TSLA-warehouse-1m",
+  "strategy_id": "sma_crossover",
+  "params": {
+    "fast": 20,
+    "slow": 50,
+    "instrument_id": "TSLA.XNAS"
+  },
+  "seed": 42,
+  "slippage_fees": {},
+  "speed": 60,
+  "run_from": "2024-10-01",
+  "run_to": "2025-07-24",
+  "code_hash": "e6038ac89aa1655f8396f424e19ce05e8970271f",
+  "env_lock": null,
+  "calendar_version": "NAZDAQ-v1",
+  "tz": "America/New_York",
+  "created_at": "2025-10-05T20:44:57.120817+00:00",
+  "status": "ERROR",
+  "error": {
+    "error_type": "KeyboardInterrupt",
+    "error_message": ""
+  }
+}

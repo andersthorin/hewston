@@ -29,13 +29,13 @@ export const BFFAggregatedBacktestResponseSchema = z.object({
 
   // Aggregated metrics data
   metrics: z.object({
-    total_return: z.number().optional(),
-    sharpe_ratio: z.number().optional(),
-    max_drawdown: z.number().optional(),
-    win_rate: z.number().optional(),
-    profit_factor: z.number().optional(),
-    total_trades: z.number().optional(),
-    avg_trade_duration: z.number().optional(),
+    total_return: z.number().optional().nullable(),
+    sharpe_ratio: z.number().optional().nullable(),
+    max_drawdown: z.number().optional().nullable(),
+    win_rate: z.number().optional().nullable(),
+    profit_factor: z.number().optional().nullable(),
+    total_trades: z.number().optional().nullable(),
+    avg_trade_duration: z.number().optional().nullable(),
   }).optional().nullable(),
 
   // Aggregated equity curve data
@@ -44,7 +44,10 @@ export const BFFAggregatedBacktestResponseSchema = z.object({
   // Aggregated orders data
   orders: z.array(z.object({
     ts: z.string(),
-    side: z.enum(['buy', 'sell']),
+    side: z.union([
+      z.enum(['buy', 'sell']),
+      z.enum(['BUY', 'SELL']).transform((s) => s.toLowerCase() as 'buy' | 'sell'),
+    ]),
     quantity: z.number(),
     price: z.number(),
     order_type: z.string().optional(),

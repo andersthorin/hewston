@@ -370,9 +370,34 @@ async def produce_frames(
                 while (m_idx + 1) < len(metrics_lookup) and metrics_lookup[m_idx + 1][0] <= key:
                     last_metrics = metrics_lookup[m_idx + 1][1]
                     m_idx += 1
-                mi = last_metrics or {}
+                # Start with precomputed (may be sparse/partial), then fill missing keys from fallback computations
+                mi = dict(last_metrics or {})
+
+                # Compute per-frame return from equity
+                r_cur = None
+                try:
+                    v_cur = float(er["value"])
+                    if 'prev_equity_val' not in locals():
+                        prev_equity_val = v_cur
+                    if prev_equity_val and prev_equity_val != 0.0:
+                        r_cur = (v_cur / prev_equity_val) - 1.0
+                    prev_equity_val = v_cur
+                except Exception:
+                    pass
+                if "return" not in mi:
+                    mi["return"] = r_cur
+
+                # Fill total_return / drawdown / sharpe from precomputed arrays (cheap, from equity)
+                if "total_return" not in mi:
+                    mi["total_return"] = metrics_arrays.get("total_return_so_far", [None]*n_equity)[i]
+                if "drawdown" not in mi:
+                    mi["drawdown"] = metrics_arrays.get("max_drawdown_so_far", [None]*n_equity)[i]
+                if "sharpe" not in mi:
+                    P = 252 * 390  # annualization for 1-minute baseline
+                    shp_raw = metrics_arrays.get("sharpe_so_far", [None]*n_equity)[i]
+                    mi["sharpe"] = (math.sqrt(P) * shp_raw) if (isinstance(shp_raw, float) or isinstance(shp_raw, int)) and shp_raw is not None else (math.sqrt(P) * shp_raw if shp_raw is not None else None)
             else:
-                # Fallback path (legacy): compute minimal metrics from equity
+                # Fallback path (legacy): compute minimal metrics from equity only
                 r_cur = None
                 try:
                     v_cur = float(er["value"])
