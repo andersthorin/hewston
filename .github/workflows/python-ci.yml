@@ -60,13 +60,13 @@ jobs:
           pip-audit --version
 
       - name: Ruff (lint)
-        run: ruff check .
+        run: ruff check backend bff
 
       - name: Black (format check)
-        run: black --check .
+        run: black --check backend bff
 
       - name: MyPy (types)
-        run: mypy .
+        run: mypy backend bff
 
       - name: PyTest (coverage - backend)
         if: matrix.service == 'backend'

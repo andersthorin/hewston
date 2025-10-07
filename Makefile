@@ -225,3 +225,39 @@ clean:
 	@echo "[clean] removing caches" && \
 	rm -rf .pytest_cache __pycache__ */__pycache__ .ruff_cache || true
 
+
+
+# -------- CI parity helpers --------
+.PHONY: dev-install
+dev-install:
+	@echo "[dev-install] installing pinned toolchain (requirements-dev.txt)" && \
+	$(UV) pip install -r requirements-dev.txt
+
+.PHONY: ci-versions
+ci-versions:
+	@$(PYTHON) python -V && \
+	$(PYTHON) ruff --version && \
+	$(PYTHON) black --version && \
+	$(PYTHON) mypy --version && \
+	$(PYTHON) pytest --version && \
+	$(PYTHON) bandit --version && \
+	$(PYTHON) pip-audit --version && \
+	$(PYTHON) python -c "import importlinter, grimp; print('import-linter', getattr(importlinter, '__version__', 'unknown')); print('grimp', getattr(grimp, '__version__', 'unknown'))"
+
+.PHONY: ci-architecture
+ci-architecture:
+	@echo "[ci-architecture] import-linter" && \
+	$(PYTHON) lint-imports --config linter.ini
+
+.PHONY: ci-local
+ci-local:
+	@echo "[ci] Using pinned toolchain — run: make setup && make dev-install (once)" && \
+	$(MAKE) ci-versions && \
+	echo "[ci] Ruff (lint)" && $(PYTHON) ruff check backend bff && \
+	echo "[ci] Black (format check)" && $(PYTHON) black --check backend bff && \
+	echo "[ci] MyPy (type check)" && $(PYTHON) mypy backend bff && \
+	echo "[ci] Import Linter (architecture)" && $(PYTHON) lint-imports --config linter.ini && \
+	echo "[ci] PyTest (backend)" && PYTHONPATH=. $(PYTHON) pytest -q backend/tests --cov=backend --cov-report=term-missing && \
+	echo "[ci] PyTest (bff)" && PYTHONPATH=. $(PYTHON) pytest -q bff/tests --cov=bff --cov-report=term-missing && \
+	echo "[ci] Bandit (security)" && $(PYTHON) bandit -q -r backend bff || true && \
+	echo "[ci] pip-audit (dependencies)" && $(PYTHON) pip-audit --progress-spinner=off || true

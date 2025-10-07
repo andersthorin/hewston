@@ -44,4 +44,3 @@ def configure_logging(level: int = logging.INFO) -> None:
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
-
