@@ -42,7 +42,7 @@ jobs:
 
       - name: Install test dependencies
         run: |
-          pip install pandas polars httpx
+          pip install pandas polars httpx pydantic
 
       - name: Ruff (lint)
         run: ruff check backend bff
