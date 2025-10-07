@@ -25,4 +25,4 @@ exclude = [
 
 [tool.ruff.lint]
 # Temporarily relax some checks to get CI green for Epic 14; tighten later.
-ignore = ["E402", "C901"]
+ignore = ["C901"]

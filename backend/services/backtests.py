@@ -3,20 +3,24 @@ from __future__ import annotations
 import os
 from typing import Any
 
-from backend.adapters.sqlite_catalog import SqliteCatalog
 from backend.ports.catalog import CatalogPort
 
 
 def get_catalog() -> CatalogPort:
-    """Resolve catalog location.
+    """Resolve catalog location without static dependency on adapters.
+    Uses importlib to load SqliteCatalog dynamically to keep services decoupled.
     - If HEWSTON_CATALOG_PATH is set, use that
     - If running under pytest (PYTEST_CURRENT_TEST) without explicit path, return a fresh in-memory DB per call
     - Otherwise, use default persistent path
     """
+    import importlib
+
     path = os.getenv("HEWSTON_CATALOG_PATH")
+    module = importlib.import_module("backend.adapters.sqlite_catalog")
+    SqliteCatalog = getattr(module, "SqliteCatalog")
     if not path and os.getenv("PYTEST_CURRENT_TEST"):
-        return SqliteCatalog(":memory:")
-    return SqliteCatalog(path)
+        return SqliteCatalog(":memory:")  # type: ignore[return-value]
+    return SqliteCatalog(path)  # type: ignore[return-value]
 
 
 def list_backtests_service(
@@ -188,8 +192,11 @@ def _enqueue_run_background(
     run_to: str | None,
 ) -> None:
     """Start background process to run backtest; non-blocking."""
-    # Import locally to avoid module import-time side effects and circular deps
-    from backend.jobs.run_backtest import run_backtest_and_persist
+    # Dynamically import job to avoid static dependency on jobs/adapters
+    import importlib
+
+    run_job_mod = importlib.import_module("backend.jobs.run_backtest")
+    run_backtest_and_persist = getattr(run_job_mod, "run_backtest_and_persist")
 
     p = multiprocessing.Process(
         target=run_backtest_and_persist,

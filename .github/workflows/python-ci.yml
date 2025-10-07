@@ -71,14 +71,14 @@ jobs:
         working-directory: .
         env:
           PYTHONPATH: .
-        run: pytest -q backend/tests --cov=backend --cov-report=term-missing
+        run: pytest -q backend/tests --cov=backend --cov-report=term-missing --cov-fail-under=15
 
       - name: PyTest (coverage - bff)
         if: matrix.service == 'bff'
         working-directory: .
         env:
           PYTHONPATH: .
-        run: pytest -q bff/tests --cov=bff --cov-report=term-missing
+        run: pytest -q bff/tests --cov=bff --cov-report=term-missing --cov-fail-under=60
 
       - name: Bandit (security)
         run: bandit -q -r . || true # advisory initially

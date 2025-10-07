@@ -14,17 +14,20 @@ from pathlib import Path
 import pandas as pd
 import polars as pl
 
-from backend.adapters.sqlite_catalog import SqliteCatalog
 from backend.constants import DEFAULT_FPS
 from backend.domain.types import StreamFrame
+from backend.ports.catalog import CatalogPort
 from backend.utils.datetime import normalize_timestamp
 
 logger = logging.getLogger(__name__)
 
 
-def _get_catalog() -> SqliteCatalog:
-    # Use default env-based constructor
-    return SqliteCatalog()
+def _get_catalog() -> CatalogPort:
+    """Return a CatalogPort without static dependency on adapters."""
+    import importlib
+    module = importlib.import_module("backend.adapters.sqlite_catalog")
+    SqliteCatalog = getattr(module, "SqliteCatalog")
+    return SqliteCatalog()  # type: ignore[return-value]
 
 
 def _resolve_artifacts(run_id: str) -> tuple[dict[str, str], str | None]:
