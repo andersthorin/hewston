@@ -45,11 +45,19 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: 'pip'
 
-      - name: Install dependencies
+      - name: Install dev toolchain (pinned)
         run: |
           python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          pip install ruff black mypy pytest pytest-cov bandit pip-audit
+          pip install -r requirements-dev.txt
+      - name: Show tool versions
+        run: |
+          python -V
+          ruff --version
+          black --version
+          mypy --version
+          pytest --version
+          bandit --version
+          pip-audit --version
 
       - name: Ruff (lint)
         run: ruff check .
@@ -95,10 +103,18 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install import-linter
+      - name: Install dev toolchain (pinned)
         run: |
           python -m pip install --upgrade pip
-          pip install import-linter
+          pip install -r requirements-dev.txt
+      - name: Show tool versions
+        run: |
+          python -V
+          python - <<'PY'
+import importlinter, grimp
+print('import-linter', getattr(importlinter, '__version__', 'unknown'))
+print('grimp', getattr(grimp, '__version__', 'unknown'))
+PY
 
       - name: Enforce contracts (lint-imports)
         run: lint-imports --config linter.ini

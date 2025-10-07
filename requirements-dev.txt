@@ -1,0 +1,12 @@
+# Pinned tooling versions to keep local and CI in sync
+# Python: 3.11.13
+ruff==0.6.9
+black==24.10.0
+mypy==1.18.2
+pytest==8.4.2
+pytest-cov==7.0.0
+bandit==1.8.6
+pip-audit==2.9.0
+import-linter==2.5
+grimp==3.11
+
