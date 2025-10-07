@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS backtest_metrics (
 
 class SqliteCatalog(CatalogPort):
     def __init__(self, db_path: str | None = None) -> None:
-        resolved = db_path or os.getenv("HEWSTON_CATALOG_PATH", "data/catalog.sqlite")
+        resolved = db_path or os.getenv("HEWSTON_CATALOG_PATH", "data/catalog.db")
         self.db_path = resolved
         self._conn: sqlite3.Connection | None = None
         if resolved != ":memory:":
