@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   quality:
-    name: Python Quality Gates (${{ matrix.service }})
+    name: ${{ matrix.service }} Quality Gates
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -89,7 +89,7 @@ jobs:
 
 
   architecture:
-    name: Architecture Contracts (import-linter)
+    name: Architecture Contracts
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
