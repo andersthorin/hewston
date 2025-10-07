@@ -65,8 +65,8 @@ export const CHART_COLORS = {
 // Baseline Values (from docs/prd/features/00-baselines.md)
 export const BASELINE_SYMBOL = 'AAPL'
 export const BASELINE_YEAR = 2023
-export const BASELINE_FROM_DATE = '2023-01-01'
-export const BASELINE_TO_DATE = '2023-12-31'
+export const BASELINE_FROM_DATE = '2024-10-01'
+export const BASELINE_TO_DATE = '2024-10-31'
 export const BASELINE_STRATEGY = 'sma_crossover'
 export const BASELINE_FAST_PERIOD = 20
 export const BASELINE_SLOW_PERIOD = 50
