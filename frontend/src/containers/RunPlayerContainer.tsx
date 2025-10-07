@@ -5,7 +5,7 @@ import { useBacktestPlayback } from '../services/ws'
 import { PlaybackControls } from '../components/playback-controls'
 import ChartOHLC, { type CandlestickChartAPI } from '../components/ChartOHLC'
 import { TimelineScrubber } from '../components/timeline-scrubber'
-import { StreamingMetricsPanel } from '../components/streaming-metrics-panel'
+
 import OverlaysOrders from '../components/OverlaysOrders'
 import playbackStore, { usePlaybackSelector, selectors } from '../store/playbackClock'
 import type { CandlestickData, Time } from 'lightweight-charts'

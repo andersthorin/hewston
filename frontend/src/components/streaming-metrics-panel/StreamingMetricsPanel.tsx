@@ -19,7 +19,7 @@ export default function StreamingMetricsPanel({ finalMetrics }: { finalMetrics?:
   const ts = usePlaybackSelector(selectors.currentTs)
   const frame = usePlaybackSelector(selectors.frame)
 
-  const m = frame?.metrics as any
+  const m = frame?.metrics ?? undefined
   const mappedStream = {
     total_return: m?.total_return ?? undefined,
     return: m?.return ?? undefined,

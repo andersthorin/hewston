@@ -24,8 +24,8 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
       if (_props.formatTime && chartRef.current) {
         const fmt = _props.formatTime
         // Apply both chart-level localization and timeScale tick formatter for compatibility
-        ;(chartRef.current as any).applyOptions?.({ localization: { timeFormatter: (t: any) => fmt(t) } })
-        chartRef.current.timeScale()?.applyOptions?.({ tickMarkFormatter: (t: any) => fmt(t) })
+        chartRef.current.applyOptions?.({ localization: { timeFormatter: (t: Time) => fmt(t) } })
+        chartRef.current.timeScale()?.applyOptions?.({ tickMarkFormatter: (t: Time) => fmt(t) })
       }
     } catch (error) {
       console.warn('Failed to apply time formatter:', error)
