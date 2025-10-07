@@ -47,7 +47,6 @@ def _resolve_artifacts(run_id: str) -> tuple[dict[str, str], str | None]:
 
 
 def _resolve_bars_path(dataset_id: str) -> str | None:
-
     cat = _get_catalog()
     with cat._connect() as conn:  # type: ignore[attr-defined]
         r = conn.execute(
