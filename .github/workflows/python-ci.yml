@@ -91,11 +91,7 @@ jobs:
       - name: Show tool versions
         run: |
           python -V
-          python - <<'PY'
-import importlinter, grimp
-print('import-linter', getattr(importlinter, '__version__', 'unknown'))
-print('grimp', getattr(grimp, '__version__', 'unknown'))
-PY
+          python -c "import importlinter, grimp; print('import-linter', getattr(importlinter, '__version__', 'unknown')); print('grimp', getattr(grimp, '__version__', 'unknown'))"
 
       - name: Enforce contracts (lint-imports)
         run: lint-imports --config linter.ini
