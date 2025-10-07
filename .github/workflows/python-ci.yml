@@ -20,12 +20,12 @@ concurrency:
 
 jobs:
   quality:
-    name: Python quality gates (${{ matrix.service }} • py${{ matrix.python-version }})
+    name: Python Quality Gates (${{ matrix.service }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        service: [backend, bff]
+        service: [Backend, BFF]
         python-version: ["3.11"]
 
 
@@ -89,7 +89,7 @@ jobs:
 
 
   architecture:
-    name: Architecture contracts (import-linter)
+    name: Architecture Contracts (import-linter)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
