@@ -119,7 +119,6 @@ def get_backtest_service(run_id: str) -> dict | None:
     return run
 
 
-
 # Fallback in-memory idempotency for minimal body (no dataset info)
 _IDEMP_CACHE: dict[str, str] = {}
 

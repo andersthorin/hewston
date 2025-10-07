@@ -8,7 +8,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 
-
 def setup_test_environment(
     tmp_path: Path,
     monkeypatch: Any,
@@ -58,4 +57,3 @@ def assert_file_exists_and_not_empty(file_path: Path, min_size: int = 1) -> None
 def get_test_symbol_year() -> tuple[str, int]:
     """Get the standard test symbol and year."""
     return "AAPL", 2023
-

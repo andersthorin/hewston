@@ -4,7 +4,6 @@ from backend.app.main import app
 import backend.api.routes.backtests as wsmod
 
 
-
 def test_ws_heartbeat_hb_event_monkeypatched_interval():
     # Speed up heartbeat for tests
     wsmod.HEARTBEAT_SECONDS = 0.05

@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 def _get_catalog() -> CatalogPort:
     """Return a CatalogPort without static dependency on adapters."""
     import importlib
+
     module = importlib.import_module("backend.adapters.sqlite_catalog")
     SqliteCatalog = getattr(module, "SqliteCatalog")
     return SqliteCatalog()  # type: ignore[return-value]
