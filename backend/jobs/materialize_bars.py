@@ -18,7 +18,7 @@ Schema:
 """
 
 from pathlib import Path
-from typing import Optional
+
 import pandas as pd
 
 
@@ -35,15 +35,35 @@ def _bars_base() -> Path:
 
 
 def _glob_quotes(symbol: str, date_str: str, venue: str = "XNAS") -> Path:
-    return _quotes_base() / f"venue={venue}" / f"symbol={symbol}" / f"date={date_str}" / "quotes.parquet"
+    return (
+        _quotes_base()
+        / f"venue={venue}"
+        / f"symbol={symbol}"
+        / f"date={date_str}"
+        / "quotes.parquet"
+    )
 
 
 def _glob_trades(symbol: str, date_str: str, timeframe: str, venue: str = "XNAS") -> Path:
-    return _trades_base() / timeframe / f"venue={venue}" / f"symbol={symbol}" / f"date={date_str}" / "agg.parquet"
+    return (
+        _trades_base()
+        / timeframe
+        / f"venue={venue}"
+        / f"symbol={symbol}"
+        / f"date={date_str}"
+        / "agg.parquet"
+    )
 
 
 def _out_path(symbol: str, date_str: str, timeframe: str, venue: str = "XNAS") -> Path:
-    return _bars_base() / f"mid_{timeframe}" / f"venue={venue}" / f"symbol={symbol}" / f"date={date_str}" / "bars.parquet"
+    return (
+        _bars_base()
+        / f"mid_{timeframe}"
+        / f"venue={venue}"
+        / f"symbol={symbol}"
+        / f"date={date_str}"
+        / "bars.parquet"
+    )
 
 
 def _derive_mid_ohlc_from_quotes(quotes: pd.DataFrame, freq: str) -> pd.DataFrame:
@@ -56,7 +76,7 @@ def _derive_mid_ohlc_from_quotes(quotes: pd.DataFrame, freq: str) -> pd.DataFram
     return ohlc[["t", "o", "h", "l", "c"]].reset_index(drop=True)
 
 
-def _merge_trades(bars: pd.DataFrame, trades: Optional[pd.DataFrame]) -> pd.DataFrame:
+def _merge_trades(bars: pd.DataFrame, trades: pd.DataFrame | None) -> pd.DataFrame:
     if trades is None or trades.empty:
         bars["v"] = 0
         bars["n"] = 0
@@ -76,7 +96,7 @@ def _flag_rth(bars_1m: pd.DataFrame) -> pd.DataFrame:
     hours = t.dt.hour
     mins = t.dt.minute
     total = hours * 60 + mins
-    rth = (total >= 14*60 - 30) & (total < 20*60)  # 13:30-19:59 inclusive
+    rth = (total >= 14 * 60 - 30) & (total < 20 * 60)  # 13:30-19:59 inclusive
     bars_1m["rth"] = rth.astype(bool)
     return bars_1m
 
@@ -114,6 +134,7 @@ def materialize_for_date(symbol: str, date_str: str, venue: str = "XNAS") -> tup
 
 if __name__ == "__main__":
     import argparse
+
     ap = argparse.ArgumentParser(description="Materialize UI bars from Quotes + Trades aggregates")
     ap.add_argument("--symbol", required=True)
     ap.add_argument("--date", required=True, help="YYYY-MM-DD")
@@ -122,4 +143,3 @@ if __name__ == "__main__":
 
     p = materialize_for_date(args.symbol, args.date, args.venue)
     print("written:", p)
-

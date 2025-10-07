@@ -1,6 +1,6 @@
 /**
  * Epic 9 Comprehensive Validation Tests
- * 
+ *
  * End-to-end testing of complete BFF integration including:
  * - API routing with feature flags
  * - WebSocket proxy integration
@@ -66,11 +66,9 @@ function createWrapper() {
       mutations: { retry: false },
     },
   })
-  
+
   return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>
-      {children}
-    </QueryClientProvider>
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   )
 }
 
@@ -84,19 +82,19 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
     it('should validate complete feature flag configuration', () => {
       const config = featureFlagService.getConfiguration()
       const issues = featureFlagService.validateConfiguration()
-      
+
       expect(config).toHaveProperty('bffEnabled')
       expect(config).toHaveProperty('chartDataEnabled')
       expect(config).toHaveProperty('runDataEnabled')
       expect(config).toHaveProperty('websocketEnabled')
       expect(config).toHaveProperty('fallbackToBackend')
-      
+
       expect(Array.isArray(issues)).toBe(true)
     })
 
     it('should provide endpoint mappings for all service types', () => {
       const endpointConfig = featureFlagService.getEndpointConfiguration()
-      
+
       expect(endpointConfig.endpointMappings).toHaveProperty('chartData')
       expect(endpointConfig.endpointMappings).toHaveProperty('runData')
       expect(endpointConfig.endpointMappings).toHaveProperty('websocket')
@@ -107,15 +105,15 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
       const chartEval = featureFlagService.evaluateFeatureFlag('chartData')
       const runEval = featureFlagService.evaluateFeatureFlag('runData')
       const wsEval = featureFlagService.evaluateFeatureFlag('websocket')
-      
+
       expect(chartEval).toHaveProperty('enabled')
       expect(chartEval).toHaveProperty('endpointUrl')
       expect(chartEval).toHaveProperty('source')
-      
+
       expect(runEval).toHaveProperty('enabled')
       expect(runEval).toHaveProperty('endpointUrl')
       expect(runEval).toHaveProperty('source')
-      
+
       expect(wsEval).toHaveProperty('enabled')
       expect(wsEval).toHaveProperty('endpointUrl')
       expect(wsEval).toHaveProperty('source')
@@ -126,16 +124,17 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
     it('should route chart data API calls based on feature flags', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({
-          symbol: 'AAPL',
-          timeframe: 'daily',
-          bars: [{ t: '2023-01-01', o: 100, h: 105, l: 99, c: 103, v: 1000 }],
-          meta: { points: 1, source: 'backend' }
-        })
+        json: () =>
+          Promise.resolve({
+            symbol: 'AAPL',
+            timeframe: 'daily',
+            bars: [{ t: '2023-01-01', o: 100, h: 105, l: 99, c: 103, v: 1000 }],
+            meta: { points: 1, source: 'backend' },
+          }),
       })
 
       const data = await chartDataService.fetchDailyData('AAPL', '2023-01-01', '2023-12-31')
-      
+
       expect(data).toHaveProperty('symbol', 'AAPL')
       expect(data).toHaveProperty('timeframe', 'daily')
       expect(data).toHaveProperty('bars')
@@ -151,12 +150,12 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
             strategy_id: 'sma_crossover',
             status: 'completed',
             symbol: 'AAPL',
-          }
+          },
         ],
         total: 1,
         limit: 20,
         offset: 0,
-        meta: { source: 'backend' }
+        meta: { source: 'backend' },
       }
 
       // Mock the service method directly since we're testing integration
@@ -174,7 +173,7 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
       mockFetch.mockRejectedValueOnce(new Error('BFF unavailable'))
 
       await expect(
-        apiRouter.routeAPICall('chartData', '/bars/daily', { allowFallback: true })
+        apiRouter.routeAPICall('chartData', '/bars/daily', { allowFallback: true }),
       ).rejects.toThrow('BFF unavailable')
     })
   })
@@ -190,11 +189,11 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
 
     it('should handle WebSocket connection lifecycle', async () => {
       const manager = createWebSocketManager('test-run-123')
-      
+
       await manager.connect()
       expect(manager.isReady()).toBe(true)
       expect(manager.getState()).toBe('connected')
-      
+
       manager.close()
       expect(manager.getState()).toBe('closed')
     })
@@ -202,15 +201,15 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
     it('should track WebSocket health metrics', async () => {
       const manager = createWebSocketManager('test-run-123')
       await manager.connect()
-      
+
       const health = manager.getHealth()
-      
+
       expect(health).toHaveProperty('state')
       expect(health).toHaveProperty('reconnectAttempts')
       expect(health).toHaveProperty('messagesReceived')
       expect(health).toHaveProperty('messagesSent')
       expect(health).toHaveProperty('connectionSource')
-      
+
       manager.close()
     })
   })
@@ -219,18 +218,18 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
     it('should integrate chart data hooks with feature flags', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({
-          symbol: 'AAPL',
-          timeframe: 'daily',
-          bars: [],
-          meta: { points: 0, source: 'backend' }
-        })
+        json: () =>
+          Promise.resolve({
+            symbol: 'AAPL',
+            timeframe: 'daily',
+            bars: [],
+            meta: { points: 0, source: 'backend' },
+          }),
       })
 
-      const { result } = renderHook(
-        () => useDailyChartData('AAPL', '2023-01-01', '2023-12-31'),
-        { wrapper: createWrapper() }
-      )
+      const { result } = renderHook(() => useDailyChartData('AAPL', '2023-01-01', '2023-12-31'), {
+        wrapper: createWrapper(),
+      })
 
       await waitFor(() => {
         expect(result.current.isSuccess || result.current.isLoading).toBe(true)
@@ -243,13 +242,12 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
         total: 0,
         limit: 20,
         offset: 0,
-        meta: { source: 'backend' }
+        meta: { source: 'backend' },
       } as any)
 
-      const { result } = renderHook(
-        () => useBacktestList({ symbol: 'AAPL' }),
-        { wrapper: createWrapper() }
-      )
+      const { result } = renderHook(() => useBacktestList({ symbol: 'AAPL' }), {
+        wrapper: createWrapper(),
+      })
 
       await waitFor(() => {
         expect(result.current.isSuccess || result.current.isLoading).toBe(true)
@@ -262,7 +260,7 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
       const testResult = await webSocketPerformanceTester.runPerformanceTest(
         'test-run-123',
         1000, // 1 second test
-        'streaming'
+        'streaming',
       )
 
       expect(testResult).toHaveProperty('config')
@@ -271,7 +269,7 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
       expect(testResult).toHaveProperty('latency')
       expect(testResult).toHaveProperty('throughput')
       expect(testResult).toHaveProperty('metadata')
-      
+
       expect(testResult.config.connectionSource).toBe('bff')
       expect(testResult.metadata.success).toBe(true)
     })
@@ -280,7 +278,7 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
       const testResult = await webSocketPerformanceTester.runPerformanceTest(
         'test-run-123',
         2000,
-        'streaming'
+        'streaming',
       )
 
       // Validate performance targets from story requirements
@@ -293,11 +291,11 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
     it('should support instant rollback via feature flags', () => {
       // Test that configuration can be changed
       const originalConfig = featureFlagService.getConfiguration()
-      
+
       // Verify we can read current state
       expect(originalConfig).toHaveProperty('bffEnabled')
       expect(originalConfig).toHaveProperty('fallbackToBackend', false)
-      
+
       // Verify validation works
       const issues = featureFlagService.validateConfiguration()
       expect(Array.isArray(issues)).toBe(true)
@@ -308,11 +306,11 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
       const chartData = await chartDataService.fetchDailyData('AAPL')
       const runList = await backtestDataService.listBacktests()
       const wsManager = createWebSocketManager('test-run-123')
-      
+
       expect(chartData).toBeDefined()
       expect(runList).toBeDefined()
       expect(wsManager).toBeDefined()
-      
+
       wsManager.close()
     })
   })
@@ -321,22 +319,25 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
     it('should handle service failures gracefully', async () => {
       // Test API failure handling
       mockFetch.mockRejectedValue(new Error('Network error'))
-      
+
       await expect(chartDataService.fetchDailyData('AAPL')).rejects.toThrow('Network error')
     })
 
     it('should handle WebSocket connection failures', async () => {
       // Mock WebSocket that fails to connect
-      vi.stubGlobal('WebSocket', class {
-        constructor() {
-          setTimeout(() => this.onerror?.(new Event('error')), 10)
-        }
-        onerror: ((event: Event) => void) | null = null
-        close() {}
-      })
+      vi.stubGlobal(
+        'WebSocket',
+        class {
+          constructor() {
+            setTimeout(() => this.onerror?.(new Event('error')), 10)
+          }
+          onerror: ((event: Event) => void) | null = null
+          close() {}
+        },
+      )
 
       const manager = createWebSocketManager('test-run-123', { connectionTimeout: 100 })
-      
+
       await expect(manager.connect()).rejects.toThrow()
     })
   })
@@ -344,7 +345,7 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
   describe('Development Tools Integration', () => {
     it('should provide debug information', () => {
       const debugInfo = featureFlagService.getDebugInfo()
-      
+
       expect(debugInfo).toHaveProperty('configuration')
       expect(debugInfo).toHaveProperty('endpointMappings')
       expect(debugInfo).toHaveProperty('lastEvaluations')
@@ -357,4 +358,3 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
     })
   })
 })
-

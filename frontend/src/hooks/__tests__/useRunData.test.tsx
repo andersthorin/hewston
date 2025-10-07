@@ -21,7 +21,7 @@ vi.mock('../../services/runData', () => ({
     createBacktest: vi.fn(),
     getPerformanceMetrics: vi.fn(),
     isUsingAggregation: vi.fn(),
-  }
+  },
 }))
 
 // Mock feature flag service
@@ -30,7 +30,7 @@ vi.mock('../../services/featureFlags', () => ({
     isFeatureFlagEnabled: vi.fn(),
     getDebugInfo: vi.fn(),
     evaluateFeatureFlag: vi.fn(),
-  }
+  },
 }))
 
 // Test wrapper with QueryClient
@@ -45,11 +45,9 @@ function createWrapper() {
       },
     },
   })
-  
+
   return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={queryClient}>
-      {children}
-    </QueryClientProvider>
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   )
 }
 
@@ -79,20 +77,19 @@ describe('Run Data Hooks', () => {
             total_return: 0.15,
             sharpe_ratio: 1.2,
             max_drawdown: -0.05,
-          }
+          },
         ],
         total: 1,
         limit: 20,
         offset: 0,
-        meta: { source: 'backend' as const }
+        meta: { source: 'backend' as const },
       }
 
       vi.mocked(backtestDataService.listBacktests).mockResolvedValue(mockData as any)
 
-      const { result } = renderHook(
-        () => useBacktestList({ symbol: 'AAPL' }),
-        { wrapper: createWrapper() }
-      )
+      const { result } = renderHook(() => useBacktestList({ symbol: 'AAPL' }), {
+        wrapper: createWrapper(),
+      })
 
       await waitFor(() => {
         expect(result.current.isSuccess).toBe(true)
@@ -105,10 +102,7 @@ describe('Run Data Hooks', () => {
     it('should include BFF flag in query key', async () => {
       vi.mocked(featureFlagService.isFeatureFlagEnabled).mockReturnValue(true)
 
-      const { result } = renderHook(
-        () => useBacktestList(),
-        { wrapper: createWrapper() }
-      )
+      const { result } = renderHook(() => useBacktestList(), { wrapper: createWrapper() })
 
       // Query should be loading or successful
       expect(result.current.isLoading || result.current.isSuccess).toBe(true)
@@ -136,22 +130,19 @@ describe('Run Data Hooks', () => {
           { ts: '2023-01-01T00:00:00Z', value: 100000 },
           { ts: '2023-12-31T23:59:59Z', value: 115000 },
         ],
-        orders: [
-          { ts: '2023-01-01T09:30:00Z', side: 'buy' as const, quantity: 100, price: 150.0 },
-        ],
+        orders: [{ ts: '2023-01-01T09:30:00Z', side: 'buy' as const, quantity: 100, price: 150.0 }],
         meta: {
           aggregated: true,
           source: 'bff' as const,
           components_loaded: ['run', 'metrics', 'equity', 'orders'],
-        }
+        },
       }
 
       vi.mocked(backtestDataService.getCompleteBacktest).mockResolvedValue(mockData as any)
 
-      const { result } = renderHook(
-        () => useBacktestDetail('run-123'),
-        { wrapper: createWrapper() }
-      )
+      const { result } = renderHook(() => useBacktestDetail('run-123'), {
+        wrapper: createWrapper(),
+      })
 
       await waitFor(() => {
         expect(result.current.isSuccess).toBe(true)
@@ -162,10 +153,7 @@ describe('Run Data Hooks', () => {
     })
 
     it('should not fetch when backtest_id is undefined', () => {
-      renderHook(
-        () => useBacktestDetail(undefined),
-        { wrapper: createWrapper() }
-      )
+      renderHook(() => useBacktestDetail(undefined), { wrapper: createWrapper() })
 
       expect(vi.mocked(backtestDataService.getCompleteBacktest)).not.toHaveBeenCalled()
     })
@@ -176,10 +164,7 @@ describe('Run Data Hooks', () => {
       const mockResponse = { backtest_id: 'run-456', status: 'created' }
       vi.mocked(backtestDataService.createBacktest).mockResolvedValue(mockResponse as any)
 
-      const { result } = renderHook(
-        () => useCreateBacktest(),
-        { wrapper: createWrapper() }
-      )
+      const { result } = renderHook(() => useCreateBacktest(), { wrapper: createWrapper() })
 
       const request = {
         strategy_id: 'sma_crossover',
@@ -191,27 +176,27 @@ describe('Run Data Hooks', () => {
       await act(async () => {
         const response = await result.current.mutateAsync({
           request,
-          idempotencyKey: 'test-key'
+          idempotencyKey: 'test-key',
         })
         expect(response).toEqual(mockResponse)
       })
 
-      expect(vi.mocked(backtestDataService.createBacktest)).toHaveBeenCalledWith(request, 'test-key')
+      expect(vi.mocked(backtestDataService.createBacktest)).toHaveBeenCalledWith(
+        request,
+        'test-key',
+      )
     })
 
     it('should handle creation errors', async () => {
       const error = new Error('Creation failed')
       vi.mocked(backtestDataService.createBacktest).mockRejectedValue(error)
 
-      const { result } = renderHook(
-        () => useCreateBacktest(),
-        { wrapper: createWrapper() }
-      )
+      const { result } = renderHook(() => useCreateBacktest(), { wrapper: createWrapper() })
 
       await act(async () => {
         try {
           await result.current.mutateAsync({
-            request: { strategy_id: 'test' }
+            request: { strategy_id: 'test' },
           })
         } catch (e) {
           expect(e).toEqual(error)
@@ -224,17 +209,15 @@ describe('Run Data Hooks', () => {
     it('should use different query keys for BFF vs backend', () => {
       // Test backend mode
       vi.mocked(featureFlagService.isFeatureFlagEnabled).mockReturnValue(false)
-      const { result: backendResult } = renderHook(
-        () => useBacktestDetail('run-123'),
-        { wrapper: createWrapper() }
-      )
+      const { result: backendResult } = renderHook(() => useBacktestDetail('run-123'), {
+        wrapper: createWrapper(),
+      })
 
       // Test BFF mode
       vi.mocked(featureFlagService.isFeatureFlagEnabled).mockReturnValue(true)
-      const { result: bffResult } = renderHook(
-        () => useBacktestDetail('run-123'),
-        { wrapper: createWrapper() }
-      )
+      const { result: bffResult } = renderHook(() => useBacktestDetail('run-123'), {
+        wrapper: createWrapper(),
+      })
 
       // Both should be loading or have data, but with different cache keys
       expect(backendResult.current.isLoading || backendResult.current.isSuccess).toBe(true)
@@ -247,10 +230,7 @@ describe('Run Data Hooks', () => {
       const error = new Error('Network error')
       vi.mocked(backtestDataService.listBacktests).mockRejectedValue(error as any)
 
-      const { result } = renderHook(
-        () => useBacktestList(),
-        { wrapper: createWrapper() }
-      )
+      const { result } = renderHook(() => useBacktestList(), { wrapper: createWrapper() })
 
       await waitFor(() => {
         expect(result.current.isError).toBe(true)

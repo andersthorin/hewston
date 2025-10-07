@@ -12,4 +12,3 @@ def test_ws_echo_ctrl_message():
         assert msg["cmd"] == "play"
         assert msg.get("echo") is True
         ws.close()
-

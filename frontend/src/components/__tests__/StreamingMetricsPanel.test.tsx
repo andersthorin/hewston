@@ -10,8 +10,12 @@ function seedFrameWithMetrics() {
   const ts = '2024-01-01T00:00:00Z'
   // @ts-ignore test shaping
   playbackStore._setFrame({
-    t: 'frame', ts, dropped: 0, ohlc: null,
-    orders: [], equity: { ts, value: 110 },
+    t: 'frame',
+    ts,
+    dropped: 0,
+    ohlc: null,
+    orders: [],
+    equity: { ts, value: 110 },
     metrics: { total_return: 0.1, drawdown: 0.02, sharpe: 1.25 },
   })
 }
@@ -22,11 +26,10 @@ describe('StreamingMetricsPanel', () => {
     const { getByText } = render(
       <PlaybackProvider>
         <StreamingMetricsPanel />
-      </PlaybackProvider>
+      </PlaybackProvider>,
     )
     expect(getByText('Performance')).toBeInTheDocument()
     // Total return formatted as percentage
     expect(getByText(/10.0%/)).toBeInTheDocument()
   })
 })
-

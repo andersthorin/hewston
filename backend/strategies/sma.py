@@ -1,17 +1,21 @@
 from __future__ import annotations
 
-from typing import Any, Optional
-
+from typing import Any
 
 # We provide a real Nautilus Strategy when available, otherwise keep a lightweight placeholder
 try:  # pragma: no cover - exercised in integration
     from datetime import timedelta
 
-    from nautilus_trader.trading.strategy import Strategy  # type: ignore
     from nautilus_trader.indicators.average.sma import SimpleMovingAverage  # type: ignore
-    from nautilus_trader.model.data import BarType, BarSpecification  # type: ignore
-    from nautilus_trader.model.identifiers import InstrumentId, ClientId  # type: ignore
-    from nautilus_trader.model.enums import PriceType, AggregationSource, OrderSide, TimeInForce  # type: ignore
+    from nautilus_trader.model.data import BarSpecification, BarType  # type: ignore
+    from nautilus_trader.model.enums import (  # type: ignore
+        AggregationSource,
+        OrderSide,
+        PriceType,
+        TimeInForce,
+    )
+    from nautilus_trader.model.identifiers import InstrumentId  # type: ignore
+    from nautilus_trader.trading.strategy import Strategy  # type: ignore
 
     class SMAStrategy(Strategy):  # type: ignore[misc]
         """Simple SMA crossover strategy using Nautilus Strategy API.
@@ -25,7 +29,16 @@ try:  # pragma: no cover - exercised in integration
         - eod_flat: bool, force flatten at end of RTH day
         """
 
-        def __init__(self, instrument_id: str, fast: int = 20, slow: int = 50, qty: int = 1, rth_only: bool = False, eod_flat: bool = False, **_: Any) -> None:
+        def __init__(
+            self,
+            instrument_id: str,
+            fast: int = 20,
+            slow: int = 50,
+            qty: int = 1,
+            rth_only: bool = False,
+            eod_flat: bool = False,
+            **_: Any,
+        ) -> None:
             super().__init__()
             if fast >= slow:
                 fast, slow = 20, 50
@@ -38,9 +51,9 @@ try:  # pragma: no cover - exercised in integration
             self.eod_flat = bool(eod_flat)
 
             # Runtime state for artifact mapping (MVP, independent of engine internals)
-            self._bar_type: Optional[BarType] = None
-            self._fast: Optional[SimpleMovingAverage] = None
-            self._slow: Optional[SimpleMovingAverage] = None
+            self._bar_type: BarType | None = None
+            self._fast: SimpleMovingAverage | None = None
+            self._slow: SimpleMovingAverage | None = None
             self._in_position: bool = False
             self._pos_qty: int = 0  # track current position size for equity fallback
 
@@ -73,15 +86,20 @@ try:  # pragma: no cover - exercised in integration
                 return
 
             # Extract timestamp and localize to NY for RTH/EOD logic
-            from datetime import timezone
+
             try:
                 from zoneinfo import ZoneInfo
+
                 tz_ny = ZoneInfo("America/New_York")
             except Exception:
                 tz_ny = None
 
-            px = float(bar.close.as_double()) if hasattr(bar.close, 'as_double') else float(bar.close)
-            ts = getattr(bar, 'ts_event', None) or getattr(bar, 'ts_init', None)
+            px = (
+                float(bar.close.as_double())
+                if hasattr(bar.close, "as_double")
+                else float(bar.close)
+            )
+            ts = getattr(bar, "ts_event", None) or getattr(bar, "ts_init", None)
 
             # RTH filter: 09:30 <= time < 16:00 NY
             in_rth = True
@@ -90,13 +108,14 @@ try:  # pragma: no cover - exercised in integration
                 try:
                     local = ts.astimezone(tz_ny)
                     mins = local.hour * 60 + local.minute
-                    in_rth = (mins >= 9*60 + 30) and (mins < 16*60)
+                    in_rth = (mins >= 9 * 60 + 30) and (mins < 16 * 60)
                 except Exception:
                     in_rth = True
 
             # Track canonical equity using Nautilus Portfolio APIs (no made-up math):
             # equity = balance_total(USD) + unrealized_pnls(venue)[USD]
             import logging
+
             logger = logging.getLogger("strategy.equity")
 
             try:
@@ -107,16 +126,28 @@ try:  # pragma: no cover - exercised in integration
                 from nautilus_trader.model.currencies import USD
 
                 bal_money = account.balance_total(USD)
-                bal_val = float(bal_money.as_double()) if hasattr(bal_money, "as_double") else float(bal_money)
+                bal_val = (
+                    float(bal_money.as_double())
+                    if hasattr(bal_money, "as_double")
+                    else float(bal_money)
+                )
 
                 upnls = portfolio.unrealized_pnls(venue)
                 upnl_money = upnls.get(USD)
-                upnl_val = float(upnl_money.as_double()) if (upnl_money is not None and hasattr(upnl_money, "as_double")) else float(upnl_money or 0.0)
+                upnl_val = (
+                    float(upnl_money.as_double())
+                    if (upnl_money is not None and hasattr(upnl_money, "as_double"))
+                    else float(upnl_money or 0.0)
+                )
 
                 equity_val = bal_val + upnl_val
-                logger.debug(f"Equity snapshot: cash={bal_val:.2f}, upnl={upnl_val:.2f}, eq={equity_val:.2f}")
+                logger.debug(
+                    f"Equity snapshot: cash={bal_val:.2f}, upnl={upnl_val:.2f}, eq={equity_val:.2f}"
+                )
             except Exception as e:
-                logger.error(f"❌ CRITICAL: Failed to obtain canonical equity (balance_total + unrealized_pnls): {type(e).__name__}: {e}")
+                logger.error(
+                    f"❌ CRITICAL: Failed to obtain canonical equity (balance_total + unrealized_pnls): {type(e).__name__}: {e}"
+                )
                 raise RuntimeError(f"Canonical equity unavailable from Nautilus: {e}") from e
 
             self.equity.append({"ts_utc": ts, "value": equity_val})
@@ -125,7 +156,12 @@ try:  # pragma: no cover - exercised in integration
                 # Optionally flatten if outside RTH, but we rely on EOD flatten at 15:59
                 return
 
-            if not self._fast or not self._slow or not self._fast.initialized or not self._slow.initialized:
+            if (
+                not self._fast
+                or not self._slow
+                or not self._fast.initialized
+                or not self._slow.initialized
+            ):
                 # Not enough history yet for signals
                 # But allow EOD flatten safeguard below if needed
                 pass
@@ -140,18 +176,19 @@ try:  # pragma: no cover - exercised in integration
                     self._place(OrderSide.SELL, px, ts)
 
             # End-of-day flatten at 15:59 NY
-            if self.eod_flat and self._in_position and mins is not None and mins == (15*60 + 59):
+            if self.eod_flat and self._in_position and mins is not None and mins == (15 * 60 + 59):
                 self._place(OrderSide.SELL, px, ts)
 
         # Generic event handler to catch ALL events for debugging
         def on_event(self, event) -> None:  # pragma: no cover
             import logging
+
             logger = logging.getLogger("strategy.events")
 
             event_type = type(event).__name__
 
             # Log all order-related events
-            if 'Order' in event_type:
+            if "Order" in event_type:
                 logger.info(f"EVENT: {event_type} - {event}")
 
             # Call parent to ensure normal processing continues
@@ -160,6 +197,7 @@ try:  # pragma: no cover - exercised in integration
         # Keep artifacts in sync when fills occur (best-effort; details may vary by engine)
         def on_order_filled(self, event) -> None:  # pragma: no cover
             import logging
+
             logger = logging.getLogger("strategy.fills")
 
             logger.info(f"🎯 on_order_filled CALLED! Event: {event}")
@@ -167,9 +205,13 @@ try:  # pragma: no cover - exercised in integration
             try:
                 # OrderFilled event has order_side directly, not event.order.side
                 side = event.order_side  # BUY/SELL enum
-                px = float(event.last_px.as_double()) if hasattr(event, 'last_px') else float(event.avg_px.as_double())
-                qty = int(event.last_qty) if hasattr(event, 'last_qty') else int(event.quantity)
-                ts = getattr(event, 'ts_event', None)
+                px = (
+                    float(event.last_px.as_double())
+                    if hasattr(event, "last_px")
+                    else float(event.avg_px.as_double())
+                )
+                qty = int(event.last_qty) if hasattr(event, "last_qty") else int(event.quantity)
+                ts = getattr(event, "ts_event", None)
 
                 # Update position tracking (simple flag for strategy logic)
                 if side == OrderSide.BUY:
@@ -195,7 +237,7 @@ try:  # pragma: no cover - exercised in integration
                     "order_id": str(event.client_order_id),
                     "qty": qty,
                     "price": px,
-                    "fill_id": str(getattr(event, 'trade_id', 'unknown')),
+                    "fill_id": str(getattr(event, "trade_id", "unknown")),
                     "slippage": 0.0,
                     "fee": 0.0,
                 }
@@ -208,18 +250,23 @@ try:  # pragma: no cover - exercised in integration
             except Exception as e:
                 logger.error(f"❌ ERROR in on_order_filled: {type(e).__name__}: {e}")
                 import traceback
+
                 logger.error(traceback.format_exc())
 
         # Helper to submit a market order and record an order artifact
         def _place(self, side: OrderSide, px: float, ts) -> None:
             import logging
+
             logger = logging.getLogger("strategy.orders")
 
             from nautilus_trader.model.objects import Quantity
+
             qty_int = int(self.qty)
             qty = Quantity.from_int(qty_int)
             # Changed from IOC to GTC - IOC orders may not trigger on_order_filled in backtest
-            order = self.order_factory.market(self.instrument_id, side, qty, time_in_force=TimeInForce.GTC)
+            order = self.order_factory.market(
+                self.instrument_id, side, qty, time_in_force=TimeInForce.GTC
+            )
             self.submit_order(order)
             oid = f"naut-{self._oid_seq}"
             self._oid_seq += 1
@@ -231,7 +278,7 @@ try:  # pragma: no cover - exercised in integration
                 "price": px,
                 "order_id": oid,
                 "type": "MKT",
-                "time_in_force": "GTC"
+                "time_in_force": "GTC",
             }
             self.orders.append(order_data)
 
@@ -256,4 +303,3 @@ except Exception:  # pragma: no cover - fallback placeholder when Nautilus not i
 
         def __repr__(self) -> str:
             return f"SMAStrategy(fast={self.fast}, slow={self.slow})"
-

@@ -26,13 +26,19 @@ describe('API Router fallback (env-gated)', () => {
     vi.stubEnv('VITE_BFF_FALLBACK_ENABLED', 'true')
 
     // BFF call fails
-    mockFetch.mockResolvedValueOnce({ ok: false, status: 502, statusText: 'Bad Gateway' } as Response)
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      statusText: 'Bad Gateway',
+    } as Response)
 
     const { apiRouter } = await import('../../utils/apiRouter')
-    await expect(apiRouter.routeAPICall<any>('chartData', '/chart-data?symbol=AAPL', {
-      method: 'GET',
-      allowFallback: true,
-    })).rejects.toThrow('HTTP 502')
+    await expect(
+      apiRouter.routeAPICall<any>('chartData', '/chart-data?symbol=AAPL', {
+        method: 'GET',
+        allowFallback: true,
+      }),
+    ).rejects.toThrow('HTTP 502')
 
     // Only one fetch call (to BFF); no backend fallback call
     expect(mockFetch).toHaveBeenCalledTimes(1)
@@ -40,4 +46,3 @@ describe('API Router fallback (env-gated)', () => {
     expect(mockFetch.mock.calls[0][0]).toContain('/api/v1/chart-data?symbol=AAPL')
   })
 })
-

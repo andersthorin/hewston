@@ -5,13 +5,21 @@
  */
 
 import { useQuery, useMutation, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
-import { backtestDataService, type BFFAggregatedBacktestResponse, type BFFBacktestListResponse } from '../services/runData'
+import {
+  backtestDataService,
+  type BFFAggregatedBacktestResponse,
+  type BFFBacktestListResponse,
+} from '../services/runData'
 import { featureFlagService } from '../services/featureFlags'
-import type { BacktestListQuery, CreateBacktestRequest, CreateBacktestResponse } from '../services/api'
+import type {
+  BacktestListQuery,
+  CreateBacktestRequest,
+  CreateBacktestResponse,
+} from '../services/api'
 
 export function useBacktestList(
   query: BacktestListQuery = {},
-  enabled: boolean = true
+  enabled: boolean = true,
 ): UseQueryResult<BFFBacktestListResponse, Error> {
   const useBFF = featureFlagService.isFeatureFlagEnabled('runData')
   return useQuery({
@@ -23,10 +31,12 @@ export function useBacktestList(
     refetchOnWindowFocus: true,
     refetchInterval: (q) => {
       const items = (q.state.data as any)?.items || []
-      const hasActive = Array.isArray(items) && items.some((it: any) => {
-        const s = String(it?.status || '').toUpperCase()
-        return s !== 'DONE' && s !== 'COMPLETED' && s !== 'ERROR' && s !== 'FAILED'
-      })
+      const hasActive =
+        Array.isArray(items) &&
+        items.some((it: any) => {
+          const s = String(it?.status || '').toUpperCase()
+          return s !== 'DONE' && s !== 'COMPLETED' && s !== 'ERROR' && s !== 'FAILED'
+        })
       return hasActive ? 2000 : false
     },
   })
@@ -34,7 +44,7 @@ export function useBacktestList(
 
 export function useBacktestDetail(
   backtest_id: string | undefined,
-  enabled: boolean = true
+  enabled: boolean = true,
 ): UseQueryResult<BFFAggregatedBacktestResponse, Error> {
   const useBFF = featureFlagService.isFeatureFlagEnabled('runData')
   return useQuery({
@@ -57,8 +67,13 @@ export function useCreateBacktest() {
   const useBFF = featureFlagService.isFeatureFlagEnabled('runData')
 
   return useMutation({
-    mutationFn: ({ request, idempotencyKey }: { request: CreateBacktestRequest; idempotencyKey?: string }) =>
-      backtestDataService.createBacktest(request, idempotencyKey),
+    mutationFn: ({
+      request,
+      idempotencyKey,
+    }: {
+      request: CreateBacktestRequest
+      idempotencyKey?: string
+    }) => backtestDataService.createBacktest(request, idempotencyKey),
 
     onSuccess: (data: CreateBacktestResponse & { backtest_id?: string }) => {
       queryClient.invalidateQueries({ queryKey: ['backtests', 'list'] })
@@ -76,17 +91,29 @@ export function useCreateBacktest() {
 
 export function useBacktestMetrics(backtest_id: string | undefined, enabled: boolean = true) {
   const result = useBacktestDetail(backtest_id, enabled)
-  return { ...result, data: result.data?.metrics || null, isAggregated: result.data?.meta?.aggregated || false }
+  return {
+    ...result,
+    data: result.data?.metrics || null,
+    isAggregated: result.data?.meta?.aggregated || false,
+  }
 }
 
 export function useBacktestEquity(backtest_id: string | undefined, enabled: boolean = true) {
   const result = useBacktestDetail(backtest_id, enabled)
-  return { ...result, data: result.data?.equity || null, isAggregated: result.data?.meta?.aggregated || false }
+  return {
+    ...result,
+    data: result.data?.equity || null,
+    isAggregated: result.data?.meta?.aggregated || false,
+  }
 }
 
 export function useBacktestOrders(backtest_id: string | undefined, enabled: boolean = true) {
   const result = useBacktestDetail(backtest_id, enabled)
-  return { ...result, data: result.data?.orders || null, isAggregated: result.data?.meta?.aggregated || false }
+  return {
+    ...result,
+    data: result.data?.orders || null,
+    isAggregated: result.data?.meta?.aggregated || false,
+  }
 }
 
 export function useBacktestDataMetrics() {

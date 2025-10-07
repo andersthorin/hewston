@@ -1,6 +1,6 @@
 /**
  * Chart data hooks with BFF integration and feature flag support.
- * 
+ *
  * These hooks provide a unified interface for fetching chart data that
  * automatically routes to BFF or backend based on feature flag configuration.
  */
@@ -16,16 +16,16 @@ export function useDailyChartData(
   symbol: string | undefined,
   from?: string,
   to?: string,
-  enabled: boolean = true
+  enabled: boolean = true,
 ): UseQueryResult<BFFChartDataResponse, Error> {
   const useBFF = featureFlagService.isFeatureFlagEnabled('chartData')
-  
+
   return useQuery({
     queryKey: ['chart-data', 'daily', symbol, from, to, useBFF ? 'bff' : 'backend'],
     queryFn: () => chartDataService.fetchDailyData(symbol!, from, to),
     enabled: enabled && !!symbol,
     staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000,   // 10 minutes (was cacheTime)
+    gcTime: 10 * 60 * 1000, // 10 minutes (was cacheTime)
   })
 }
 
@@ -38,25 +38,25 @@ export function useMinuteChartData(
   to: string | undefined,
   target?: number,
   rth_only: boolean = true,
-  enabled: boolean = true
+  enabled: boolean = true,
 ): UseQueryResult<BFFChartDataResponse, Error> {
   const useBFF = featureFlagService.isFeatureFlagEnabled('chartData')
-  
+
   return useQuery({
     queryKey: [
-      'chart-data', 
-      'minute', 
-      symbol, 
-      from, 
-      to, 
-      target, 
-      rth_only, 
-      useBFF ? 'bff' : 'backend'
+      'chart-data',
+      'minute',
+      symbol,
+      from,
+      to,
+      target,
+      rth_only,
+      useBFF ? 'bff' : 'backend',
     ],
     queryFn: () => chartDataService.fetchMinuteData(symbol!, from!, to!, target, rth_only),
     enabled: enabled && !!symbol && !!from && !!to,
     staleTime: 2 * 60 * 1000, // 2 minutes
-    gcTime: 5 * 60 * 1000,    // 5 minutes
+    gcTime: 5 * 60 * 1000, // 5 minutes
   })
 }
 
@@ -68,24 +68,16 @@ export function useHourChartData(
   from: string | undefined,
   to: string | undefined,
   rth_only: boolean = true,
-  enabled: boolean = true
+  enabled: boolean = true,
 ): UseQueryResult<BFFChartDataResponse, Error> {
   const useBFF = featureFlagService.isFeatureFlagEnabled('chartData')
-  
+
   return useQuery({
-    queryKey: [
-      'chart-data', 
-      'hour', 
-      symbol, 
-      from, 
-      to, 
-      rth_only, 
-      useBFF ? 'bff' : 'backend'
-    ],
+    queryKey: ['chart-data', 'hour', symbol, from, to, rth_only, useBFF ? 'bff' : 'backend'],
     queryFn: () => chartDataService.fetchHourData(symbol!, from!, to!, rth_only),
     enabled: enabled && !!symbol && !!from && !!to,
     staleTime: 5 * 60 * 1000, // 5 minutes
-    gcTime: 10 * 60 * 1000,   // 10 minutes
+    gcTime: 10 * 60 * 1000, // 10 minutes
   })
 }
 
@@ -97,38 +89,38 @@ export function useAdaptiveChartData(
   from: string | undefined,
   to: string | undefined,
   preferredTimeframe: 'daily' | 'minute' | 'hour' = 'hour',
-  enabled: boolean = true
+  enabled: boolean = true,
 ): UseQueryResult<BFFChartDataResponse, Error> {
   const useBFF = featureFlagService.isFeatureFlagEnabled('chartData')
-  
+
   // Calculate optimal target for decimation based on date range
   const calculateTarget = (from?: string, to?: string): number | undefined => {
     if (!from || !to) return undefined
-    
+
     const fromDate = new Date(from)
     const toDate = new Date(to)
     const daysDiff = Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24))
-    
+
     // For minute data, target ~10k points for good performance
     if (preferredTimeframe === 'minute' && daysDiff > 30) {
       return 10000
     }
-    
+
     return undefined
   }
-  
+
   const target = calculateTarget(from, to)
-  
+
   return useQuery({
     queryKey: [
-      'chart-data', 
+      'chart-data',
       'adaptive',
       preferredTimeframe,
-      symbol, 
-      from, 
-      to, 
+      symbol,
+      from,
+      to,
       target,
-      useBFF ? 'bff' : 'backend'
+      useBFF ? 'bff' : 'backend',
     ],
     queryFn: () => {
       switch (preferredTimeframe) {
@@ -144,7 +136,7 @@ export function useAdaptiveChartData(
     },
     enabled: enabled && !!symbol && !!from && !!to,
     staleTime: 3 * 60 * 1000, // 3 minutes
-    gcTime: 8 * 60 * 1000,    // 8 minutes
+    gcTime: 8 * 60 * 1000, // 8 minutes
   })
 }
 
@@ -154,7 +146,7 @@ export function useAdaptiveChartData(
 export function useChartDataMetrics() {
   const metrics = chartDataService.getPerformanceMetrics()
   const debugInfo = featureFlagService.getDebugInfo()
-  
+
   return {
     ...metrics,
     featureFlags: {
@@ -184,17 +176,19 @@ export function useDailyData(
   symbol: string | undefined,
   from?: string,
   to?: string,
-  enabled: boolean = true
+  enabled: boolean = true,
 ) {
   const result = useDailyChartData(symbol, from, to, enabled)
-  
+
   // Transform BFF response to legacy format for backward compatibility
   return {
     ...result,
-    data: result.data ? {
-      symbol: result.data.symbol,
-      bars: result.data.bars,
-    } : undefined,
+    data: result.data
+      ? {
+          symbol: result.data.symbol,
+          bars: result.data.bars,
+        }
+      : undefined,
   }
 }
 
@@ -207,21 +201,25 @@ export function useMinuteData(
   to: string | undefined,
   target?: number,
   rth_only: boolean = true,
-  enabled: boolean = true
+  enabled: boolean = true,
 ) {
   const result = useMinuteChartData(symbol, from, to, target, rth_only, enabled)
-  
+
   // Transform BFF response to legacy format for backward compatibility
   return {
     ...result,
-    data: result.data ? {
-      symbol: result.data.symbol,
-      bars: result.data.bars,
-      meta: result.data.meta ? {
-        stride_minutes: result.data.meta.stride_minutes,
-        points: result.data.meta.points,
-      } : undefined,
-    } : undefined,
+    data: result.data
+      ? {
+          symbol: result.data.symbol,
+          bars: result.data.bars,
+          meta: result.data.meta
+            ? {
+                stride_minutes: result.data.meta.stride_minutes,
+                points: result.data.meta.points,
+              }
+            : undefined,
+        }
+      : undefined,
   }
 }
 
@@ -233,16 +231,18 @@ export function useHourData(
   from: string | undefined,
   to: string | undefined,
   rth_only: boolean = true,
-  enabled: boolean = true
+  enabled: boolean = true,
 ) {
   const result = useHourChartData(symbol, from, to, rth_only, enabled)
-  
+
   // Transform BFF response to legacy format for backward compatibility
   return {
     ...result,
-    data: result.data ? {
-      symbol: result.data.symbol,
-      bars: result.data.bars,
-    } : undefined,
+    data: result.data
+      ? {
+          symbol: result.data.symbol,
+          bars: result.data.bars,
+        }
+      : undefined,
   }
 }

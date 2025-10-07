@@ -81,4 +81,3 @@ function Row({ r, onView }: { r: BacktestSummaryRow; onView?: (id: string) => vo
 }
 
 export default BacktestsTable
-

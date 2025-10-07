@@ -32,4 +32,3 @@ def test_ingest_idempotent_and_force(tmp_path, monkeypatch):
     sizes3 = ingest.ingest_databento("AAPL", 2023, force=True)
     assert sizes3["TRADES"] == s_trades_1
     assert sizes3["TBBO"] == s_tbbo_1
-

@@ -1,6 +1,6 @@
 /**
  * BFF Performance Monitor Component
- * 
+ *
  * Development component for monitoring and comparing BFF vs backend performance.
  * Only rendered in development mode with feature flag debugging enabled.
  */
@@ -46,7 +46,7 @@ export function BFFPerformanceMonitor({ runId, className = '' }: BFFPerformanceM
     setIsRunningTest(true)
     try {
       const result = await webSocketPerformanceTester.runPerformanceTest(runId, 10000, 'streaming')
-      setTestResults(prev => [...prev, result])
+      setTestResults((prev) => [...prev, result])
     } catch (error) {
       console.error('Performance test failed:', error)
     } finally {
@@ -65,11 +65,13 @@ export function BFFPerformanceMonitor({ runId, className = '' }: BFFPerformanceM
   }
 
   return (
-    <div className={`fixed bottom-4 right-4 bg-gray-900 text-white p-4 rounded-lg shadow-lg max-w-md z-50 ${className}`}>
+    <div
+      className={`fixed bottom-4 right-4 bg-gray-900 text-white p-4 rounded-lg shadow-lg max-w-md z-50 ${className}`}
+    >
       <div className="flex justify-between items-center mb-3">
         <h3 className="text-lg font-semibold">🎛️ BFF Performance Monitor</h3>
         <button
-          onClick={() => console.log('Hide monitor not implemented') }
+          onClick={() => console.log('Hide monitor not implemented')}
           className="text-gray-400 hover:text-white"
         >
           ✕
@@ -82,19 +84,29 @@ export function BFFPerformanceMonitor({ runId, className = '' }: BFFPerformanceM
         <div className="text-sm space-y-1">
           <div className="flex justify-between">
             <span>BFF Master:</span>
-            <span className={featureFlagService.getConfiguration().bffEnabled ? 'text-green-400' : 'text-red-400'}>
+            <span
+              className={
+                featureFlagService.getConfiguration().bffEnabled ? 'text-green-400' : 'text-red-400'
+              }
+            >
               {featureFlagService.getConfiguration().bffEnabled ? 'ON' : 'OFF'}
             </span>
           </div>
           <div className="flex justify-between">
             <span>Chart Data:</span>
-            <span className={chartMetrics.featureFlags.chartDataEnabled ? 'text-green-400' : 'text-red-400'}>
+            <span
+              className={
+                chartMetrics.featureFlags.chartDataEnabled ? 'text-green-400' : 'text-red-400'
+              }
+            >
               {chartMetrics.featureFlags.chartDataEnabled ? 'BFF' : 'Backend'}
             </span>
           </div>
           <div className="flex justify-between">
             <span>Run Data:</span>
-            <span className={runMetrics.featureFlags.runDataEnabled ? 'text-green-400' : 'text-red-400'}>
+            <span
+              className={runMetrics.featureFlags.runDataEnabled ? 'text-green-400' : 'text-red-400'}
+            >
               {runMetrics.featureFlags.runDataEnabled ? 'BFF' : 'Backend'}
             </span>
           </div>
@@ -131,7 +143,11 @@ export function BFFPerformanceMonitor({ runId, className = '' }: BFFPerformanceM
           </div>
           <div className="flex justify-between">
             <span>Dropped:</span>
-            <span className={wsHealth.performanceMetrics.droppedFrames > 5 ? 'text-red-400' : 'text-green-400'}>
+            <span
+              className={
+                wsHealth.performanceMetrics.droppedFrames > 5 ? 'text-red-400' : 'text-green-400'
+              }
+            >
               {wsHealth.performanceMetrics.droppedFrames}
             </span>
           </div>
@@ -166,9 +182,7 @@ export function BFFPerformanceMonitor({ runId, className = '' }: BFFPerformanceM
           </div>
           <div className="flex justify-between">
             <span>API Reduction:</span>
-            <span className="text-green-400">
-              {runMetrics.aggregationBenefit}x fewer calls
-            </span>
+            <span className="text-green-400">{runMetrics.aggregationBenefit}x fewer calls</span>
           </div>
         </div>
       </div>
@@ -194,7 +208,9 @@ export function BFFPerformanceMonitor({ runId, className = '' }: BFFPerformanceM
         {testResults.length > 0 && (
           <div className="text-sm">
             <div>Tests: {testResults.length}</div>
-            <div>Last: {testResults[testResults.length - 1].streaming.averageFPS.toFixed(1)} FPS</div>
+            <div>
+              Last: {testResults[testResults.length - 1].streaming.averageFPS.toFixed(1)} FPS
+            </div>
           </div>
         )}
       </div>
@@ -243,7 +259,7 @@ export function useBFFPerformanceMonitor() {
     // Add keyboard shortcut to toggle
     const handleKeyPress = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.shiftKey && e.key === 'P') {
-        setShouldShow(prev => !prev)
+        setShouldShow((prev) => !prev)
       }
     }
 

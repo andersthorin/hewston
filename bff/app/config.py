@@ -6,17 +6,23 @@ established in backend/constants.py while providing BFF-specific settings.
 """
 
 import os
-from typing import List
 
 # API Configuration
 BFF_API_TITLE = "Hewston BFF API"
 BFF_API_VERSION = "0.1.0"
-BFF_API_DESCRIPTION = "Backend-for-Frontend service providing aggregated APIs for Hewston trading platform"
+BFF_API_DESCRIPTION = (
+    "Backend-for-Frontend service providing aggregated APIs for Hewston trading platform"
+)
 
 # Server Configuration
 BFF_DEFAULT_HOST = "127.0.0.1"
 BFF_DEFAULT_PORT = 8001  # Different from backend (8000) to avoid conflicts
-BFF_CORS_ORIGINS = ["http://127.0.0.1:5173", "http://localhost:5173", "http://127.0.0.1:5174", "http://localhost:5174"]
+BFF_CORS_ORIGINS = [
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "http://127.0.0.1:5174",
+    "http://localhost:5174",
+]
 
 # Backend Integration
 BACKEND_BASE_URL = os.getenv("HEWSTON_BACKEND_URL", "http://127.0.0.1:8000")
@@ -34,10 +40,7 @@ MAX_CONCURRENT_BACKEND_REQUESTS = 10
 REQUEST_TIMEOUT_SECONDS = 30
 
 # Health Check Configuration
-HEALTH_CHECK_DEPENDENCIES = [
-    "backend_api",
-    "redis" if REDIS_ENABLED else None
-]
+HEALTH_CHECK_DEPENDENCIES = ["backend_api", "redis" if REDIS_ENABLED else None]
 
 # Remove None values
 HEALTH_CHECK_DEPENDENCIES = [dep for dep in HEALTH_CHECK_DEPENDENCIES if dep is not None]

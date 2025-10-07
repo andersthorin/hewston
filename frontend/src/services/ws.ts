@@ -34,7 +34,7 @@ export function useBacktestPlayback(backtestId: string) {
     playing: false,
     speed: 60,
     dropped: 0,
-    connectionSource: featureFlagService.isFeatureFlagEnabled('websocket') ? 'bff' : 'backend'
+    connectionSource: featureFlagService.isFeatureFlagEnabled('websocket') ? 'bff' : 'backend',
   })
   const subsRef = useRef<Set<Subscription>>(new Set())
   const workerRef = useRef<Worker | null>(null)
@@ -54,12 +54,14 @@ export function useBacktestPlayback(backtestId: string) {
   const lastWorkerOutTimeRef = useRef<number>(0)
   const lastConsumeTimeRef = useRef<number>(0)
 
-
   const notify = useCallback((f: StreamFrameT) => {
     if (framesSeenRef.current <= 20) {
       try {
         // eslint-disable-next-line no-console
-        console.debug('[notify->subs]', { n: framesSeenRef.current, ts: (f as any)?.equity?.ts || (f as any)?.ts })
+        console.debug('[notify->subs]', {
+          n: framesSeenRef.current,
+          ts: (f as any)?.equity?.ts || (f as any)?.ts,
+        })
       } catch {}
     }
     subsRef.current.forEach((cb) => cb(f))
@@ -71,13 +73,15 @@ export function useBacktestPlayback(backtestId: string) {
       ...s,
       health,
       connectionSource: health.connectionSource,
-      dropped: (health.droppedFrames ?? s.dropped)
+      dropped: health.droppedFrames ?? s.dropped,
     }))
   }, [])
 
   useEffect(() => {
     // Initialize worker
-    const worker = new Worker(new URL('../workers/streamParser.ts', import.meta.url), { type: 'module' })
+    const worker = new Worker(new URL('../workers/streamParser.ts', import.meta.url), {
+      type: 'module',
+    })
     worker.postMessage({ type: 'init', fps: DEFAULT_FPS })
     worker.onmessage = (ev: MessageEvent<WorkerOutMessage>) => {
       const msg = ev.data
@@ -86,7 +90,10 @@ export function useBacktestPlayback(backtestId: string) {
         if (framesSeenRef.current <= 20) {
           try {
             // eslint-disable-next-line no-console
-            console.debug('[fe-worker->main]', { n: framesSeenRef.current, ts: (msg.data as any)?.equity?.ts || (msg.data as any)?.ts })
+            console.debug('[fe-worker->main]', {
+              n: framesSeenRef.current,
+              ts: (msg.data as any)?.equity?.ts || (msg.data as any)?.ts,
+            })
           } catch {}
         }
         // Buffer frame and drop-oldest if buffer grows too large
@@ -111,11 +118,15 @@ export function useBacktestPlayback(backtestId: string) {
     }
     // Capture worker fatal errors (outside its postMessage protocol)
     worker.addEventListener('error', (e) => {
-      try { console.error('[worker.onerror]', e.message || e) } catch {}
+      try {
+        console.error('[worker.onerror]', e.message || e)
+      } catch {}
       setState((s) => ({ ...s, status: 'error', playing: false }))
     })
     worker.addEventListener('messageerror', (e) => {
-      try { console.error('[worker.messageerror]', e.data) } catch {}
+      try {
+        console.error('[worker.messageerror]', e.data)
+      } catch {}
     })
     workerRef.current = worker
 
@@ -170,7 +181,8 @@ export function useBacktestPlayback(backtestId: string) {
           }
           try {
             // eslint-disable-next-line no-console
-            if (feRawDebugRef.current <= 20) console.debug('[main->worker] post frame', { n: feRawDebugRef.current })
+            if (feRawDebugRef.current <= 20)
+              console.debug('[main->worker] post frame', { n: feRawDebugRef.current })
             worker.postMessage({ type: 'frame', payload: msg })
           } catch (err) {
             console.error('Failed to post frame to worker', err)
@@ -188,7 +200,8 @@ export function useBacktestPlayback(backtestId: string) {
     const unsubscribeClose = wsManager.addEventListener('close', () => {
       // Reflect manager state to avoid sticky 'error' during auto-reconnects
       const mgrState = wsManager.getState()
-      const nextStatus: PlaybackState['status'] = (mgrState === 'reconnecting' || mgrState === 'connecting') ? 'connecting' : 'error'
+      const nextStatus: PlaybackState['status'] =
+        mgrState === 'reconnecting' || mgrState === 'connecting' ? 'connecting' : 'error'
       setState((s) => ({ ...s, status: nextStatus, playing: false }))
       updateHealthInfo(wsManager.getHealth())
     })
@@ -197,7 +210,8 @@ export function useBacktestPlayback(backtestId: string) {
       console.warn('WebSocket error:', error)
       // If auto-reconnect is enabled, show 'connecting' to avoid frozen/error UX
       const mgrState = wsManager.getState()
-      const nextStatus: PlaybackState['status'] = (mgrState === 'reconnecting' || mgrState === 'connecting') ? 'connecting' : 'error'
+      const nextStatus: PlaybackState['status'] =
+        mgrState === 'reconnecting' || mgrState === 'connecting' ? 'connecting' : 'error'
       setState((s) => ({ ...s, status: nextStatus, playing: false }))
       updateHealthInfo(wsManager.getHealth())
     })
@@ -216,7 +230,11 @@ export function useBacktestPlayback(backtestId: string) {
               const next = frameBufferRef.current.shift()!
               const bufAfter = frameBufferRef.current.length
               // eslint-disable-next-line no-console
-              console.debug('[diag][raf.consume]', { dt, buf_before: bufBefore, buf_after: bufAfter })
+              console.debug('[diag][raf.consume]', {
+                dt,
+                buf_before: bufBefore,
+                buf_after: bufAfter,
+              })
               notify(next)
             }
             lastPaintRef.current = t
@@ -233,16 +251,18 @@ export function useBacktestPlayback(backtestId: string) {
       updateHealthInfo(wsManager.getHealth())
     })
 
-    const unsubscribeHealthUpdate = wsManager.addEventListener('healthUpdate', (health: WebSocketHealth) => {
-      updateHealthInfo(health)
-    })
-
+    const unsubscribeHealthUpdate = wsManager.addEventListener(
+      'healthUpdate',
+      (health: WebSocketHealth) => {
+        updateHealthInfo(health)
+      },
+    )
 
     const connect = () => {
       if (closed) return
       setState((s) => ({ ...s, status: 'connecting' }))
 
-      wsManager.connect().catch(error => {
+      wsManager.connect().catch((error) => {
         console.warn('WebSocket connection failed:', error)
         setState((s) => ({ ...s, status: 'error', playing: false }))
       })
@@ -279,7 +299,7 @@ export function useBacktestPlayback(backtestId: string) {
         workerRef.current = null
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [backtestId])
 
   // Keep a ref in sync with playing state (covers error/close transitions)
@@ -289,7 +309,9 @@ export function useBacktestPlayback(backtestId: string) {
 
   const subscribe = useCallback((cb: Subscription) => {
     subsRef.current.add(cb)
-    return () => { subsRef.current.delete(cb) }
+    return () => {
+      subsRef.current.delete(cb)
+    }
   }, [])
 
   const onPlay = useCallback(() => {
@@ -345,7 +367,6 @@ export function useBacktestPlayback(backtestId: string) {
     // Enhanced BFF functions
     getConnectionHealth,
     reconnect,
-    ping
+    ping,
   }
 }
-

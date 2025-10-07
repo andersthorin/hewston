@@ -19,7 +19,7 @@ vi.mock('../../services/featureFlags', () => ({
     evaluateFeatureFlag: vi.fn(),
     getConfiguration: vi.fn(),
     validateConfiguration: vi.fn(),
-  }
+  },
 }))
 
 // Mock import.meta.env
@@ -29,8 +29,8 @@ vi.stubGlobal('import', {
       VITE_API_BASE_URL: 'http://127.0.0.1:8000',
       VITE_BFF_BASE_URL: 'http://127.0.0.1:8001',
       VITE_FEATURE_FLAG_DEBUG: 'false',
-    }
-  }
+    },
+  },
 })
 
 describe('APIClientRouter', () => {
@@ -53,16 +53,16 @@ describe('APIClientRouter', () => {
       vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: false,
         endpointUrl: 'http://127.0.0.1:8000/bars',
-        source: 'backend'
+        source: 'backend',
       })
 
       vi.mocked(featureFlagService.getConfiguration).mockReturnValue({
-        bffEnabled: false
+        bffEnabled: false,
       })
 
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ data: 'test' })
+        json: () => Promise.resolve({ data: 'test' }),
       })
 
       const result = await router.routeAPICall('chartData', '/bars/daily')
@@ -71,9 +71,9 @@ describe('APIClientRouter', () => {
         'http://127.0.0.1:8000/bars/daily',
         expect.objectContaining({
           headers: expect.objectContaining({
-            'Content-Type': 'application/json'
-          })
-        })
+            'Content-Type': 'application/json',
+          }),
+        }),
       )
       expect(result).toEqual({ data: 'test' })
     })
@@ -82,23 +82,23 @@ describe('APIClientRouter', () => {
       vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data',
-        source: 'bff'
+        source: 'bff',
       })
 
       vi.mocked(featureFlagService.getConfiguration).mockReturnValue({
-        bffEnabled: true
+        bffEnabled: true,
       })
 
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ data: 'bff-test' })
+        json: () => Promise.resolve({ data: 'bff-test' }),
       })
 
       const result = await router.routeAPICall('chartData', '/bars/daily')
 
       expect(mockFetch).toHaveBeenCalledWith(
         'http://127.0.0.1:8001/api/v1/chart-data',
-        expect.any(Object)
+        expect.any(Object),
       )
       expect(result).toEqual({ data: 'bff-test' })
     })
@@ -107,18 +107,18 @@ describe('APIClientRouter', () => {
       vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data',
-        source: 'bff'
+        source: 'bff',
       })
 
       vi.mocked(featureFlagService.getConfiguration).mockReturnValue({
-        bffEnabled: true
+        bffEnabled: true,
       })
 
       // BFF call fails; no fallback allowed by policy
       mockFetch.mockRejectedValueOnce(new Error('BFF unavailable'))
 
       await expect(
-        router.routeAPICall('chartData', '/bars/daily', { allowFallback: true })
+        router.routeAPICall('chartData', '/bars/daily', { allowFallback: true }),
       ).rejects.toThrow('BFF unavailable')
 
       expect(mockFetch).toHaveBeenCalledTimes(1)
@@ -128,15 +128,15 @@ describe('APIClientRouter', () => {
       vi.mocked(featureFlagService).evaluateFeatureFlag.mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data',
-        source: 'bff'
+        source: 'bff',
       })
 
       mockFetch.mockRejectedValue(new Error('BFF unavailable'))
 
       await expect(
         router.routeAPICall('chartData', '/bars/daily', {
-          allowFallback: false
-        })
+          allowFallback: false,
+        }),
       ).rejects.toThrow('BFF unavailable')
 
       expect(mockFetch).toHaveBeenCalledTimes(1)
@@ -148,23 +148,23 @@ describe('APIClientRouter', () => {
       vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data',
-        source: 'bff'
+        source: 'bff',
       })
 
       vi.mocked(featureFlagService.getConfiguration).mockReturnValue({
-        bffEnabled: true
+        bffEnabled: true,
       })
 
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({})
+        json: () => Promise.resolve({}),
       })
 
       await router.routeAPICall('chartData', 'bars/daily')
 
       expect(mockFetch).toHaveBeenCalledWith(
         'http://127.0.0.1:8001/api/v1/chart-data',
-        expect.any(Object)
+        expect.any(Object),
       )
     })
 
@@ -172,23 +172,23 @@ describe('APIClientRouter', () => {
       vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/backtests',
-        source: 'bff'
+        source: 'bff',
       })
 
       vi.mocked(featureFlagService.getConfiguration).mockReturnValue({
-        bffEnabled: true
+        bffEnabled: true,
       })
 
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({})
+        json: () => Promise.resolve({}),
       })
 
       await router.routeAPICall('runData', 'backtests/123')
 
       expect(mockFetch).toHaveBeenCalledWith(
         'http://127.0.0.1:8001/api/v1/backtests/123/complete',
-        expect.any(Object)
+        expect.any(Object),
       )
     })
 
@@ -196,23 +196,23 @@ describe('APIClientRouter', () => {
       vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: true,
         endpointUrl: 'ws://127.0.0.1:8001/api/v1/backtests',
-        source: 'bff'
+        source: 'bff',
       })
 
       vi.mocked(featureFlagService.getConfiguration).mockReturnValue({
-        bffEnabled: true
+        bffEnabled: true,
       })
 
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({})
+        json: () => Promise.resolve({}),
       })
 
       await router.routeAPICall('websocket', 'backtests/123/ws')
 
       expect(mockFetch).toHaveBeenCalledWith(
         'ws://127.0.0.1:8001/api/v1/backtests/123/stream',
-        expect.any(Object)
+        expect.any(Object),
       )
     })
   })
@@ -222,48 +222,44 @@ describe('APIClientRouter', () => {
       vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: false,
         endpointUrl: 'http://127.0.0.1:8000/bars',
-        source: 'backend'
+        source: 'backend',
       })
 
       mockFetch.mockResolvedValue({
         ok: false,
         status: 404,
-        statusText: 'Not Found'
+        statusText: 'Not Found',
       })
 
-      await expect(
-        router.routeAPICall('chartData', '/bars/daily')
-      ).rejects.toThrow('HTTP 404: Not Found')
+      await expect(router.routeAPICall('chartData', '/bars/daily')).rejects.toThrow(
+        'HTTP 404: Not Found',
+      )
     })
 
     it('should handle network errors', async () => {
       vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: false,
         endpointUrl: 'http://127.0.0.1:8000/bars',
-        source: 'backend'
+        source: 'backend',
       })
 
       mockFetch.mockRejectedValue(new Error('Network error'))
 
-      await expect(
-        router.routeAPICall('chartData', '/bars/daily')
-      ).rejects.toThrow('Network error')
+      await expect(router.routeAPICall('chartData', '/bars/daily')).rejects.toThrow('Network error')
     })
 
     it('should handle timeout', async () => {
       vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: false,
         endpointUrl: 'http://127.0.0.1:8000/bars',
-        source: 'backend'
+        source: 'backend',
       })
 
       // Mock a slow response
-      mockFetch.mockImplementation(() => 
-        new Promise(resolve => setTimeout(resolve, 2000))
-      )
+      mockFetch.mockImplementation(() => new Promise((resolve) => setTimeout(resolve, 2000)))
 
       await expect(
-        router.routeAPICall('chartData', '/bars/daily', { timeout: 100 })
+        router.routeAPICall('chartData', '/bars/daily', { timeout: 100 }),
       ).rejects.toThrow()
     })
   })
@@ -273,7 +269,7 @@ describe('APIClientRouter', () => {
       vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: false,
         endpointUrl: 'http://127.0.0.1:8000/bars',
-        source: 'backend'
+        source: 'backend',
       })
 
       const baseUrl = router.getEffectiveBaseURL('chartData')
@@ -293,14 +289,14 @@ describe('APIClientRouter', () => {
       vi.mocked(featureFlagService).evaluateFeatureFlag.mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data',
-        source: 'bff'
+        source: 'bff',
       })
 
       // Mock BFF failure
       mockFetch.mockRejectedValue(new Error('ECONNREFUSED'))
 
       await expect(
-        router.routeAPICall('chartData', '/bars/daily', { allowFallback: false })
+        router.routeAPICall('chartData', '/bars/daily', { allowFallback: false }),
       ).rejects.toThrow('ECONNREFUSED')
     })
 
@@ -308,14 +304,14 @@ describe('APIClientRouter', () => {
       vi.mocked(featureFlagService).evaluateFeatureFlag.mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data',
-        source: 'bff'
+        source: 'bff',
       })
 
       // Mock timeout error
       mockFetch.mockRejectedValue(new Error('ETIMEDOUT'))
 
       await expect(
-        router.routeAPICall('chartData', '/bars/daily', { allowFallback: false })
+        router.routeAPICall('chartData', '/bars/daily', { allowFallback: false }),
       ).rejects.toThrow('ETIMEDOUT')
     })
 
@@ -323,18 +319,18 @@ describe('APIClientRouter', () => {
       vi.mocked(featureFlagService).evaluateFeatureFlag.mockReturnValue({
         enabled: true,
         endpointUrl: 'http://127.0.0.1:8001/api/v1/chart-data',
-        source: 'bff'
+        source: 'bff',
       })
 
       // Mock response with invalid JSON
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.reject(new Error('Unexpected token'))
+        json: () => Promise.reject(new Error('Unexpected token')),
       } as Response)
 
-      await expect(
-        router.routeAPICall('chartData', '/bars/daily')
-      ).rejects.toThrow('Unexpected token')
+      await expect(router.routeAPICall('chartData', '/bars/daily')).rejects.toThrow(
+        'Unexpected token',
+      )
     })
   })
 })

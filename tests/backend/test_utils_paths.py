@@ -31,7 +31,7 @@ class TestPathUtilities:
         """Test get_base_data_dir respects HEWSTON_DATA_DIR environment variable."""
         custom_path = "/custom/data/path"
         monkeypatch.setenv("HEWSTON_DATA_DIR", custom_path)
-        
+
         result = get_base_data_dir()
         assert result == Path(custom_path)
 
@@ -46,7 +46,7 @@ class TestPathUtilities:
         """Test get_catalog_path with custom base directory."""
         custom_base = "/custom/base"
         monkeypatch.setenv("HEWSTON_DATA_DIR", custom_base)
-        
+
         result = get_catalog_path()
         expected = Path(custom_base) / "catalog.db"
         assert result == expected
@@ -62,7 +62,7 @@ class TestPathUtilities:
         """Test get_raw_databento_dir with custom base directory."""
         custom_base = "/custom/base"
         monkeypatch.setenv("HEWSTON_DATA_DIR", custom_base)
-        
+
         result = get_raw_databento_dir()
         expected = Path(custom_base) / "raw" / "databento"
         assert result == expected
@@ -78,12 +78,10 @@ class TestPathUtilities:
         """Test get_backtests_dir with custom base directory."""
         custom_base = "/custom/base"
         monkeypatch.setenv("HEWSTON_DATA_DIR", custom_base)
-        
+
         result = get_backtests_dir()
         expected = Path(custom_base) / "backtests"
         assert result == expected
-
-
 
     def test_get_backtests_dir_with_run_id(self):
         """Test get_backtests_dir with run_id parameter."""

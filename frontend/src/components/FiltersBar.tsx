@@ -20,10 +20,14 @@ export function FiltersBar({ initial, onApply }: FiltersBarProps) {
         value={strategyId}
         onChange={(e) => setStrategyId(e.target.value)}
       />
-      <button className="px-3 py-1 rounded bg-slate-800 text-white hover:bg-slate-700" onClick={() => onApply({ symbol, strategy_id: strategyId })}>Filter</button>
+      <button
+        className="px-3 py-1 rounded bg-slate-800 text-white hover:bg-slate-700"
+        onClick={() => onApply({ symbol, strategy_id: strategyId })}
+      >
+        Filter
+      </button>
     </div>
   )
 }
 
 export default FiltersBar
-

@@ -15,13 +15,14 @@ Schema (Parquet):
   ask_sz: float32 (optional)
 """
 
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, Optional
+
 import pandas as pd
 
 try:
     from databento import DBNStore  # type: ignore
-except Exception as e:  # pragma: no cover
+except Exception:  # pragma: no cover
     DBNStore = None  # type: ignore
 
 
@@ -30,10 +31,18 @@ def _warehouse_base() -> Path:
 
 
 def _out_path(symbol: str, date_str: str, venue: str = "XNAS") -> Path:
-    return _warehouse_base() / f"venue={venue}" / f"symbol={symbol}" / f"date={date_str}" / "quotes.parquet"
+    return (
+        _warehouse_base()
+        / f"venue={venue}"
+        / f"symbol={symbol}"
+        / f"date={date_str}"
+        / "quotes.parquet"
+    )
 
 
-def ingest_tbbo_dbn_to_parquet(dbn_file: Path, instrument_id: int, symbol: str, venue: str = "XNAS") -> Path:
+def ingest_tbbo_dbn_to_parquet(
+    dbn_file: Path, instrument_id: int, symbol: str, venue: str = "XNAS"
+) -> Path:
     """Ingest a single TBBO DBN file to partitioned Parquet for one instrument.
 
     Args:
@@ -64,17 +73,29 @@ def ingest_tbbo_dbn_to_parquet(dbn_file: Path, instrument_id: int, symbol: str, 
             raise ValueError(f"Missing TBBO column {col} in {dbn_file}")
 
     ts = pd.to_datetime(sdf["ts_event"], unit="ns", utc=True)
-    pdf = pd.DataFrame({
-        "ts": ts,
-        "instrument_id": pd.to_numeric(sdf["instrument_id"], errors="coerce", downcast=None),
-        "bid_px": pd.to_numeric(sdf["bid_px_00"], errors="coerce"),
-        "ask_px": pd.to_numeric(sdf["ask_px_00"], errors="coerce"),
-        "bid_sz": pd.to_numeric(sdf.get("bid_sz_00", 0.0), errors="coerce").astype("float32"),
-        "ask_sz": pd.to_numeric(sdf.get("ask_sz_00", 0.0), errors="coerce").astype("float32"),
-    }).dropna(subset=["ts", "bid_px", "ask_px"]).sort_values("ts")
+    pdf = (
+        pd.DataFrame(
+            {
+                "ts": ts,
+                "instrument_id": pd.to_numeric(
+                    sdf["instrument_id"], errors="coerce", downcast=None
+                ),
+                "bid_px": pd.to_numeric(sdf["bid_px_00"], errors="coerce"),
+                "ask_px": pd.to_numeric(sdf["ask_px_00"], errors="coerce"),
+                "bid_sz": pd.to_numeric(sdf.get("bid_sz_00", 0.0), errors="coerce").astype(
+                    "float32"
+                ),
+                "ask_sz": pd.to_numeric(sdf.get("ask_sz_00", 0.0), errors="coerce").astype(
+                    "float32"
+                ),
+            }
+        )
+        .dropna(subset=["ts", "bid_px", "ask_px"])
+        .sort_values("ts")
+    )
 
     # Derive partition key from filename if possible (expects ...YYYYMMDD...)
-    date_str: Optional[str] = None
+    date_str: str | None = None
     for tok in str(dbn_file).split("/")[-1].split(".")[0].split("-"):
         if tok.isdigit() and len(tok) == 8:
             date_str = f"{tok[0:4]}-{tok[4:6]}-{tok[6:8]}"
@@ -90,7 +111,9 @@ def ingest_tbbo_dbn_to_parquet(dbn_file: Path, instrument_id: int, symbol: str, 
     return out_path
 
 
-def ingest_many(dbn_files: Iterable[Path], instrument_id: int, symbol: str, venue: str = "XNAS") -> list[Path]:
+def ingest_many(
+    dbn_files: Iterable[Path], instrument_id: int, symbol: str, venue: str = "XNAS"
+) -> list[Path]:
     written: list[Path] = []
     for f in dbn_files:
         try:
@@ -114,4 +137,3 @@ if __name__ == "__main__":  # simple CLI
 
     paths = ingest_many([Path(p) for p in args.dbn], args.instrument_id, args.symbol, args.venue)
     print("written:", len(paths))
-

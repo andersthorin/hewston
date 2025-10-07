@@ -16,7 +16,6 @@ vi.mock('../../containers/RunPlayerContainer', () => ({
   default: () => <div data-testid="player-stub" />,
 }))
 
-
 import BacktestDetailView from '../BacktestDetail'
 
 function renderAt(path: string) {
@@ -25,7 +24,7 @@ function renderAt(path: string) {
       <Routes>
         <Route path="/backtests/:backtest_id" element={<BacktestDetailView />} />
       </Routes>
-    </MemoryRouter>
+    </MemoryRouter>,
   )
 }
 
@@ -35,4 +34,3 @@ describe('BacktestDetailView', () => {
     expect(await screen.findByText(/Engine: Nautilus Trader/)).toBeInTheDocument()
   })
 })
-

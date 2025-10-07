@@ -5,21 +5,21 @@ Provides dependency injection for BFF services, following FastAPI patterns
 and enabling easy testing and configuration management.
 """
 
-from typing import Optional
-import httpx
+import asyncio
 import logging
 import time
-import asyncio
+
+import httpx
 from fastapi import Depends
 
 from bff.app import config as config
 
 # Global HTTP client for backend communication
-_backend_client: Optional[httpx.AsyncClient] = None
+_backend_client: httpx.AsyncClient | None = None
 # Track the event loop that created the client to avoid cross-loop reuse in tests
-_backend_client_loop_id: Optional[int] = None
+_backend_client_loop_id: int | None = None
 # Track the base URL used to construct the client so patched configs take effect in tests
-_backend_client_base_url: Optional[str] = None
+_backend_client_base_url: str | None = None
 
 # Global Redis client (if enabled)
 _redis_client = None
@@ -40,9 +40,9 @@ async def get_backend_client() -> httpx.AsyncClient:
     current_loop_id = id(current_loop)
     # Normalize backend base URL to include canonical API prefix
     raw_base_url = config.BACKEND_BASE_URL  # read at call time so test patches take effect
-    desired_base_url = raw_base_url.rstrip('/')
-    if not desired_base_url.endswith('/api/v1'):
-        desired_base_url = desired_base_url + '/api/v1'
+    desired_base_url = raw_base_url.rstrip("/")
+    if not desired_base_url.endswith("/api/v1"):
+        desired_base_url = desired_base_url + "/api/v1"
 
     # Recreate client if it does not exist, is bound to a different loop, or base URL changed
     needs_new = (
@@ -63,7 +63,7 @@ async def get_backend_client() -> httpx.AsyncClient:
             timeout=httpx.Timeout(config.BACKEND_TIMEOUT_SECONDS),
             headers={
                 "User-Agent": "Hewston-BFF/0.1.0",
-            }
+            },
         )
         _backend_client_loop_id = current_loop_id
         _backend_client_base_url = desired_base_url
@@ -91,6 +91,7 @@ async def get_redis_client():
     if _redis_client is None:
         try:
             import redis.asyncio as redis
+
             # Use very short socket timeouts to avoid 30s hangs when Redis is unreachable
             _redis_client = redis.from_url(
                 config.REDIS_URL,
@@ -101,8 +102,8 @@ async def get_redis_client():
             # Quick ping to verify connectivity with hard timeout guard
             try:
                 await asyncio.wait_for(_redis_client.ping(), timeout=0.25)
-            except asyncio.TimeoutError:
-                raise TimeoutError("Redis ping timeout")
+            except TimeoutError as err:
+                raise TimeoutError("Redis ping timeout") from err
         except ImportError:
             logging.warning("Redis not available - install redis package for caching")
             # Back off longer if package is missing
@@ -121,7 +122,7 @@ async def get_redis_client():
 async def get_logger() -> logging.Logger:
     """
     Get configured logger for BFF operations.
-    
+
     Returns:
         logging.Logger: Configured logger instance
     """
@@ -139,11 +140,11 @@ async def cleanup_dependencies():
     Cleanup function to close connections on shutdown.
     """
     global _backend_client, _redis_client
-    
+
     if _backend_client:
         await _backend_client.aclose()
         _backend_client = None
-    
+
     if _redis_client:
         await _redis_client.close()
         _redis_client = None

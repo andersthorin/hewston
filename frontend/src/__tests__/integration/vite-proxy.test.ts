@@ -12,7 +12,7 @@ describe('Vite Proxy Integration', () => {
 
   beforeAll(async () => {
     server = await preview({
-      preview: { port: 4173 }
+      preview: { port: 4173 },
     })
   })
 
@@ -26,7 +26,7 @@ describe('Vite Proxy Integration', () => {
       const response = await fetch('http://localhost:4173/api/v1/health')
       // Should attempt to proxy to BFF service
       expect(response).toBeDefined()
-      
+
       // Even if BFF service is not running, proxy should attempt the connection
       // We're testing the proxy configuration, not the service availability
     } catch (error) {
@@ -42,7 +42,7 @@ describe('Vite Proxy Integration', () => {
       const response = await fetch('http://localhost:4173/backtests')
       // Should attempt to proxy to backend service
       expect(response).toBeDefined()
-      
+
       // Even if backend service is not running, proxy should attempt the connection
       // We're testing the proxy configuration, not the service availability
     } catch (error) {
@@ -68,13 +68,13 @@ describe('Vite Proxy Integration', () => {
     try {
       // Attempt WebSocket connection through proxy
       const ws = new WebSocket('ws://localhost:4173/backtests/test-run/ws')
-      
+
       // Wait a moment for connection attempt
-      await new Promise(resolve => setTimeout(resolve, 100))
-      
+      await new Promise((resolve) => setTimeout(resolve, 100))
+
       // Close the connection
       ws.close()
-      
+
       expect(ws).toBeDefined()
     } catch (error) {
       // Expected if backend WebSocket is not running

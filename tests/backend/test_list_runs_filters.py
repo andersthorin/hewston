@@ -62,6 +62,7 @@ def seed_sample_db(db_path: str):
         )
         # Write minimal run manifests with configured windows
         import json
+
         with open("/tmp/run1.manifest", "w") as f:
             json.dump({"from": "2024-01-01", "to": "2024-01-31"}, f)
         with open("/tmp/run2.manifest", "w") as f:
@@ -189,4 +190,3 @@ def test_list_runs_filters_and_order(monkeypatch):
         r5 = client.get("/api/v1/backtests", params={"limit": 1000})
         j5 = r5.json()
         assert j5["limit"] == 500
-

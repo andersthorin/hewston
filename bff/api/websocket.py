@@ -5,14 +5,13 @@ Provides WebSocket endpoints for real-time communication with backend services.
 Handles run streaming, connection management, and message routing.
 """
 
-import uuid
 import json
 import logging
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Path, Depends
-from typing import Optional
+import uuid
+
+from fastapi import APIRouter, Path, WebSocket, WebSocketDisconnect
 
 from bff.services.websocket_manager import WebSocketConnectionManager
-from bff.models.websocket import ConnectionStatus, ConnectionStatusMessage
 
 router = APIRouter()
 logger = logging.getLogger("bff.websocket_api")
@@ -21,13 +20,9 @@ logger = logging.getLogger("bff.websocket_api")
 connection_manager = WebSocketConnectionManager()
 
 
-
-
-
 @router.websocket("/backtests/{backtest_id}/stream")
 async def websocket_backtest_stream(
-    websocket: WebSocket,
-    backtest_id: str = Path(..., description="Backtest identifier to stream")
+    websocket: WebSocket, backtest_id: str = Path(..., description="Backtest identifier to stream")
 ):
     """
     WebSocket endpoint for real-time backtest updates (canonical).
@@ -44,7 +39,7 @@ async def websocket_backtest_stream(
             "connection_id": connection_id,
             "run_id": run_id,
             "client_host": websocket.client.host if websocket.client else "unknown",
-        }
+        },
     )
 
     try:
@@ -55,19 +50,16 @@ async def websocket_backtest_stream(
         subscribe_message = {
             "type": "subscribe",
             "run_id": run_id,
-            "updates": ["run_status", "metrics", "orders"]
+            "updates": ["run_status", "metrics", "orders"],
         }
-        await connection_manager.handle_client_message(
-            connection_id,
-            json.dumps(subscribe_message)
-        )
+        await connection_manager.handle_client_message(connection_id, json.dumps(subscribe_message))
 
         logger.info(
             "websocket.connected",
             extra={
                 "connection_id": connection_id,
                 "run_id": run_id,
-            }
+            },
         )
 
         # Handle incoming messages
@@ -82,7 +74,7 @@ async def websocket_backtest_stream(
                     extra={
                         "connection_id": connection_id,
                         "run_id": run_id,
-                    }
+                    },
                 )
                 break
 
@@ -90,6 +82,7 @@ async def websocket_backtest_stream(
                 # Minimal guard: if socket not connected/accepted, stop silently
                 try:
                     from starlette.websockets import WebSocketState
+
                     if getattr(websocket, "application_state", None) != WebSocketState.CONNECTED:
                         break
                 except Exception:
@@ -104,15 +97,13 @@ async def websocket_backtest_stream(
                         "run_id": run_id,
                         "error": msg,
                         "error_type": type(e).__name__,
-                    }
+                    },
                 )
 
-                if not isinstance(e, (ConnectionResetError, BrokenPipeError, OSError)):
+                if not isinstance(e, ConnectionResetError | BrokenPipeError | OSError):
                     try:
                         await connection_manager._send_error(
-                            connection_id,
-                            "MESSAGE_ERROR",
-                            f"Error processing message: {msg}"
+                            connection_id, "MESSAGE_ERROR", f"Error processing message: {msg}"
                         )
                     except Exception as send_error:
                         logger.debug(
@@ -122,7 +113,7 @@ async def websocket_backtest_stream(
                                 "run_id": run_id,
                                 "original_error": msg,
                                 "send_error": str(send_error),
-                            }
+                            },
                         )
                 break
 
@@ -133,7 +124,7 @@ async def websocket_backtest_stream(
                 "connection_id": connection_id,
                 "run_id": run_id,
                 "error": str(e),
-            }
+            },
         )
     finally:
         # Clean up connection
@@ -144,8 +135,9 @@ async def websocket_backtest_stream(
             extra={
                 "connection_id": connection_id,
                 "run_id": run_id,
-            }
+            },
         )
+
 
 @router.websocket("/stream")
 async def websocket_general_stream(websocket: WebSocket):
@@ -165,17 +157,14 @@ async def websocket_general_stream(websocket: WebSocket):
         extra={
             "connection_id": connection_id,
             "client_host": websocket.client.host if websocket.client else "unknown",
-        }
+        },
     )
 
     try:
         # Accept connection
         await connection_manager.connect_client(websocket, connection_id)
 
-        logger.info(
-            "websocket.general_connected",
-            extra={"connection_id": connection_id}
-        )
+        logger.info("websocket.general_connected", extra={"connection_id": connection_id})
 
         # Handle incoming messages
         while True:
@@ -185,8 +174,7 @@ async def websocket_general_stream(websocket: WebSocket):
 
             except WebSocketDisconnect:
                 logger.info(
-                    "websocket.general_client_disconnect",
-                    extra={"connection_id": connection_id}
+                    "websocket.general_client_disconnect", extra={"connection_id": connection_id}
                 )
                 break
 
@@ -194,6 +182,7 @@ async def websocket_general_stream(websocket: WebSocket):
                 # Minimal guard: if socket not connected/accepted, stop silently
                 try:
                     from starlette.websockets import WebSocketState
+
                     if getattr(websocket, "application_state", None) != WebSocketState.CONNECTED:
                         break
                 except Exception:
@@ -206,15 +195,13 @@ async def websocket_general_stream(websocket: WebSocket):
                         "connection_id": connection_id,
                         "error": msg,
                         "error_type": type(e).__name__,
-                    }
+                    },
                 )
 
-                if not isinstance(e, (ConnectionResetError, BrokenPipeError, OSError)):
+                if not isinstance(e, ConnectionResetError | BrokenPipeError | OSError):
                     try:
                         await connection_manager._send_error(
-                            connection_id,
-                            "MESSAGE_ERROR",
-                            f"Error processing message: {msg}"
+                            connection_id, "MESSAGE_ERROR", f"Error processing message: {msg}"
                         )
                     except Exception as send_error:
                         logger.debug(
@@ -223,7 +210,7 @@ async def websocket_general_stream(websocket: WebSocket):
                                 "connection_id": connection_id,
                                 "original_error": msg,
                                 "send_error": str(send_error),
-                            }
+                            },
                         )
                 break
 
@@ -233,16 +220,13 @@ async def websocket_general_stream(websocket: WebSocket):
             extra={
                 "connection_id": connection_id,
                 "error": str(e),
-            }
+            },
         )
     finally:
         # Clean up connection
         await connection_manager.disconnect_client(connection_id)
 
-        logger.info(
-            "websocket.general_disconnected",
-            extra={"connection_id": connection_id}
-        )
+        logger.info("websocket.general_disconnected", extra={"connection_id": connection_id})
 
 
 @router.get("/websocket/stats")
@@ -258,14 +242,11 @@ async def get_websocket_stats():
     """
     stats = connection_manager.get_connection_stats()
 
-    logger.info(
-        "websocket.stats_request",
-        extra=stats
-    )
+    logger.info("websocket.stats_request", extra=stats)
 
     return {
         "websocket_stats": stats,
-        "timestamp": "2024-01-01T00:00:00Z"  # Would use actual timestamp
+        "timestamp": "2024-01-01T00:00:00Z",  # Would use actual timestamp
     }
 
 
@@ -289,18 +270,15 @@ async def websocket_health():
             "service": "websocket",
             "active_connections": stats["active_connections"],
             "backend_connections": stats["backend_connections"],
-            "timestamp": "2024-01-01T00:00:00Z"
+            "timestamp": "2024-01-01T00:00:00Z",
         }
 
     except Exception as e:
-        logger.error(
-            "websocket.health_error",
-            extra={"error": str(e)}
-        )
+        logger.error("websocket.health_error", extra={"error": str(e)})
 
         return {
             "status": "unhealthy",
             "service": "websocket",
             "error": str(e),
-            "timestamp": "2024-01-01T00:00:00Z"
+            "timestamp": "2024-01-01T00:00:00Z",
         }

@@ -26,20 +26,20 @@ describe('API Routing Integration', () => {
     vi.stubEnv('VITE_BFF_CHART_DATA_ENABLED', 'true')
     vi.stubEnv('VITE_BFF_BASE_URL', 'http://127.0.0.1:8001')
     vi.stubEnv('VITE_API_BASE_URL', 'http://127.0.0.1:8000')
-    
+
     // Import modules after environment setup
     const { apiGetWithFlags } = await import('../../utils/api')
-    
+
     mockFetch.mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ data: 'bff-response' })
+      json: () => Promise.resolve({ data: 'bff-response' }),
     } as Response)
 
     await apiGetWithFlags('/bars/daily', 'chartData')
-    
+
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('127.0.0.1:8001'),
-      expect.any(Object)
+      expect.any(Object),
     )
   })
 
@@ -49,20 +49,20 @@ describe('API Routing Integration', () => {
     vi.stubEnv('VITE_BFF_CHART_DATA_ENABLED', 'false')
     vi.stubEnv('VITE_BFF_BASE_URL', 'http://127.0.0.1:8001')
     vi.stubEnv('VITE_API_BASE_URL', 'http://127.0.0.1:8000')
-    
+
     // Import modules after environment setup
     const { apiGetWithFlags } = await import('../../utils/api')
-    
+
     mockFetch.mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ data: 'backend-response' })
+      json: () => Promise.resolve({ data: 'backend-response' }),
     } as Response)
 
     await apiGetWithFlags('/bars/daily', 'chartData')
-    
+
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('127.0.0.1:8000'),
-      expect.any(Object)
+      expect.any(Object),
     )
   })
 
@@ -72,20 +72,20 @@ describe('API Routing Integration', () => {
     vi.stubEnv('VITE_BFF_RUN_DATA_ENABLED', 'true')
     vi.stubEnv('VITE_BFF_BASE_URL', 'http://127.0.0.1:8001')
     vi.stubEnv('VITE_API_BASE_URL', 'http://127.0.0.1:8000')
-    
+
     // Import modules after environment setup
     const { apiGetWithFlags } = await import('../../utils/api')
-    
+
     mockFetch.mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ runs: [] })
+      json: () => Promise.resolve({ runs: [] }),
     } as Response)
 
     await apiGetWithFlags('/backtests', 'runData')
-    
+
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('127.0.0.1:8001'),
-      expect.any(Object)
+      expect.any(Object),
     )
   })
 
@@ -96,27 +96,27 @@ describe('API Routing Integration', () => {
     vi.stubEnv('VITE_BFF_RUN_DATA_ENABLED', 'false')
     vi.stubEnv('VITE_BFF_BASE_URL', 'http://127.0.0.1:8001')
     vi.stubEnv('VITE_API_BASE_URL', 'http://127.0.0.1:8000')
-    
+
     // Import modules after environment setup
     const { apiGetWithFlags } = await import('../../utils/api')
-    
+
     mockFetch.mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ data: 'response' })
+      json: () => Promise.resolve({ data: 'response' }),
     } as Response)
 
     // Chart data should go to BFF
     await apiGetWithFlags('/bars/daily', 'chartData')
     expect(mockFetch).toHaveBeenLastCalledWith(
       expect.stringContaining('127.0.0.1:8001'),
-      expect.any(Object)
+      expect.any(Object),
     )
 
     // Run data should go to backend
     await apiGetWithFlags('/backtests', 'runData')
     expect(mockFetch).toHaveBeenLastCalledWith(
       expect.stringContaining('127.0.0.1:8000'),
-      expect.any(Object)
+      expect.any(Object),
     )
   })
 
@@ -126,18 +126,16 @@ describe('API Routing Integration', () => {
     vi.stubEnv('VITE_BFF_CHART_DATA_ENABLED', 'true')
     vi.stubEnv('VITE_BFF_BASE_URL', 'http://127.0.0.1:8001')
     vi.stubEnv('VITE_API_BASE_URL', 'http://127.0.0.1:8000')
-    
+
     // Import modules after environment setup
     const { apiGetWithFlags } = await import('../../utils/api')
-    
+
     mockFetch.mockResolvedValue({
       ok: true,
-      json: () => Promise.resolve({ data: 'response' })
+      json: () => Promise.resolve({ data: 'response' }),
     } as Response)
 
     // Should not throw even with invalid flag name
-    await expect(
-      apiGetWithFlags('/some/endpoint', 'invalidFlag' as any)
-    ).resolves.toBeDefined()
+    await expect(apiGetWithFlags('/some/endpoint', 'invalidFlag' as any)).resolves.toBeDefined()
   })
 })

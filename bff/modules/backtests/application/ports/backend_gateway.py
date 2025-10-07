@@ -1,27 +1,25 @@
 from __future__ import annotations
 
-from typing import Protocol, Any, Optional
+from typing import Any, Protocol
 
 
 class BackendGatewayPort(Protocol):
     """Outbound port for communicating with backend backtests endpoints."""
 
-    async def create_backtest(self, body: dict, idempotency_key: Optional[str]) -> tuple[dict, int]:
-        ...
+    async def create_backtest(
+        self, body: dict, idempotency_key: str | None
+    ) -> tuple[dict, int]: ...
 
-    async def get_backtest(self, run_id: str) -> Optional[dict[str, Any]]:
-        ...
+    async def get_backtest(self, run_id: str) -> dict[str, Any] | None: ...
 
     async def list_backtests(
         self,
         *,
-        symbol: Optional[str] = None,
-        strategy_id: Optional[str] = None,
-        from_date: Optional[str] = None,
-        to_date: Optional[str] = None,
+        symbol: str | None = None,
+        strategy_id: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
         limit: int = 20,
         offset: int = 0,
-        order: Optional[str] = None,
-    ) -> dict[str, Any]:
-        ...
-
+        order: str | None = None,
+    ) -> dict[str, Any]: ...

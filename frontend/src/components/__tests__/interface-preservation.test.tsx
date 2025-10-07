@@ -18,7 +18,7 @@ import BacktestDetailView from '../../views/BacktestDetail'
 // Mock the services to prevent actual API calls
 // Stub ChartOHLC to avoid heavy lightweight-charts rendering in tests
 vi.mock('../ChartOHLC', () => ({
-  default: () => <div data-testid="chart-ohlc" />
+  default: () => <div data-testid="chart-ohlc" />,
 }))
 
 vi.mock('../../services/chartData', () => ({
@@ -26,14 +26,14 @@ vi.mock('../../services/chartData', () => ({
     fetchDailyData: vi.fn(),
     fetchMinuteData: vi.fn(),
     fetchHourData: vi.fn(),
-  }
+  },
 }))
 
 vi.mock('../../services/runData', () => ({
   backtestDataService: {
     listBacktests: vi.fn(),
     getCompleteBacktest: vi.fn(),
-  }
+  },
 }))
 
 vi.mock('../../services/featureFlags', () => ({
@@ -46,34 +46,35 @@ vi.mock('../../services/featureFlags', () => ({
       bffEnabled: false,
       chartDataEnabled: false,
       runDataEnabled: false,
-      websocketEnabled: false
+      websocketEnabled: false,
     }),
     evaluateFeatureFlag: vi.fn().mockReturnValue({
       enabled: false,
       source: 'backend',
-      endpointUrl: 'http://127.0.0.1:8000'
-    })
-  }
+      endpointUrl: 'http://127.0.0.1:8000',
+    }),
+  },
 }))
 vi.mock('../../services/ws', () => ({
   useBacktestPlayback: () => ({
     state: { status: 'ws', playing: false },
     subscribe: () => () => {},
-    onPlay: vi.fn(), onPause: vi.fn(), onSpeedChange: vi.fn(), onSeek: vi.fn(),
-    sendReady: vi.fn(), getConnectionHealth: vi.fn(() => ({ state: 'connected', reconnectAttempts: 0 }))
-  })
+    onPlay: vi.fn(),
+    onPause: vi.fn(),
+    onSpeedChange: vi.fn(),
+    onSeek: vi.fn(),
+    sendReady: vi.fn(),
+    getConnectionHealth: vi.fn(() => ({ state: 'connected', reconnectAttempts: 0 })),
+  }),
 }))
-
 
 describe('Component Interface Preservation', () => {
   const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false } }
+    defaultOptions: { queries: { retry: false } },
   })
 
   const wrapper = ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={queryClient}>
-      {children}
-    </QueryClientProvider>
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   )
 
   describe('Chart Components', () => {
@@ -84,7 +85,7 @@ describe('Component Interface Preservation', () => {
         from: '2023-01-01',
         to: '2023-12-31',
         height: 400,
-        width: 800
+        width: 800,
       }
 
       expect(() => {
@@ -92,15 +93,11 @@ describe('Component Interface Preservation', () => {
       }).not.toThrow()
     })
 
-
-
     it('should handle optional props correctly', () => {
       // Test ChartOHLC with minimal props
       expect(() => {
         render(<ChartOHLC symbol="AAPL" timeframe="daily" />, { wrapper })
       }).not.toThrow()
-
-
     })
   })
 
@@ -116,7 +113,7 @@ describe('Component Interface Preservation', () => {
           run_from: '2023-01-01',
           run_to: '2023-01-31',
           duration_ms: 0,
-        }
+        },
       ]
 
       const props = {
@@ -135,9 +132,9 @@ describe('Component Interface Preservation', () => {
         onSymbolChange: vi.fn(),
         dateRange: {
           from: '2023-01-01',
-          to: '2023-12-31'
+          to: '2023-12-31',
         },
-        onDateRangeChange: vi.fn()
+        onDateRangeChange: vi.fn(),
       }
 
       expect(() => {
@@ -156,7 +153,7 @@ describe('Component Interface Preservation', () => {
         onPlay: vi.fn(),
         onPause: vi.fn(),
         onSeek: vi.fn(),
-        onSpeedChange: vi.fn()
+        onSpeedChange: vi.fn(),
       }
 
       expect(() => {
@@ -177,7 +174,7 @@ describe('Component Interface Preservation', () => {
         onPlay,
         onPause,
         onSeek: vi.fn(),
-        onSpeedChange: vi.fn()
+        onSpeedChange: vi.fn(),
       }
 
       expect(() => {
@@ -189,7 +186,7 @@ describe('Component Interface Preservation', () => {
   describe('View Components', () => {
     it('should preserve RunDetailView props interface', () => {
       const props = {
-        runId: 'test-run-123'
+        runId: 'test-run-123',
       }
 
       expect(() => {
@@ -211,7 +208,7 @@ describe('Component Interface Preservation', () => {
         symbol: 'AAPL',
         timeframe: 'daily',
         from: '2023-01-01',
-        to: '2023-12-31'
+        to: '2023-12-31',
       }
 
       expect(chartProps.symbol).toBe('AAPL')
@@ -237,7 +234,7 @@ describe('Component Interface Preservation', () => {
         onPlay: vi.fn(),
         onPause: vi.fn(),
         onSeek: vi.fn(),
-        onSpeedChange: vi.fn()
+        onSpeedChange: vi.fn(),
       }
 
       expect(typeof controlProps.isPlaying).toBe('boolean')
@@ -255,7 +252,7 @@ describe('Component Interface Preservation', () => {
         onPlay: vi.fn(),
         onPause: vi.fn(),
         onSeek: vi.fn(),
-        onSpeedChange: vi.fn()
+        onSpeedChange: vi.fn(),
       }
 
       // Verify handlers can be called with expected parameters

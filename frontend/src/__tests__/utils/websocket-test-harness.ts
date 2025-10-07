@@ -1,6 +1,6 @@
 /**
  * WebSocket Test Harness
- * 
+ *
  * Comprehensive testing utilities for WebSocket functionality.
  * Provides mock WebSocket implementation and testing helpers.
  */
@@ -39,7 +39,7 @@ export class WebSocketTestHarness {
         // Store reference to this instance
         // @ts-ignore - accessing private property for testing
         window.__mockWebSocketInstance = this
-        
+
         // Simulate async connection
         setTimeout(() => {
           this.readyState = MockWebSocket.OPEN
@@ -74,7 +74,7 @@ export class WebSocketTestHarness {
   async simulateConnection(url: string): Promise<void> {
     this.connectionState = 'connecting'
     // Simulate connection delay
-    await new Promise(resolve => setTimeout(resolve, 10))
+    await new Promise((resolve) => setTimeout(resolve, 10))
     this.connectionState = 'connected'
   }
 
@@ -146,7 +146,7 @@ export class WebSocketTestHarness {
       type: 'command',
       command,
       params,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     }
     await this.simulateMessage(message)
   }
@@ -155,7 +155,7 @@ export class WebSocketTestHarness {
     const message = {
       type: 'data',
       payload: data,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     }
     await this.simulateMessage(message)
   }
@@ -165,7 +165,7 @@ export class WebSocketTestHarness {
       type: 'performance',
       fps,
       latency,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     }
     await this.simulateMessage(message)
   }
@@ -199,7 +199,9 @@ export class WebSocketTestHarness {
   expectLastMessage(expectedMessage: any): void {
     const lastMessage = this.messageQueue[this.messageQueue.length - 1]
     if (JSON.stringify(lastMessage) !== JSON.stringify(expectedMessage)) {
-      throw new Error(`Expected last message ${JSON.stringify(expectedMessage)}, got ${JSON.stringify(lastMessage)}`)
+      throw new Error(
+        `Expected last message ${JSON.stringify(expectedMessage)}, got ${JSON.stringify(lastMessage)}`,
+      )
     }
   }
 }

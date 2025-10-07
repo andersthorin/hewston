@@ -3,7 +3,6 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
-from typing import Dict, List
 
 DEFAULT_PRODUCTS = ("TRADES", "TBBO")
 
@@ -25,7 +24,9 @@ def _atomic_write(path: Path, data: bytes) -> None:
     os.replace(tmp, path)
 
 
-def ingest_databento(symbol: str, year: int, *, products: List[str] | None = None, force: bool = False) -> Dict[str, int]:
+def ingest_databento(
+    symbol: str, year: int, *, products: list[str] | None = None, force: bool = False
+) -> dict[str, int]:
     """
     Stubbed Databento ingestion that simulates downloads by writing non-empty files.
     - Respects HEWSTON_DATA_DIR for repo-relative placement (default: data)
@@ -41,7 +42,7 @@ def ingest_databento(symbol: str, year: int, *, products: List[str] | None = Non
     prods = list(products or DEFAULT_PRODUCTS)
     base = _base_data_dir() / "raw" / "databento" / symbol / str(year)
 
-    sizes: Dict[str, int] = {}
+    sizes: dict[str, int] = {}
     for prod in prods:
         filename = f"{prod}.dbn.zst"
         out = base / filename
@@ -55,7 +56,7 @@ def ingest_databento(symbol: str, year: int, *, products: List[str] | None = Non
             continue
 
         # Simulate content (1 KiB) — later stories will replace with real Databento SDK call
-        data = (f"stub-dbento {symbol} {year} {prod}\n").encode("utf-8") * 32
+        data = (f"stub-dbento {symbol} {year} {prod}\n").encode() * 32
         _atomic_write(out, data)
         elapsed = time.perf_counter() - start
         size = out.stat().st_size
@@ -63,4 +64,3 @@ def ingest_databento(symbol: str, year: int, *, products: List[str] | None = Non
         sizes[prod] = size
 
     return sizes
-

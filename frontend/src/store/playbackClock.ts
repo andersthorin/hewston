@@ -68,7 +68,10 @@ function createPlaybackStore(): PlaybackStore {
 
   const store: PlaybackStore = {
     getState: () => state,
-    subscribe: (cb) => { subs.add(cb); return () => subs.delete(cb) },
+    subscribe: (cb) => {
+      subs.add(cb)
+      return () => subs.delete(cb)
+    },
     _setFrame: (f) => {
       const incomingTotal = (f as any)?.total_frames
       const nextIdx = ((state as any).currentFrameIndex ?? 0) + 1
@@ -78,26 +81,32 @@ function createPlaybackStore(): PlaybackStore {
         frame: f,
         currentSimTime: (f?.equity?.ts || f?.ts) ?? state.currentSimTime,
         currentFrameIndex: nextIdx,
-        totalFrames: (state as any).totalFrames ?? (typeof incomingTotal === 'number' ? incomingTotal : undefined),
+        totalFrames:
+          (state as any).totalFrames ??
+          (typeof incomingTotal === 'number' ? incomingTotal : undefined),
       }
 
       if (debugCount < 20) {
         try {
           // eslint-disable-next-line no-console
-          console.debug('[playback._setFrame]', { idx: nextIdx, ts: state.currentSimTime, total: state.totalFrames })
+          console.debug('[playback._setFrame]', {
+            idx: nextIdx,
+            ts: state.currentSimTime,
+            total: state.totalFrames,
+          })
         } catch {}
         debugCount += 1
       }
 
       // Compute client-side running metrics from equity if present
       const rawEq: any = (f as any)?.equity?.value
-      const eq = typeof rawEq === 'number' ? rawEq : (rawEq != null ? Number(rawEq) : undefined)
+      const eq = typeof rawEq === 'number' ? rawEq : rawEq != null ? Number(rawEq) : undefined
       if (typeof eq === 'number' && isFinite(eq)) {
         if (initialEquity == null) initialEquity = eq
         if (peakEquity == null || eq > peakEquity) peakEquity = eq
         if (lastEquity == null) lastEquity = eq
 
-        const total_return_so_far = initialEquity ? (eq / initialEquity) - 1 : undefined
+        const total_return_so_far = initialEquity ? eq / initialEquity - 1 : undefined
         const max_drawdown_so_far = peakEquity ? (peakEquity - eq) / peakEquity : undefined
 
         // Update state.metricsLive without touching server-provided metrics in frame
@@ -116,44 +125,74 @@ function createPlaybackStore(): PlaybackStore {
 
       // accumulate markers from orders if present
       if (Array.isArray(f?.orders) && f.orders.length > 0) {
-        const newMarks = f.orders.map((o: any) => (o.ts_utc || o.ts || f.ts)).filter(Boolean)
+        const newMarks = f.orders.map((o: any) => o.ts_utc || o.ts || f.ts).filter(Boolean)
         if (newMarks.length) {
           state = { ...state, markers: dedupeAppend(state.markers, newMarks) }
         }
         // collect symbols seen in orders
-        const syms = f.orders.map((o: any) => (o.symbol || o.sym || o.instrument || o.inst || null)).filter(Boolean)
+        const syms = f.orders
+          .map((o: any) => o.symbol || o.sym || o.instrument || o.inst || null)
+          .filter(Boolean)
         if (syms.length) {
           state = { ...state, symbolsSeen: dedupeAppendStr(state.symbolsSeen, syms) }
         }
         // attach markers meta with symbol info
-        const metas = f.orders.map((o: any) => {
-          const ts = (o.ts_utc || o.ts || f.ts)
-          if (!ts) return null
-          const sym = (o.symbol || o.sym || o.instrument || o.inst || undefined)
-          return { ts, sym }
-        }).filter(Boolean) as Array<{ ts: string; sym?: string }>
+        const metas = f.orders
+          .map((o: any) => {
+            const ts = o.ts_utc || o.ts || f.ts
+            if (!ts) return null
+            const sym = o.symbol || o.sym || o.instrument || o.inst || undefined
+            return { ts, sym }
+          })
+          .filter(Boolean) as Array<{ ts: string; sym?: string }>
         if (metas.length) {
           state = { ...state, markersMeta: dedupeAppendMeta(state.markersMeta || [], metas) }
         }
       }
       emit()
     },
-    _setPlaying: (p) => { state = { ...state, playing: p }; emit() },
+    _setPlaying: (p) => {
+      state = { ...state, playing: p }
+      emit()
+    },
     _setRange: (r) => {
       // Reset client-side running metrics and frame counters when run window changes
       initialEquity = null
       peakEquity = null
       lastEquity = null
-      state = { ...state, range: r, metricsLive: undefined, currentFrameIndex: 0, totalFrames: undefined }
+      state = {
+        ...state,
+        range: r,
+        metricsLive: undefined,
+        currentFrameIndex: 0,
+        totalFrames: undefined,
+      }
       emit()
     },
-    _addMarkers: (ts) => { state = { ...state, markers: dedupeAppend(state.markers, ts) }; emit() },
-    _addSymbols: (syms) => { state = { ...state, symbolsSeen: dedupeAppendStr(state.symbolsSeen, syms) }; emit() },
-    setFocus: (sym) => { state = { ...state, focusedSymbol: sym }; emit() },
-    play: () => { controls?.play?.() },
-    pause: () => { controls?.pause?.() },
-    seek: (ts) => { controls?.seek?.(ts) },
-    setControls: (c) => { controls = c },
+    _addMarkers: (ts) => {
+      state = { ...state, markers: dedupeAppend(state.markers, ts) }
+      emit()
+    },
+    _addSymbols: (syms) => {
+      state = { ...state, symbolsSeen: dedupeAppendStr(state.symbolsSeen, syms) }
+      emit()
+    },
+    setFocus: (sym) => {
+      state = { ...state, focusedSymbol: sym }
+      emit()
+    },
+    play: () => {
+      controls?.play?.()
+    },
+    pause: () => {
+      controls?.pause?.()
+    },
+    seek: (ts) => {
+      controls?.seek?.(ts)
+    },
+    setControls: (c) => {
+      controls = c
+    },
   }
   return store
 }
@@ -168,7 +207,10 @@ function dedupeAppendStr(existing: string[], add: string[]): string[] {
   for (const s of add) set.add(s)
   return Array.from(set).sort()
 }
-function dedupeAppendMeta(existing: Array<{ ts: any; sym?: string }>, add: Array<{ ts: any; sym?: string }>): Array<{ ts: any; sym?: string }>{
+function dedupeAppendMeta(
+  existing: Array<{ ts: any; sym?: string }>,
+  add: Array<{ ts: any; sym?: string }>,
+): Array<{ ts: any; sym?: string }> {
   const key = (m: { ts: any; sym?: string }) => `${String(m.ts)}|${m.sym ?? ''}`
   const map = new Map(existing.map((m) => [key(m), m] as const))
   for (const m of add) map.set(key(m), m)
@@ -233,4 +275,3 @@ export const selectors = {
 }
 
 export default playbackStore
-

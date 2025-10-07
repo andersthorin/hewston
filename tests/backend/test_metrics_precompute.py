@@ -48,4 +48,3 @@ def test_precompute_handles_zeros_and_nans():
     assert m["max_drawdown_so_far"][0] in (None, 0.0)
     # sharpe may be None when insufficient or zero variance
     assert m["sharpe_so_far"][1] is None
-

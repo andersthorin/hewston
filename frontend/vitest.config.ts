@@ -5,6 +5,14 @@ export default defineConfig({
     environment: 'happy-dom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
+    coverage: {
+      reporter: ['text', 'lcov'],
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 70,
+        statements: 80,
+      },
+    },
   },
 })
-

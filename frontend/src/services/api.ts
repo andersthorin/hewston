@@ -33,13 +33,16 @@ export const BacktestDetailSchema = z.object({
   duration_ms: z.number().optional().nullable(),
   params: z.record(z.string(), z.any()).optional().nullable(),
   slippage_fees: z.record(z.string(), z.any()).optional().nullable(),
-  artifacts: z.object({
-    metrics_path: z.string().optional().nullable(),
-    equity_path: z.string().optional().nullable(),
-    orders_path: z.string().optional().nullable(),
-    fills_path: z.string().optional().nullable(),
-    run_manifest_path: z.string().optional().nullable(),
-  }).optional().nullable(),
+  artifacts: z
+    .object({
+      metrics_path: z.string().optional().nullable(),
+      equity_path: z.string().optional().nullable(),
+      orders_path: z.string().optional().nullable(),
+      fills_path: z.string().optional().nullable(),
+      run_manifest_path: z.string().optional().nullable(),
+    })
+    .optional()
+    .nullable(),
   manifest: z.object({ path: z.string().optional().nullable() }).optional().nullable(),
   // Enriched by backend: window from backtest-manifest.json
   run_from: z.string().optional().nullable(),
@@ -57,8 +60,6 @@ export type BacktestListQuery = {
   order?: string
 }
 
-
-
 export type StreamFrame = {
   t: 'frame'
   ts: string
@@ -67,8 +68,6 @@ export type StreamFrame = {
   equity?: { ts: string; value: number } | null
   dropped: number
 }
-
-
 
 // --- Create Backtest ---
 export type CreateBacktestRequest = {
@@ -82,4 +81,3 @@ export type CreateBacktestRequest = {
   seed?: number
 }
 export type CreateBacktestResponse = { backtest_id: string; status: string }
-

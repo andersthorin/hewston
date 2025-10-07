@@ -28,7 +28,7 @@ export default defineConfig(({ mode }) => {
             proxy.on('proxyReq', (_proxyReq, req) => {
               console.log('BFF proxy request:', req.method, req.url)
             })
-          }
+          },
         },
 
         // Backend routes still directly proxied (non-SPA paths only)
@@ -39,7 +39,7 @@ export default defineConfig(({ mode }) => {
         '/bars': {
           target: backendUrl,
           changeOrigin: true,
-        }
+        },
       },
     },
   }

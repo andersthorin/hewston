@@ -4,9 +4,9 @@ import json
 import os
 import shutil
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Any, List, Optional, Tuple
+from typing import Any
 
 from backend.adapters.sqlite_catalog import SqliteCatalog
 
@@ -26,7 +26,7 @@ def _parse_dt(s: str) -> datetime:
             s = s[:-1] + "+00:00"
         return datetime.fromisoformat(s)
     except Exception:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
 
 def _dir_size(p: Path) -> int:
@@ -43,7 +43,9 @@ def _dir_size(p: Path) -> int:
     return total
 
 
-def select_candidates(*, keep_latest: int, max_age_days: Optional[int]) -> Tuple[List[Candidate], List[str]]:
+def select_candidates(
+    *, keep_latest: int, max_age_days: int | None
+) -> tuple[list[Candidate], list[str]]:
     cat = SqliteCatalog()
     # Order all runs by created_at DESC
     with cat._connect() as conn:  # type: ignore[attr-defined]
@@ -56,12 +58,12 @@ def select_candidates(*, keep_latest: int, max_age_days: Optional[int]) -> Tuple
     # Max age filter
     cutoff = None
     if max_age_days and max_age_days > 0:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=max_age_days)
+        cutoff = datetime.now(UTC) - timedelta(days=max_age_days)
 
     data_root = Path(os.environ.get("HEWSTON_DATA_DIR", "data")) / "backtests"
 
-    cands: List[Candidate] = []
-    kept_list: List[str] = []
+    cands: list[Candidate] = []
+    kept_list: list[str] = []
     for run_id, created_at in rows:
         if run_id in kept:
             kept_list.append(run_id)
@@ -76,7 +78,7 @@ def select_candidates(*, keep_latest: int, max_age_days: Optional[int]) -> Tuple
     return cands, kept_list
 
 
-def apply_deletions(cands: List[Candidate]) -> Tuple[int, int]:
+def apply_deletions(cands: list[Candidate]) -> tuple[int, int]:
     """Delete artifact dirs and remove DB rows. Returns (count, bytes)."""
     cat = SqliteCatalog()
     deleted = 0
@@ -109,13 +111,20 @@ except Exception:  # pragma: no cover
     typer = None  # type: ignore
 
 
-def retention_main(keep_latest: int = 100, max_age_days: Optional[int] = None, apply: bool = False) -> int:
+def retention_main(
+    keep_latest: int = 100, max_age_days: int | None = None, apply: bool = False
+) -> int:
     cands, kept = select_candidates(keep_latest=keep_latest, max_age_days=max_age_days)
     summary: dict[str, Any] = {
         "keep_latest": keep_latest,
         "max_age_days": max_age_days,
         "candidates": [
-            {"run_id": c.run_id, "created_at": c.created_at, "dir": str(c.dir_path), "size_bytes": c.size_bytes}
+            {
+                "run_id": c.run_id,
+                "created_at": c.created_at,
+                "dir": str(c.dir_path),
+                "size_bytes": c.size_bytes,
+            }
             for c in cands
         ],
         "kept": kept,
@@ -138,8 +147,11 @@ if typer is not None:
     @app.command(name="retention")
     def retention_cmd(
         keep_latest: int = typer.Option(100, "--keep-latest"),
-        max_age_days: Optional[int] = typer.Option(None, "--max-age", help="Days; if set, delete older than this (except latest N)"),
+        max_age_days: int | None = typer.Option(
+            None, "--max-age", help="Days; if set, delete older than this (except latest N)"
+        ),
         apply: bool = typer.Option(False, "--apply", help="Actually delete files and DB rows"),
     ) -> None:
-        raise typer.Exit(retention_main(keep_latest=keep_latest, max_age_days=max_age_days, apply=apply))
-
+        raise typer.Exit(
+            retention_main(keep_latest=keep_latest, max_age_days=max_age_days, apply=apply)
+        )

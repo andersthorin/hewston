@@ -1,12 +1,13 @@
-from fastapi import FastAPI, WebSocket, Request
-from fastapi.middleware.cors import CORSMiddleware
 import logging
 import time
 from uuid import uuid4
 
-from backend.api.routes.health import router as health_router
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+
 from backend.api.routes.backtests import router as backtests_router
 from backend.api.routes.bars import router as bars_router
+from backend.api.routes.health import router as health_router
 from backend.app.logging_setup import configure_logging
 from backend.constants import API_TITLE, API_VERSION, CORS_ORIGINS
 
@@ -56,4 +57,3 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
-

@@ -1,6 +1,6 @@
 /**
  * WebSocket health monitoring hooks for BFF integration.
- * 
+ *
  * These hooks provide real-time monitoring of WebSocket connection health,
  * performance metrics, and connection management capabilities.
  */
@@ -62,7 +62,7 @@ export function useWebSocketHealth(backtestId: string) {
     connectionSource: featureFlagService.isFeatureFlagEnabled('websocket') ? 'bff' : 'backend',
     bffFeaturesEnabled: featureFlagService.isFeatureFlagEnabled('websocket'),
   })
-  
+
   const [connectionStatus, setConnectionStatus] = useState<WebSocketConnectionStatus>({
     state: 'idle',
     isReady: false,
@@ -79,16 +79,16 @@ export function useWebSocketHealth(backtestId: string) {
     const unsubscribe = playback.subscribe((frame) => {
       frameCount++
       const now = Date.now()
-      
+
       // Update frame timestamps for FPS calculation
-      setFrameTimestamps(prev => {
+      setFrameTimestamps((prev) => {
         const newTimestamps = [...prev, now]
         // Keep only last 10 seconds of timestamps
-        return newTimestamps.filter(ts => now - ts <= 10000)
+        return newTimestamps.filter((ts) => now - ts <= 10000)
       })
-      
+
       // Update performance metrics
-      setPerformanceMetrics(prev => ({
+      setPerformanceMetrics((prev) => ({
         ...prev,
         totalFrames: frameCount,
         droppedFrames: frame.dropped || 0,
@@ -102,10 +102,10 @@ export function useWebSocketHealth(backtestId: string) {
   // Calculate FPS from frame timestamps
   useEffect(() => {
     const now = Date.now()
-    const recentFrames = frameTimestamps.filter(ts => now - ts <= 1000) // Last 1 second
-    const averageFrames = frameTimestamps.filter(ts => now - ts <= 10000) // Last 10 seconds
-    
-    setPerformanceMetrics(prev => ({
+    const recentFrames = frameTimestamps.filter((ts) => now - ts <= 1000) // Last 1 second
+    const averageFrames = frameTimestamps.filter((ts) => now - ts <= 10000) // Last 10 seconds
+
+    setPerformanceMetrics((prev) => ({
       ...prev,
       currentFPS: recentFrames.length,
       averageFPS: averageFrames.length / 10, // Average over 10 seconds
@@ -116,7 +116,7 @@ export function useWebSocketHealth(backtestId: string) {
   useEffect(() => {
     const health = playback.getConnectionHealth?.()
 
-    setConnectionStatus(prev => ({
+    setConnectionStatus((prev) => ({
       ...prev,
       state: health?.state || 'idle',
       isReady: health?.state === 'connected',
@@ -134,7 +134,7 @@ export function useWebSocketHealth(backtestId: string) {
 
     // Update performance metrics with health data
     if (health) {
-      setPerformanceMetrics(prev => ({
+      setPerformanceMetrics((prev) => ({
         ...prev,
         latency: health.latency,
         connectionSource: health.connectionSource,
@@ -194,13 +194,13 @@ export function useWebSocketPerformanceMonitor(
     latencyThreshold?: number
     droppedFrameThreshold?: number
     onPerformanceAlert?: (alert: PerformanceAlert) => void
-  } = {}
+  } = {},
 ) {
   const {
     fpsThreshold = 25,
     latencyThreshold = 100,
     droppedFrameThreshold = 10,
-    onPerformanceAlert
+    onPerformanceAlert,
   } = options
 
   const { performanceMetrics, connectionStatus } = useWebSocketHealth(backtestId)
@@ -258,7 +258,7 @@ export function useWebSocketPerformanceMonitor(
     fpsThreshold,
     latencyThreshold,
     droppedFrameThreshold,
-    onPerformanceAlert
+    onPerformanceAlert,
   ])
 
   return {
@@ -266,8 +266,8 @@ export function useWebSocketPerformanceMonitor(
     connectionStatus,
     alerts,
     hasAlerts: alerts.length > 0,
-    criticalAlerts: alerts.filter(a => a.severity === 'error'),
-    warningAlerts: alerts.filter(a => a.severity === 'warning'),
+    criticalAlerts: alerts.filter((a) => a.severity === 'error'),
+    warningAlerts: alerts.filter((a) => a.severity === 'warning'),
   }
 }
 

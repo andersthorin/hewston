@@ -45,9 +45,9 @@ def seed_one_run(db_path: str):
                 "r100",
                 "ds1",
                 "sma_crossover",
-                "{\"fast\":10,\"slow\":20}",
+                '{"fast":10,"slow":20}',
                 42,
-                "{\"fee\":0.0}",
+                '{"fee":0.0}',
                 60,
                 "abcd",
                 "2024-07-01T12:00:00Z",
@@ -92,4 +92,3 @@ def test_get_run_detail_shape(monkeypatch):
         assert a["run_manifest_path"].endswith("run.manifest")
         # Optional manifest link
         assert j["manifest"]["path"].endswith("run.manifest")
-

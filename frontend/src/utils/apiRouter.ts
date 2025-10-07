@@ -24,10 +24,10 @@ class APIClientRouter {
   /**
    * Route API call to BFF or backend based on feature flag configuration.
    */
-  routeAPICall = async <T,>(
+  routeAPICall = async <T>(
     endpointGroup: EndpointGroup,
     endpoint: string,
-    options: RequestInit & ApiRouterOptions = {}
+    options: RequestInit & ApiRouterOptions = {},
   ): Promise<T> => {
     const { timeout = 30000, ...requestOptions } = options
     const evaluation = featureFlagService.evaluateFeatureFlag(endpointGroup)
@@ -36,7 +36,7 @@ class APIClientRouter {
     this.logEndpointRouting(endpoint, evaluation.source, endpointGroup)
 
     return await this.makeRequest<T>(evaluation, endpoint, requestOptions, timeout)
-  };
+  }
 
   /**
    * Get effective base URL for specific endpoint group.
@@ -44,21 +44,20 @@ class APIClientRouter {
   getEffectiveBaseURL = (endpointGroup: EndpointGroup): string => {
     const evaluation = featureFlagService.evaluateFeatureFlag(endpointGroup)
     return this.extractBaseUrl(evaluation.endpointUrl)
-  };
+  }
 
   /**
    * Handle fallback to backend when BFF fails.
    */
 
-
   /**
    * Make the actual HTTP request.
    */
-  makeRequest = async <T,>(
+  makeRequest = async <T>(
     evaluation: FeatureFlagEvaluation,
     endpoint: string,
     requestOptions: RequestInit,
-    timeout: number
+    timeout: number,
   ): Promise<T> => {
     const baseUrl = this.extractBaseUrl(evaluation.endpointUrl)
     const fullUrl = this.buildFullUrl(baseUrl, endpoint, evaluation.source)
@@ -84,7 +83,7 @@ class APIClientRouter {
     } finally {
       clearTimeout(timeoutId)
     }
-  };
+  }
 
   /**
    * Build full URL based on endpoint and source.
@@ -100,7 +99,7 @@ class APIClientRouter {
       // Backend endpoints use direct path
       return `${baseUrl}/${cleanEndpoint}`
     }
-  };
+  }
 
   /**
    * Transform endpoint for BFF routing.
@@ -143,10 +142,9 @@ class APIClientRouter {
       return `${baseUrl}/api/v1/backtests`
     }
 
-
     // Default: pass through
     return `${baseUrl}/${endpoint}`
-  };
+  }
 
   /**
    * Extract base URL from full endpoint URL.
@@ -159,7 +157,7 @@ class APIClientRouter {
       // Fallback: assume it's already a base URL
       return endpointUrl
     }
-  };
+  }
 
   /**
    * Get backend URL for specific endpoint group.
@@ -177,7 +175,7 @@ class APIClientRouter {
       default:
         return backendBase
     }
-  };
+  }
 
   /**
    * Log endpoint routing decision for debugging.
@@ -186,20 +184,23 @@ class APIClientRouter {
     endpoint: string,
     target: 'bff' | 'backend',
     endpointGroup: EndpointGroup,
-    isFallback = false
+    isFallback = false,
   ): void => {
-    if (featureFlagService.getConfiguration().bffEnabled || import.meta.env.VITE_FEATURE_FLAG_DEBUG) {
+    if (
+      featureFlagService.getConfiguration().bffEnabled ||
+      import.meta.env.VITE_FEATURE_FLAG_DEBUG
+    ) {
       const prefix = isFallback ? '🔄 FALLBACK' : '🎯 ROUTING'
       console.log(`${prefix} [${endpointGroup}] ${endpoint} → ${target.toUpperCase()}`)
     }
-  };
+  }
 
   /**
    * Validate configuration and return any issues.
    */
   validateConfiguration = (): string[] => {
     return featureFlagService.validateConfiguration()
-  };
+  }
 }
 
 // Export singleton instance

@@ -6,7 +6,18 @@ import { MetricsSummary } from '../metrics-summary'
 
 describe('MetricsSummary', () => {
   it('renders key metrics with formatting', () => {
-    render(<MetricsSummary metrics={{ total_return: 0.123, return: 0.01, win_rate: 0.56, max_drawdown: -0.08, sharpe_ratio: 1.23, realized_pnl: 1234.56 }} />)
+    render(
+      <MetricsSummary
+        metrics={{
+          total_return: 0.123,
+          return: 0.01,
+          win_rate: 0.56,
+          max_drawdown: -0.08,
+          sharpe_ratio: 1.23,
+          realized_pnl: 1234.56,
+        }}
+      />,
+    )
     expect(screen.getByText('Performance')).toBeInTheDocument()
     expect(screen.getByText('Total return')).toBeInTheDocument()
     expect(screen.getByText('12.3%')).toBeInTheDocument()
@@ -28,4 +39,3 @@ describe('MetricsSummary', () => {
     expect(screen.getAllByText('—').length).toBeGreaterThan(0)
   })
 })
-

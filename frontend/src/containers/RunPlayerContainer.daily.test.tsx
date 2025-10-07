@@ -10,11 +10,11 @@ vi.mock('lightweight-charts', () => {
     applyOptions: vi.fn(),
     fitContent: vi.fn(),
     scrollToRealTime: vi.fn(),
-    setVisibleRange: vi.fn()
+    setVisibleRange: vi.fn(),
   }
   const series: MockSeries = {
     setData: vi.fn(),
-    update: vi.fn()
+    update: vi.fn(),
   }
   const mkChart = (): MockChart => ({
     applyOptions: vi.fn(),
@@ -26,7 +26,13 @@ vi.mock('lightweight-charts', () => {
     remove: vi.fn(),
   })
   const createChart = vi.fn().mockImplementation(() => mkChart())
-  return { createChart, ColorType: { Solid: 'solid' }, CandlestickSeries: {}, LineSeries: {}, PriceScaleMode: { Logarithmic: 3 } }
+  return {
+    createChart,
+    ColorType: { Solid: 'solid' },
+    CandlestickSeries: {},
+    LineSeries: {},
+    PriceScaleMode: { Logarithmic: 3 },
+  }
 })
 
 import type { StreamFrame } from '../services/api'
@@ -35,9 +41,16 @@ const subs = new Set<(f: StreamFrame) => void>()
 vi.mock('../services/ws', () => ({
   useBacktestPlayback: () => ({
     state: { status: 'ws', playing: true, speed: 30, dropped: 0 },
-    subscribe: (cb: (f: StreamFrame) => void) => { subs.add(cb); return () => subs.delete(cb) },
-    onPlay: vi.fn(), onPause: vi.fn(), onSpeedChange: vi.fn(), onSeek: vi.fn(),
-    sendReady: vi.fn(), getConnectionHealth: vi.fn(() => ({ state: 'connected', reconnectAttempts: 0 }))
+    subscribe: (cb: (f: StreamFrame) => void) => {
+      subs.add(cb)
+      return () => subs.delete(cb)
+    },
+    onPlay: vi.fn(),
+    onPause: vi.fn(),
+    onSpeedChange: vi.fn(),
+    onSeek: vi.fn(),
+    sendReady: vi.fn(),
+    getConnectionHealth: vi.fn(() => ({ state: 'connected', reconnectAttempts: 0 })),
   }),
   __emit: (f: StreamFrame) => subs.forEach((cb) => cb(f)),
 }))
@@ -47,15 +60,30 @@ import { createChart as createChartLWC } from 'lightweight-charts'
 import { __emit } from '../services/ws'
 import RunPlayerContainer from './RunPlayerContainer'
 
-const charts = (): MockChart[] => (createChartLWC as any).mock.results.map((r: { value: MockChart }) => r.value)
+const charts = (): MockChart[] =>
+  (createChartLWC as any).mock.results.map((r: { value: MockChart }) => r.value)
 
-function emitFrame({ ts, ohlc, equity }: { ts: string, ohlc?: { o?: number; h?: number; l?: number; c?: number; v?: number }, equity?: { ts: string; value: number } }) {
+function emitFrame({
+  ts,
+  ohlc,
+  equity,
+}: {
+  ts: string
+  ohlc?: { o?: number; h?: number; l?: number; c?: number; v?: number }
+  equity?: { ts: string; value: number }
+}) {
   __emit({ t: 'frame', ts, dropped: 0, ohlc: ohlc ?? null, orders: [], equity: equity ?? null })
 }
 
 describe('RunPlayerContainer daily aggregates', () => {
   const wrapper = ({ children }: { children: React.ReactNode }) => (
-    <QueryClientProvider client={new (require('@tanstack/react-query').QueryClient)({ defaultOptions: { queries: { retry: false } } })}>
+    <QueryClientProvider
+      client={
+        new (require('@tanstack/react-query').QueryClient)({
+          defaultOptions: { queries: { retry: false } },
+        })
+      }
+    >
       {children}
     </QueryClientProvider>
   )
@@ -67,7 +95,6 @@ describe('RunPlayerContainer daily aggregates', () => {
 
     // allow ChartOHLC effect to mount and create series
     await new Promise((r) => setTimeout(r, 0))
-
 
     // Emit two minute frames within same NY day (use Z times around boundary 04:00Z)
     emitFrame({ ts: '2024-10-01T03:59:00Z', ohlc: { o: 10, h: 12, l: 9, c: 11 } }) // belongs to 2024-09-30 NY
@@ -102,10 +129,15 @@ describe('RunPlayerContainer daily aggregates', () => {
 
     const updatedArg = ohlcSeries.update.mock.calls.at(-1)?.[0]
     const setArgArray = ohlcSeries.setData.mock.calls.at(-1)?.[0]
-    const lastPoint: any = updatedArg ?? (Array.isArray(setArgArray) ? setArgArray.at(-1) : undefined)
+    const lastPoint: any =
+      updatedArg ?? (Array.isArray(setArgArray) ? setArgArray.at(-1) : undefined)
     if (lastPoint?.time) {
       if (typeof lastPoint.time === 'object') {
-        expect(lastPoint.time).toMatchObject({ year: expect.any(Number), month: expect.any(Number), day: expect.any(Number) })
+        expect(lastPoint.time).toMatchObject({
+          year: expect.any(Number),
+          month: expect.any(Number),
+          day: expect.any(Number),
+        })
       } else {
         expect(String(lastPoint.time)).toMatch(/^\d{4}-\d{2}-\d{2}$/)
       }
@@ -147,4 +179,3 @@ describe('RunPlayerContainer daily aggregates', () => {
     expect(ohlcSeries.update.mock.calls.length).toBeGreaterThan(0)
   })
 })
-

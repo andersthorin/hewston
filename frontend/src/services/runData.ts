@@ -28,66 +28,83 @@ export const BFFAggregatedBacktestResponseSchema = z.object({
   run_to: z.string().optional().nullable(),
 
   // Aggregated metrics data
-  metrics: z.object({
-    total_return: z.number().optional().nullable(),
-    sharpe_ratio: z.number().optional().nullable(),
-    max_drawdown: z.number().optional().nullable(),
-    win_rate: z.number().optional().nullable(),
-    profit_factor: z.number().optional().nullable(),
-    total_trades: z.number().optional().nullable(),
-    avg_trade_duration: z.number().optional().nullable(),
-  }).optional().nullable(),
+  metrics: z
+    .object({
+      total_return: z.number().optional().nullable(),
+      sharpe_ratio: z.number().optional().nullable(),
+      max_drawdown: z.number().optional().nullable(),
+      win_rate: z.number().optional().nullable(),
+      profit_factor: z.number().optional().nullable(),
+      total_trades: z.number().optional().nullable(),
+      avg_trade_duration: z.number().optional().nullable(),
+    })
+    .optional()
+    .nullable(),
 
   // Aggregated equity curve data
-  equity: z.array(z.object({ ts: z.string(), value: z.number() })).optional().nullable(),
+  equity: z
+    .array(z.object({ ts: z.string(), value: z.number() }))
+    .optional()
+    .nullable(),
 
   // Aggregated orders data
-  orders: z.array(z.object({
-    ts: z.string(),
-    side: z.union([
-      z.enum(['buy', 'sell']),
-      z.enum(['BUY', 'SELL']).transform((s) => s.toLowerCase() as 'buy' | 'sell'),
-    ]),
-    quantity: z.number(),
-    price: z.number(),
-    order_type: z.string().optional(),
-    status: z.string().optional(),
-  })).optional().nullable(),
+  orders: z
+    .array(
+      z.object({
+        ts: z.string(),
+        side: z.union([
+          z.enum(['buy', 'sell']),
+          z.enum(['BUY', 'SELL']).transform((s) => s.toLowerCase() as 'buy' | 'sell'),
+        ]),
+        quantity: z.number(),
+        price: z.number(),
+        order_type: z.string().optional(),
+        status: z.string().optional(),
+      }),
+    )
+    .optional()
+    .nullable(),
 
   // BFF metadata
-  meta: z.object({
-    aggregated: z.boolean().default(true),
-    cache_hit: z.boolean().optional().default(false),
-    load_time_ms: z.number().optional(),
-    source: z.enum(['bff']).default('bff'),
-    components_loaded: z.array(z.string()).optional(),
-  }).optional(),
+  meta: z
+    .object({
+      aggregated: z.boolean().default(true),
+      cache_hit: z.boolean().optional().default(false),
+      load_time_ms: z.number().optional(),
+      source: z.enum(['bff']).default('bff'),
+      components_loaded: z.array(z.string()).optional(),
+    })
+    .optional(),
 })
 export type BFFAggregatedBacktestResponse = z.infer<typeof BFFAggregatedBacktestResponseSchema>
 
 // Backtest list with metadata (BFF-enhanced)
 export const BFFBacktestListResponseSchema = z.object({
-  items: z.array(z.object({
-    backtest_id: z.string(),
-    created_at: z.string(),
-    strategy_id: z.string(),
-    status: z.string(),
-    symbol: z.string().optional().nullable(),
-    run_from: z.string().optional().nullable(),
-    run_to: z.string().optional().nullable(),
-    duration_ms: z.number().optional().nullable(),
-    total_return: z.number().optional().nullable(),
-    sharpe_ratio: z.number().optional().nullable(),
-    max_drawdown: z.number().optional().nullable(),
-  })),
+  items: z.array(
+    z.object({
+      backtest_id: z.string(),
+      created_at: z.string(),
+      strategy_id: z.string(),
+      status: z.string(),
+      symbol: z.string().optional().nullable(),
+      run_from: z.string().optional().nullable(),
+      run_to: z.string().optional().nullable(),
+      duration_ms: z.number().optional().nullable(),
+      total_return: z.number().optional().nullable(),
+      sharpe_ratio: z.number().optional().nullable(),
+      max_drawdown: z.number().optional().nullable(),
+    }),
+  ),
   total: z.number(),
   limit: z.number(),
   offset: z.number(),
-  meta: z.object({
-    cache_hit: z.boolean().optional().default(false),
-    load_time_ms: z.number().optional(),
-    source: z.enum(['bff']).optional().default('bff'),
-  }).optional(),
+  meta: z
+    .object({
+      cache_hit: z.boolean().optional().default(false),
+      load_time_ms: z.number().optional(),
+      source: z.enum(['bff']).optional().default('bff'),
+    })
+    .optional(),
 })
 export type BFFBacktestListResponse = z.infer<typeof BFFBacktestListResponseSchema>
 
@@ -101,7 +118,7 @@ export class BacktestDataService {
     // Normalize any legacy/nested shapes to ensure backtest_id is present before Zod parsing
     if (response && Array.isArray(response.items)) {
       response.items = response.items.map((it: any) => {
-        const run = it && typeof it === 'object' ? (it.run || {}) : {}
+        const run = it && typeof it === 'object' ? it.run || {} : {}
         const normalized = {
           backtest_id: it?.backtest_id ?? it?.run_id ?? it?.id ?? run?.run_id ?? run?.id,
           created_at: it?.created_at ?? run?.created_at ?? it?.createdAt,
@@ -119,7 +136,10 @@ export class BacktestDataService {
   }
 
   public async getCompleteBacktest(backtest_id: string): Promise<BFFAggregatedBacktestResponse> {
-    const response: any = await apiGetWithFlags<any>(`/backtests/${backtest_id}/complete`, 'runData')
+    const response: any = await apiGetWithFlags<any>(
+      `/backtests/${backtest_id}/complete`,
+      'runData',
+    )
     // Normalize any legacy keys in case of fallback/misroute
     if (response && typeof response === 'object') {
       const r: any = response
@@ -140,12 +160,16 @@ export class BacktestDataService {
 
   public async createBacktest(
     request: CreateBacktestRequest,
-    idempotencyKey?: string
+    idempotencyKey?: string,
   ): Promise<CreateBacktestResponse & { backtest_id?: string }> {
     return await apiPostWithFlags('/backtests', 'runData', request, { idempotencyKey })
   }
 
-  public getPerformanceMetrics(): { bffEnabled: boolean; lastLoadTime?: number; aggregationBenefit?: number } {
+  public getPerformanceMetrics(): {
+    bffEnabled: boolean
+    lastLoadTime?: number
+    aggregationBenefit?: number
+  } {
     const config = featureFlagService.getConfiguration()
     return {
       bffEnabled: config.bffEnabled && config.runDataEnabled,

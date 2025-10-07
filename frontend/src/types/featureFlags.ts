@@ -1,6 +1,6 @@
 /**
  * Feature flag types and configuration for BFF integration.
- * 
+ *
  * This module defines the TypeScript types for feature flag configuration
  * that controls BFF vs backend endpoint selection.
  */

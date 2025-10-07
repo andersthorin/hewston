@@ -1,3 +1,5 @@
+# ruff: noqa: B008
+
 """
 BFF Proxy API Routes
 
@@ -5,12 +7,10 @@ Provides transparent proxy functionality for existing backend APIs.
 Maintains exact API compatibility while adding BFF-specific enhancements.
 """
 
-from fastapi import APIRouter, Request, Depends, Query
-from fastapi.responses import Response
-import httpx
 import logging
-from typing import Optional, Dict, Any
-import json
+
+import httpx
+from fastapi import APIRouter, Depends, Query, Request
 
 from bff.app.dependencies import get_backend_client
 from bff.services.backend_client import BackendClient, create_backend_client
@@ -21,18 +21,17 @@ logger = logging.getLogger("bff.proxy")
 
 async def get_correlation_id(request: Request) -> str:
     """Extract correlation ID from request state."""
-    return getattr(request.state, 'correlation_id', 'unknown')
+    return getattr(request.state, "correlation_id", "unknown")
 
 
 async def get_backend_proxy_client(
-    backend_client: httpx.AsyncClient = Depends(get_backend_client)
+    backend_client: httpx.AsyncClient = Depends(get_backend_client),
 ) -> BackendClient:
     """Get configured backend proxy client."""
     return await create_backend_client(backend_client)
 
 
 # Backtests API Proxy Routes
-
 
 
 @router.get("/backtests")
@@ -43,15 +42,15 @@ async def proxy_list_backtests(
     # Query parameters matching backend API
     limit: int = 20,
     offset: int = 0,
-    symbol: Optional[str] = None,
-    strategy_id: Optional[str] = None,
-    from_date: Optional[str] = Query(None, alias="from"),
-    to_date: Optional[str] = Query(None, alias="to"),
-    order: Optional[str] = None,
+    symbol: str | None = None,
+    strategy_id: str | None = None,
+    from_date: str | None = Query(None, alias="from"),
+    to_date: str | None = Query(None, alias="to"),
+    order: str | None = None,
 ):
     """
     Proxy GET /backtests to backend.
-    
+
     Lists backtest runs with the same filtering and pagination as the backend.
     """
     # Prepare query parameters
@@ -59,7 +58,7 @@ async def proxy_list_backtests(
         "limit": limit,
         "offset": offset,
     }
-    
+
     # Add optional parameters
     if symbol:
         params["symbol"] = symbol
@@ -71,7 +70,7 @@ async def proxy_list_backtests(
         params["to"] = to_date
     if order:
         params["order"] = order
-    
+
     # Forward request to backend
     return await backend_client.proxy_request(
         method="GET",
@@ -91,7 +90,7 @@ async def proxy_get_backtest(
 ):
     """
     Proxy GET /backtests/{run_id} to backend.
-    
+
     Gets a specific backtest run details.
     """
     return await backend_client.proxy_request(
@@ -104,28 +103,29 @@ async def proxy_get_backtest(
 
 # Bars API Proxy Routes
 
+
 @router.get("/bars/daily")
 async def proxy_get_daily_bars(
     symbol: str,
-    from_date: Optional[str] = Query(None, alias="from"),
-    to_date: Optional[str] = Query(None, alias="to"),
+    from_date: str | None = Query(None, alias="from"),
+    to_date: str | None = Query(None, alias="to"),
     request: Request = None,
     backend_client: BackendClient = Depends(get_backend_proxy_client),
     correlation_id: str = Depends(get_correlation_id),
 ):
     """
     Proxy GET /bars/daily to backend.
-    
+
     Gets daily OHLCV bars for a symbol.
     """
     # Prepare query parameters
     params = {"symbol": symbol}
-    
+
     if from_date:
         params["from"] = from_date
     if to_date:
         params["to"] = to_date
-    
+
     # Forward request to backend
     return await backend_client.proxy_request(
         method="GET",
@@ -148,7 +148,7 @@ async def proxy_get_minute_bars(
 ):
     """
     Proxy GET /bars/minute to backend.
-    
+
     Gets minute OHLCV bars for a symbol.
     """
     # Prepare query parameters
@@ -158,7 +158,7 @@ async def proxy_get_minute_bars(
         "to": to_date,
         "rth_only": rth_only,
     }
-    
+
     # Forward request to backend
     return await backend_client.proxy_request(
         method="GET",
@@ -182,7 +182,7 @@ async def proxy_get_minute_decimated_bars(
 ):
     """
     Proxy GET /bars/minute_decimated to backend.
-    
+
     Gets decimated minute OHLCV bars for a symbol.
     """
     # Prepare query parameters
@@ -193,7 +193,7 @@ async def proxy_get_minute_decimated_bars(
         "target": target,
         "rth_only": rth_only,
     }
-    
+
     # Forward request to backend
     return await backend_client.proxy_request(
         method="GET",
@@ -216,7 +216,7 @@ async def proxy_get_hour_bars(
 ):
     """
     Proxy GET /bars/hour to backend.
-    
+
     Gets hourly OHLCV bars for a symbol.
     """
     # Prepare query parameters
@@ -226,7 +226,7 @@ async def proxy_get_hour_bars(
         "to": to_date,
         "rth_only": rth_only,
     }
-    
+
     # Forward request to backend
     return await backend_client.proxy_request(
         method="GET",

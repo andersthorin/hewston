@@ -11,7 +11,6 @@ function App() {
         {/* Canonical backtest routes only */}
         <Route path="/backtests" element={<BacktestsListContainer />} />
         <Route path="/backtests/:backtest_id" element={<BacktestDetailView />} />
-
       </Routes>
 
       {/* Development tools - only shown in dev mode with debug enabled */}

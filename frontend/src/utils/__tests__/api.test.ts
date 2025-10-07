@@ -10,7 +10,7 @@ import {
   apiPut,
   apiDelete,
   apiGetWithFlags,
-  apiPostWithFlags
+  apiPostWithFlags,
 } from '../api'
 
 // Mock fetch globally
@@ -21,12 +21,12 @@ global.fetch = mockFetch
 vi.mock('../apiRouter', () => ({
   apiRouter: {
     routeAPICall: vi.fn(),
-  }
+  },
 }))
 
 // Mock the constants module
 vi.mock('../../constants', () => ({
-  API_BASE_URL: 'http://127.0.0.1:8000'
+  API_BASE_URL: 'http://127.0.0.1:8000',
 }))
 
 describe('API Utilities', () => {
@@ -67,7 +67,7 @@ describe('API Utilities', () => {
     it('should make a POST request with body', async () => {
       const requestBody = { name: 'test' }
       const mockResponse = { id: 1, name: 'test' }
-      
+
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 201,
@@ -90,9 +90,9 @@ describe('API Utilities', () => {
     })
 
     it('should handle custom headers', async () => {
-      const customHeaders = { 'Authorization': 'Bearer token123' }
+      const customHeaders = { Authorization: 'Bearer token123' }
       const mockResponse = { data: 'authorized' }
-      
+
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -108,7 +108,7 @@ describe('API Utilities', () => {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer token123',
+          Authorization: 'Bearer token123',
         },
       })
     })
@@ -121,15 +121,15 @@ describe('API Utilities', () => {
         json: vi.fn().mockResolvedValueOnce({ error: 'Resource not found' }),
       })
 
-      await expect(apiRequest('/nonexistent', { method: 'GET' }))
-        .rejects.toThrow('HTTP 404: Not Found')
+      await expect(apiRequest('/nonexistent', { method: 'GET' })).rejects.toThrow(
+        'HTTP 404: Not Found',
+      )
     })
 
     it('should handle network errors', async () => {
       mockFetch.mockRejectedValueOnce(new Error('Network error'))
 
-      await expect(apiRequest('/test', { method: 'GET' }))
-        .rejects.toThrow('Network error')
+      await expect(apiRequest('/test', { method: 'GET' })).rejects.toThrow('Network error')
     })
 
     it('should handle JSON parsing errors', async () => {
@@ -139,8 +139,7 @@ describe('API Utilities', () => {
         json: vi.fn().mockRejectedValueOnce(new Error('Invalid JSON')),
       })
 
-      await expect(apiRequest('/test', { method: 'GET' }))
-        .rejects.toThrow('Invalid JSON')
+      await expect(apiRequest('/test', { method: 'GET' })).rejects.toThrow('Invalid JSON')
     })
   })
 
@@ -188,7 +187,7 @@ describe('API Utilities', () => {
     it('should make a POST request with data', async () => {
       const requestData = { name: 'test post' }
       const mockResponse = { id: 1, name: 'test post' }
-      
+
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 201,
@@ -232,7 +231,7 @@ describe('API Utilities', () => {
     it('should make a PUT request with data', async () => {
       const requestData = { id: 1, name: 'updated' }
       const mockResponse = { id: 1, name: 'updated' }
-      
+
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -282,13 +281,13 @@ describe('API Utilities', () => {
         json: vi.fn().mockResolvedValueOnce(mockResponse),
       })
 
-      await apiDelete('/test/1', { 'Authorization': 'Bearer token' })
+      await apiDelete('/test/1', { Authorization: 'Bearer token' })
 
       expect(mockFetch).toHaveBeenCalledWith('http://127.0.0.1:8000/test/1', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': 'Bearer token',
+          Authorization: 'Bearer token',
         },
       })
     })
@@ -303,8 +302,7 @@ describe('API Utilities', () => {
         json: vi.fn().mockResolvedValueOnce({ error: 'Invalid input' }),
       })
 
-      await expect(apiGet('/test'))
-        .rejects.toThrow('HTTP 400: Bad Request')
+      await expect(apiGet('/test')).rejects.toThrow('HTTP 400: Bad Request')
     })
 
     it('should handle 401 Unauthorized', async () => {
@@ -315,8 +313,7 @@ describe('API Utilities', () => {
         json: vi.fn().mockResolvedValueOnce({ error: 'Authentication required' }),
       })
 
-      await expect(apiGet('/protected'))
-        .rejects.toThrow('HTTP 401: Unauthorized')
+      await expect(apiGet('/protected')).rejects.toThrow('HTTP 401: Unauthorized')
     })
 
     it('should handle 500 Internal Server Error', async () => {
@@ -327,8 +324,7 @@ describe('API Utilities', () => {
         json: vi.fn().mockResolvedValueOnce({ error: 'Server error' }),
       })
 
-      await expect(apiGet('/test'))
-        .rejects.toThrow('HTTP 500: Internal Server Error')
+      await expect(apiGet('/test')).rejects.toThrow('HTTP 500: Internal Server Error')
     })
   })
 
@@ -343,8 +339,8 @@ describe('API Utilities', () => {
         '/bars/daily',
         expect.objectContaining({
           method: 'GET',
-          allowFallback: false
-        })
+          allowFallback: false,
+        }),
       )
       expect(result).toEqual({ data: 'bff-test' })
     })
@@ -352,11 +348,7 @@ describe('API Utilities', () => {
     it('should use API router for feature flag POST requests', async () => {
       vi.mocked(mockApiRouter.routeAPICall).mockResolvedValue({ id: 456 })
 
-      const result = await apiPostWithFlags(
-        '/backtests',
-        'runData',
-        { strategy: 'test' }
-      )
+      const result = await apiPostWithFlags('/backtests', 'runData', { strategy: 'test' })
 
       expect(vi.mocked(mockApiRouter.routeAPICall)).toHaveBeenCalledWith(
         'runData',
@@ -364,8 +356,8 @@ describe('API Utilities', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ strategy: 'test' }),
-          allowFallback: false
-        })
+          allowFallback: false,
+        }),
       )
       expect(result).toEqual({ id: 456 })
     })
@@ -374,7 +366,7 @@ describe('API Utilities', () => {
       vi.mocked(mockApiRouter.routeAPICall).mockResolvedValue({ data: 'authorized' })
 
       await apiGetWithFlags('/bars/daily', 'chartData', {
-        'Authorization': 'Bearer token'
+        Authorization: 'Bearer token',
       })
 
       expect(vi.mocked(mockApiRouter.routeAPICall)).toHaveBeenCalledWith(
@@ -382,20 +374,16 @@ describe('API Utilities', () => {
         '/bars/daily',
         expect.objectContaining({
           headers: expect.objectContaining({
-            'Authorization': 'Bearer token'
-          })
-        })
+            Authorization: 'Bearer token',
+          }),
+        }),
       )
     })
 
     it('should propagate errors from API router', async () => {
-      vi.mocked(mockApiRouter.routeAPICall).mockRejectedValue(
-        new Error('BFF unavailable')
-      )
+      vi.mocked(mockApiRouter.routeAPICall).mockRejectedValue(new Error('BFF unavailable'))
 
-      await expect(
-        apiGetWithFlags('/bars/daily', 'chartData')
-      ).rejects.toThrow('BFF unavailable')
+      await expect(apiGetWithFlags('/bars/daily', 'chartData')).rejects.toThrow('BFF unavailable')
     })
   })
 
@@ -403,12 +391,12 @@ describe('API Utilities', () => {
     it('should use direct API call when useFeatureFlags is false', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ data: 'direct' })
+        json: () => Promise.resolve({ data: 'direct' }),
       })
 
       const result = await apiRequest('/test-endpoint', {
         endpointGroup: 'chartData',
-        useFeatureFlags: false
+        useFeatureFlags: false,
       })
 
       expect(mockFetch).toHaveBeenCalled()
@@ -419,11 +407,11 @@ describe('API Utilities', () => {
     it('should use direct API call when endpointGroup not specified', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: () => Promise.resolve({ data: 'direct' })
+        json: () => Promise.resolve({ data: 'direct' }),
       })
 
       const result = await apiRequest('/test-endpoint', {
-        useFeatureFlags: true
+        useFeatureFlags: true,
         // endpointGroup not specified
       })
 

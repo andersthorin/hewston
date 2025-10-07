@@ -1,6 +1,6 @@
 /**
  * WebSocket Performance Validation Tests
- * 
+ *
  * These tests validate the performance claims for Story 9.3:
  * - ~30 FPS streaming performance through BFF
  * - <50ms latency for real-time updates
@@ -41,14 +41,14 @@ vi.mock('../../services/websocket', () => ({
     getHealth() {
       const uptime = Date.now() - this.startTime
       const avgLatency = this.latencyCount > 0 ? this.latencySum / this.latencyCount : 0
-      
+
       return {
         state: this.connectionState,
-        connectionSource: (process.env.VITE_BFF_WEBSOCKET_ENABLED === 'true') ? 'bff' : 'backend',
+        connectionSource: process.env.VITE_BFF_WEBSOCKET_ENABLED === 'true' ? 'bff' : 'backend',
         messagesReceived: this.messageCount,
         latency: avgLatency,
         uptime,
-        reconnectAttempts: 0
+        reconnectAttempts: 0,
       }
     }
 
@@ -56,7 +56,7 @@ vi.mock('../../services/websocket', () => ({
       this.connectionState = 'closed'
     }
   },
-  createWebSocketManager: vi.fn()
+  createWebSocketManager: vi.fn(),
 }))
 
 // Mock feature flags
@@ -66,7 +66,7 @@ vi.mock('../../services/featureFlags', () => ({
     getConfiguration: vi.fn(),
     getEffectiveWsBaseUrl: vi.fn(),
     evaluateFeatureFlag: vi.fn(),
-  }
+  },
 }))
 
 describe('WebSocket Performance Validation', () => {
@@ -88,7 +88,7 @@ describe('WebSocket Performance Validation', () => {
     vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
       enabled: true,
       source: 'bff',
-      endpointUrl: 'ws://127.0.0.1:8001'
+      endpointUrl: 'ws://127.0.0.1:8001',
     })
   })
 
@@ -102,7 +102,7 @@ describe('WebSocket Performance Validation', () => {
       // Mock BFF mode
       vi.stubEnv('VITE_BFF_ENABLED', 'true')
       vi.stubEnv('VITE_BFF_WEBSOCKET_ENABLED', 'true')
-      
+
       const { BFFWebSocketManager } = await import('../../services/websocket')
       const manager = new BFFWebSocketManager('test-run-123')
       await manager.connect()
@@ -111,7 +111,7 @@ describe('WebSocket Performance Validation', () => {
       const targetFPS = 30
       const testDurationMs = 1000
       const expectedFrames = Math.floor((testDurationMs / 1000) * targetFPS)
-      
+
       const startTime = Date.now()
       let frameCount = 0
 
@@ -121,16 +121,16 @@ describe('WebSocket Performance Validation', () => {
           clearInterval(frameInterval)
           return
         }
-        
+
         testHarness.simulateStreamingData({
           frame: frameCount++,
           timestamp: Date.now(),
-          data: { price: 100 + Math.random() * 10 }
+          data: { price: 100 + Math.random() * 10 },
         })
       }, 1000 / targetFPS) // ~33ms intervals for 30 FPS
 
       // Wait for test completion
-      await new Promise(resolve => setTimeout(resolve, testDurationMs + 100))
+      await new Promise((resolve) => setTimeout(resolve, testDurationMs + 100))
       clearInterval(frameInterval)
 
       // Validate performance
@@ -155,7 +155,7 @@ describe('WebSocket Performance Validation', () => {
         await testHarness.simulateMessage({
           type: 'burst',
           sequence: i,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         })
       }
 
@@ -184,15 +184,18 @@ describe('WebSocket Performance Validation', () => {
         const latency = await testHarness.measureMessageLatency({
           type: 'latency-test',
           sequence: i,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         })
         latencyMeasurements.push(latency)
       }
 
       // Calculate statistics
-      const avgLatency = latencyMeasurements.reduce((sum, lat) => sum + lat, 0) / latencyMeasurements.length
+      const avgLatency =
+        latencyMeasurements.reduce((sum, lat) => sum + lat, 0) / latencyMeasurements.length
       const maxLatency = Math.max(...latencyMeasurements)
-      const p95Latency = latencyMeasurements.sort((a, b) => a - b)[Math.floor(latencyMeasurements.length * 0.95)]
+      const p95Latency = latencyMeasurements.sort((a, b) => a - b)[
+        Math.floor(latencyMeasurements.length * 0.95)
+      ]
 
       // Validate latency requirements
       expect(avgLatency).toBeLessThan(50) // Average latency < 50ms
@@ -209,18 +212,18 @@ describe('WebSocket Performance Validation', () => {
 
       // Simulate ping/pong exchange
       const pingStartTime = Date.now()
-      
+
       // Send ping
       manager.send({ type: 'ping', timestamp: pingStartTime })
-      
+
       // Simulate pong response
       await testHarness.simulateMessage({
         type: 'pong',
-        timestamp: Date.now()
+        timestamp: Date.now(),
       })
 
       const roundTripTime = Date.now() - pingStartTime
-      
+
       // Round-trip should be reasonable for local testing
       expect(roundTripTime).toBeLessThan(100) // < 100ms round-trip
       expect(roundTripTime).toBeGreaterThanOrEqual(0) // Allow zero in synthetic envs
@@ -242,8 +245,8 @@ describe('WebSocket Performance Validation', () => {
           symbol: `STOCK${i}`,
           price: 100 + Math.random() * 50,
           volume: Math.floor(Math.random() * 10000),
-          timestamp: Date.now()
-        }))
+          timestamp: Date.now(),
+        })),
       }
 
       const startTime = Date.now()
@@ -281,12 +284,12 @@ describe('WebSocket Performance Validation', () => {
         await testHarness.simulateMessage({
           type: 'sustained-load',
           sequence: messagesSent++,
-          timestamp: Date.now()
+          timestamp: Date.now(),
         })
       }, 1000 / messagesPerSecond)
 
       // Wait for test completion
-      await new Promise(resolve => setTimeout(resolve, (testDurationSeconds + 1) * 1000))
+      await new Promise((resolve) => setTimeout(resolve, (testDurationSeconds + 1) * 1000))
       clearInterval(loadInterval)
 
       const totalTime = Date.now() - startTime
@@ -306,7 +309,7 @@ describe('WebSocket Performance Validation', () => {
   describe('Connection Performance', () => {
     it('should establish connections quickly', async () => {
       const { BFFWebSocketManager } = await import('../../services/websocket')
-      
+
       const connectionStartTime = Date.now()
       const manager = new BFFWebSocketManager('test-run-123')
       await manager.connect()
@@ -322,7 +325,7 @@ describe('WebSocket Performance Validation', () => {
     it('should handle reconnection efficiently', async () => {
       const { BFFWebSocketManager } = await import('../../services/websocket')
       const manager = new BFFWebSocketManager('test-run-123')
-      
+
       // Initial connection
       await manager.connect()
       expect(manager.isReady()).toBe(true)
@@ -335,7 +338,7 @@ describe('WebSocket Performance Validation', () => {
 
       // Reconnection should be efficient
       expect(reconnectTime).toBeLessThan(2000) // < 2 seconds
-      
+
       manager.close()
     })
   })
@@ -345,18 +348,18 @@ describe('WebSocket Performance Validation', () => {
       // Test backend mode
       vi.stubEnv('VITE_BFF_ENABLED', 'false')
       vi.stubEnv('VITE_BFF_WEBSOCKET_ENABLED', 'false')
-      
+
       const { featureFlagService } = await import('../../services/featureFlags')
       vi.mocked(featureFlagService.isFeatureFlagEnabled).mockReturnValue(false)
       vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: false,
         source: 'backend',
-        endpointUrl: 'ws://127.0.0.1:8000'
+        endpointUrl: 'ws://127.0.0.1:8000',
       })
 
       const { BFFWebSocketManager } = await import('../../services/websocket')
       const manager = new BFFWebSocketManager('test-run-123')
-      
+
       const startTime = Date.now()
       await manager.connect()
       const connectionTime = Date.now() - startTime
@@ -364,7 +367,7 @@ describe('WebSocket Performance Validation', () => {
       // Backend mode should still be performant
       expect(connectionTime).toBeLessThan(1000)
       expect(manager.isReady()).toBe(true)
-      
+
       const health = manager.getHealth()
       expect(health.connectionSource).toBe('backend')
 

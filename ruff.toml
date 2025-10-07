@@ -1,0 +1,29 @@
+line-length = 100
+extend-exclude = [
+  ".venv",
+  "node_modules",
+  "frontend/node_modules",
+  "frontend/dist",
+  "tmp_data_bff_debug",
+]
+# Target Python version for linting rules
+target-version = "py311"
+
+[lint]
+select = [
+  "E",  # pycodestyle
+  "F",  # pyflakes
+  "W",  # warnings
+  "I",  # isort (import order via Ruff)
+  "UP", # pyupgrade
+  "B",  # bugbear (subset via Ruff)
+  "C90",# mccabe complexity
+]
+ignore = []
+
+[lint.isort]
+known-first-party = ["backend", "bff"]
+
+[format]
+quote-style = "single"
+

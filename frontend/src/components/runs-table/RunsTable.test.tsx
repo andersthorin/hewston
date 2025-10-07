@@ -11,9 +11,9 @@ function makeItem(partial: Partial<RunSummary> = {}): RunSummary {
     strategy_id: partial.strategy_id ?? 'sma_crossover',
     status: partial.status ?? 'DONE',
     symbol: partial.symbol ?? 'AAPL',
-    run_from: ('run_from' in partial) ? partial.run_from : '2024-10-01',
-    run_to: ('run_to' in partial) ? partial.run_to : '2024-10-31',
-    duration_ms: ('duration_ms' in partial) ? partial.duration_ms : 1234,
+    run_from: 'run_from' in partial ? partial.run_from : '2024-10-01',
+    run_to: 'run_to' in partial ? partial.run_to : '2024-10-31',
+    duration_ms: 'duration_ms' in partial ? partial.duration_ms : 1234,
   }
 }
 
@@ -33,4 +33,3 @@ describe('RunsTable', () => {
     expect(dashes.length).toBeGreaterThanOrEqual(2)
   })
 })
-

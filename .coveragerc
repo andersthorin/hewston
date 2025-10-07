@@ -1,0 +1,14 @@
+[run]
+branch = True
+source =
+    backend
+    bff
+omit =
+    */__init__.py
+    */__pycache__/*
+    */tests/*
+
+[report]
+show_missing = True
+fail_under = 85
+

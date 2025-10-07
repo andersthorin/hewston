@@ -7,9 +7,8 @@ across the backend codebase.
 
 import os
 from pathlib import Path
-from typing import Optional
 
-from backend.constants import DEFAULT_DATA_DIR, DEFAULT_CATALOG_PATH
+from backend.constants import DEFAULT_CATALOG_PATH, DEFAULT_DATA_DIR
 
 
 def get_base_data_dir() -> Path:
@@ -31,7 +30,7 @@ def get_catalog_path() -> Path:
     return base / Path(DEFAULT_CATALOG_PATH).name
 
 
-def get_raw_databento_dir(symbol: Optional[str] = None, year: Optional[int] = None) -> Path:
+def get_raw_databento_dir(symbol: str | None = None, year: int | None = None) -> Path:
     """Get the raw Databento data directory, optionally for a specific symbol/year."""
     base = get_base_data_dir() / "raw" / "databento"
     if symbol and year:
@@ -41,10 +40,7 @@ def get_raw_databento_dir(symbol: Optional[str] = None, year: Optional[int] = No
     return base
 
 
-
-
-
-def get_backtests_dir(run_id: Optional[str] = None) -> Path:
+def get_backtests_dir(run_id: str | None = None) -> Path:
     """Get the backtests directory, optionally for a specific run."""
     base = get_base_data_dir() / "backtests"
     if run_id:

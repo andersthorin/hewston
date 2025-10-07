@@ -15,7 +15,7 @@ describe('SymbolFocus', () => {
     render(
       <PlaybackProvider>
         <SymbolFocus />
-      </PlaybackProvider>
+      </PlaybackProvider>,
     )
 
     // Should include All + seeded symbols
@@ -30,4 +30,3 @@ describe('SymbolFocus', () => {
     expect(playbackStore.getState().focusedSymbol).toBe('AAPL')
   })
 })
-

@@ -5,22 +5,35 @@ import contextlib
 import json
 import logging
 from datetime import datetime as _dt
-import pandas as pd
 from typing import Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from backend.modules.backtests.adapters.http.controllers import list_backtests as list_backtests_ctrl, get_backtest as get_backtest_ctrl, create_backtest as create_backtest_ctrl
-
-from uuid import uuid4
-from fastapi import Body, Header, HTTPException, Request, status, Query
+import pandas as pd
+from fastapi import (
+    APIRouter,
+    Header,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+    status,
+)
 from fastapi.responses import JSONResponse, StreamingResponse
-from backend.constants import DEFAULT_FPS
 
+from backend.constants import DEFAULT_FPS
+from backend.modules.backtests.adapters.http.controllers import (
+    create_backtest as create_backtest_ctrl,
+)
+from backend.modules.backtests.adapters.http.controllers import (
+    get_backtest as get_backtest_ctrl,
+)
+from backend.modules.backtests.adapters.http.controllers import (
+    list_backtests as list_backtests_ctrl,
+)
 
 
 def _json_default(o):
     try:
-        if isinstance(o, (_dt, pd.Timestamp)):
+        if isinstance(o, _dt | pd.Timestamp):
             return pd.to_datetime(o, utc=True).strftime("%Y-%m-%dT%H:%M:%SZ")
     except Exception:
         pass
@@ -30,13 +43,16 @@ def _json_default(o):
     except Exception:
         return ""
 
+
 def _json_dumps(obj: dict) -> str:
     return json.dumps(obj, default=_json_default)
+
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 # Heartbeat interval (seconds). Tests may monkeypatch this.
+
 
 @router.post("/backtests")
 async def create_backtest(
@@ -48,13 +64,22 @@ async def create_backtest(
         raw = await request.body()
         body = json.loads(raw.decode("utf-8") or "{}")
     except Exception as e:
-        logger.exception("create_backtest.json_error", extra={
-            "content_type": request.headers.get("content-type"),
-            "raw_sample": (raw[:200].decode("utf-8", "ignore") if isinstance(raw, (bytes, bytearray)) else str(raw)),
-            "error": str(e),
-        })
+        logger.exception(
+            "create_backtest.json_error",
+            extra={
+                "content_type": request.headers.get("content-type"),
+                "raw_sample": (
+                    raw[:200].decode("utf-8", "ignore")
+                    if isinstance(raw, bytes | bytearray)
+                    else str(raw)
+                ),
+                "error": str(e),
+            },
+        )
         try:
-            logger.error(f"create_backtest.body raw={raw[:200]!r} content_type={request.headers.get('content-type')}")
+            logger.error(
+                f"create_backtest.body raw={raw[:200]!r} content_type={request.headers.get('content-type')}"
+            )
         except Exception:
             pass
         return JSONResponse(
@@ -63,7 +88,6 @@ async def create_backtest(
         )
 
     # Delegate to module controller (pilot exemplar)
-    from backend.modules.backtests.adapters.http.controllers import create_backtest as create_backtest_ctrl
 
     payload, code = create_backtest_ctrl(body if isinstance(body, dict) else {}, idempotency_key)
     if 200 <= code < 300:
@@ -116,7 +140,6 @@ async def get_backtest(run_id: str):
     return data
 
 
-
 @router.get("/backtests/{run_id}/metrics")
 async def get_backtest_metrics(run_id: str):
     """Return metrics.json for a run.
@@ -128,27 +151,43 @@ async def get_backtest_metrics(run_id: str):
             status_code=status.HTTP_404_NOT_FOUND,
             content={"error": {"code": "RUN_NOT_FOUND", "message": f"Run {run_id} not found"}},
         )
-    metrics_path = ((run.get("artifacts") or {}).get("metrics_path"))
+    metrics_path = (run.get("artifacts") or {}).get("metrics_path")
     try:
         import os
+
         if not metrics_path:
             logger.warning("get_metrics.missing_path", extra={"run_id": run_id})
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": {"code": "ARTIFACT_MISSING", "message": f"metrics_path missing for backtest {run_id}"}},
+                content={
+                    "error": {
+                        "code": "ARTIFACT_MISSING",
+                        "message": f"metrics_path missing for backtest {run_id}",
+                    }
+                },
             )
         if not os.path.isfile(metrics_path):
-            logger.warning("get_metrics.file_not_found", extra={"run_id": run_id, "path": metrics_path})
+            logger.warning(
+                "get_metrics.file_not_found", extra={"run_id": run_id, "path": metrics_path}
+            )
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": {"code": "ARTIFACT_NOT_FOUND", "message": f"metrics file not found at {metrics_path}"}},
+                content={
+                    "error": {
+                        "code": "ARTIFACT_NOT_FOUND",
+                        "message": f"metrics file not found at {metrics_path}",
+                    }
+                },
             )
-        with open(metrics_path, "r") as f:
+        with open(metrics_path) as f:
             data = json.load(f)
         return JSONResponse(status_code=200, content=data)
     except Exception as e:
         logger.exception("get_metrics.error", extra={"run_id": run_id, "error": str(e)[:200]})
-        return JSONResponse(status_code=500, content={"error": {"code": "INTERNAL", "message": "failed to load metrics"}})
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"code": "INTERNAL", "message": "failed to load metrics"}},
+        )
 
 
 @router.get("/backtests/{run_id}/equity")
@@ -162,22 +201,34 @@ async def get_backtest_equity(run_id: str):
             status_code=status.HTTP_404_NOT_FOUND,
             content={"error": {"code": "RUN_NOT_FOUND", "message": f"Run {run_id} not found"}},
         )
-    eq_path = ((run.get("artifacts") or {}).get("equity_path"))
+    eq_path = (run.get("artifacts") or {}).get("equity_path")
     try:
         import os
+
         if not eq_path:
             logger.warning("get_equity.missing_path", extra={"run_id": run_id})
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": {"code": "ARTIFACT_MISSING", "message": f"equity_path missing for backtest {run_id}"}},
+                content={
+                    "error": {
+                        "code": "ARTIFACT_MISSING",
+                        "message": f"equity_path missing for backtest {run_id}",
+                    }
+                },
             )
         if not os.path.isfile(eq_path):
             logger.warning("get_equity.file_not_found", extra={"run_id": run_id, "path": eq_path})
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": {"code": "ARTIFACT_NOT_FOUND", "message": f"equity file not found at {eq_path}"}},
+                content={
+                    "error": {
+                        "code": "ARTIFACT_NOT_FOUND",
+                        "message": f"equity file not found at {eq_path}",
+                    }
+                },
             )
         import polars as pl
+
         df = pl.read_parquet(eq_path)
         # Accept legacy naming too; normalize to 'ts_utc'
         if "ts" in df.columns and "ts_utc" not in df.columns:
@@ -203,7 +254,10 @@ async def get_backtest_equity(run_id: str):
         return JSONResponse(status_code=200, content={"equity": points})
     except Exception as e:
         logger.exception("get_equity.error", extra={"run_id": run_id, "error": str(e)[:200]})
-        return JSONResponse(status_code=500, content={"error": {"code": "INTERNAL", "message": "failed to load equity"}})
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"code": "INTERNAL", "message": "failed to load equity"}},
+        )
 
 
 @router.get("/backtests/{run_id}/orders")
@@ -218,22 +272,34 @@ async def get_backtest_orders(run_id: str):
             status_code=status.HTTP_404_NOT_FOUND,
             content={"error": {"code": "RUN_NOT_FOUND", "message": f"Run {run_id} not found"}},
         )
-    path = ((run.get("artifacts") or {}).get("orders_path"))
+    path = (run.get("artifacts") or {}).get("orders_path")
     try:
         import os
+
         if not path:
             logger.warning("get_orders.missing_path", extra={"run_id": run_id})
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": {"code": "ARTIFACT_MISSING", "message": f"orders_path missing for backtest {run_id}"}},
+                content={
+                    "error": {
+                        "code": "ARTIFACT_MISSING",
+                        "message": f"orders_path missing for backtest {run_id}",
+                    }
+                },
             )
         if not os.path.isfile(path):
             logger.warning("get_orders.file_not_found", extra={"run_id": run_id, "path": path})
             return JSONResponse(
                 status_code=status.HTTP_404_NOT_FOUND,
-                content={"error": {"code": "ARTIFACT_NOT_FOUND", "message": f"orders file not found at {path}"}},
+                content={
+                    "error": {
+                        "code": "ARTIFACT_NOT_FOUND",
+                        "message": f"orders file not found at {path}",
+                    }
+                },
             )
         import polars as pl
+
         df = pl.read_parquet(path)
         rows = []
         for r in df.to_dicts():
@@ -242,25 +308,143 @@ async def get_backtest_orders(run_id: str):
                 iso = pd.to_datetime(ts, utc=True).strftime("%Y-%m-%dT%H:%M:%SZ")
             except Exception:
                 iso = str(ts) if ts is not None else ""
-            rows.append({
-                "order_id": str(r.get("order_id", "")),
-                "timestamp": iso,
-                "symbol": str(r.get("symbol", "")),
-                "side": str(r.get("side", "")),
-                "quantity": int(r.get("qty") if r.get("qty") is not None else r.get("quantity") or 0),
-                "price": float(r.get("price", 0.0) or 0.0),
-                "order_type": str(r.get("type") or r.get("order_type") or ""),
-                "status": str(r.get("status") or "FILLED"),
-                "commission": (float(r.get("commission")) if r.get("commission") is not None else None),
-            })
+            rows.append(
+                {
+                    "order_id": str(r.get("order_id", "")),
+                    "timestamp": iso,
+                    "symbol": str(r.get("symbol", "")),
+                    "side": str(r.get("side", "")),
+                    "quantity": int(
+                        r.get("qty") if r.get("qty") is not None else r.get("quantity") or 0
+                    ),
+                    "price": float(r.get("price", 0.0) or 0.0),
+                    "order_type": str(r.get("type") or r.get("order_type") or ""),
+                    "status": str(r.get("status") or "FILLED"),
+                    "commission": (
+                        float(r.get("commission")) if r.get("commission") is not None else None
+                    ),
+                }
+            )
 
         return JSONResponse(status_code=200, content={"orders": rows})
     except Exception as e:
         logger.exception("get_orders.error", extra={"run_id": run_id, "error": str(e)[:200]})
-        return JSONResponse(status_code=500, content={"error": {"code": "INTERNAL", "message": "failed to load orders"}})
+        return JSONResponse(
+            status_code=500,
+            content={"error": {"code": "INTERNAL", "message": "failed to load orders"}},
+        )
+
 
 HEARTBEAT_SECONDS = 5.0
 
+
+
+
+class _BacktestWSHandler:
+    def __init__(self, websocket: WebSocket, run_id: str):
+        self.ws = websocket
+        self.run_id = run_id
+        self.frames_sent = 0
+        self.last_dropped = 0
+        self.ready = False
+        self.hb: asyncio.Task | None = None
+        self.player_task: asyncio.Task | None = None
+
+    async def _send_err(self, code: str, msg: str) -> None:
+        try:
+            await self.ws.send_text(json.dumps({"t": "err", "code": code, "msg": msg}))
+        except Exception:
+            pass
+
+    def _frame_payload(self, fr) -> dict:
+        return {
+            "t": fr.t,
+            "ts": fr.ts,
+            "ohlc": fr.ohlc,
+            "orders": fr.orders,
+            "equity": fr.equity,
+            "metrics": fr.metrics,
+            "dropped": fr.dropped,
+            "total_frames": getattr(fr, "total_frames", None),
+        }
+
+    async def _start_player(self) -> None:
+        if not self.ready:
+            logger.debug("ws.play_ignored", extra={"run_id": self.run_id, "reason": "frontend_not_ready"})
+            return
+        if self.player_task and not self.player_task.done():
+            return
+
+        from backend.services.streamer import produce_frames
+
+        async def _run():
+            try:
+                logger.info("ws.stream_start", extra={"run_id": self.run_id})
+                async for fr in produce_frames(
+                    run_id=self.run_id, fps=DEFAULT_FPS, speed=1.0, realtime=True, cadence="1h"
+                ):
+                    await self.ws.send_text(_json_dumps(self._frame_payload(fr)))
+                    self.frames_sent += 1
+                    self.last_dropped = fr.dropped or 0
+                logger.info("ws.stream_complete", extra={"run_id": self.run_id, "frames_sent": self.frames_sent})
+            except Exception as e:
+                await self._send_err("STREAM_ERROR", str(e)[:200])
+                return
+
+        self.player_task = asyncio.create_task(_run())
+
+    async def _handle_payload(self, payload: dict[str, Any]) -> None:
+        t = payload.get("t")
+        if t == "ready":
+            self.ready = True
+            logger.info("ws.ready_received", extra={"run_id": self.run_id})
+            await self.ws.send_text(json.dumps({"t": "ready_ack"}))
+            await self._start_player()
+            return
+        if t == "ctrl":
+            cmd = payload.get("cmd")
+            if cmd not in {"play", "pause", "seek", "speed"}:
+                await self._send_err("VALIDATION", "invalid ctrl.cmd")
+                return
+            payload["echo"] = True
+            await self.ws.send_text(json.dumps(payload))
+            if cmd == "play":
+                await self._start_player()
+            elif cmd == "pause":
+                if self.player_task and not self.player_task.done():
+                    self.player_task.cancel()
+                    with contextlib.suppress(BaseException):
+                        await self.player_task
+            return
+        await self._send_err("VALIDATION", "unsupported message")
+
+    async def run(self) -> None:
+        await self.ws.accept()
+        logger.info("ws.connect", extra={"run_id": self.run_id})
+        self.hb = asyncio.create_task(_heartbeat_task(self.ws))
+        try:
+            while True:
+                data = await self.ws.receive_text()
+                try:
+                    payload: dict[str, Any] = json.loads(data)
+                except json.JSONDecodeError:
+                    await self._send_err("VALIDATION", "invalid JSON")
+                    continue
+                await self._handle_payload(payload)
+        except WebSocketDisconnect:
+            logger.info(
+                "ws.disconnect",
+                extra={"run_id": self.run_id, "frames_sent": self.frames_sent, "frames_dropped": self.last_dropped},
+            )
+        finally:
+            if self.hb:
+                self.hb.cancel()
+                with contextlib.suppress(BaseException):
+                    await self.hb
+            if self.player_task and not self.player_task.done():
+                self.player_task.cancel()
+                with contextlib.suppress(BaseException):
+                    await self.player_task
 
 async def _heartbeat_task(ws: WebSocket) -> None:
     try:
@@ -276,111 +460,9 @@ async def _heartbeat_task(ws: WebSocket) -> None:
 async def backtests_ws_echo(websocket: WebSocket, run_id: str) -> None:
     """
     WS endpoint with heartbeat, ctrl echo, and optional frame streaming when available.
-    - Sends periodic {"t":"hb"}
-    - Echoes {"t":"ctrl", ...} with {"echo": true}
-    - Waits for {"t":"ready"} signal before starting to stream frames
-    - On {"t":"ctrl","cmd":"play"} attempts to stream frames for run_id if artifacts exist (only after ready signal)
-    - Sends {"t":"err", code:"VALIDATION", msg:"..."} on invalid payloads
     """
-    await websocket.accept()
-    logger.info("ws.connect", extra={"run_id": run_id})
-
-    from backend.services.streamer import produce_frames
-
-    hb = asyncio.create_task(_heartbeat_task(websocket))
-    player_task: asyncio.Task | None = None
-    frames_sent = 0
-    last_dropped = 0
-    ready_received = False  # Track if frontend has sent ready signal
-
-    async def _start_player() -> None:
-        nonlocal player_task, frames_sent, last_dropped
-        # Only start streaming if frontend is ready
-        if not ready_received:
-            logger.debug("ws.play_ignored", extra={"run_id": run_id, "reason": "frontend_not_ready"})
-            return
-        if player_task and not player_task.done():
-            return
-        async def _run():
-            nonlocal frames_sent, last_dropped
-            try:
-                logger.info("ws.stream_start", extra={"run_id": run_id})
-                async for fr in produce_frames(run_id=run_id, fps=DEFAULT_FPS, speed=1.0, realtime=True, cadence="1h"):
-                    d = {
-                        "t": fr.t,
-                        "ts": fr.ts,
-                        "ohlc": fr.ohlc,
-                        "orders": fr.orders,
-                        "equity": fr.equity,
-                        "metrics": fr.metrics,
-                        "dropped": fr.dropped,
-                        "total_frames": getattr(fr, "total_frames", None),
-                    }
-                    await websocket.send_text(_json_dumps(d))
-                    frames_sent += 1
-                    last_dropped = fr.dropped or 0
-                logger.info("ws.stream_complete", extra={"run_id": run_id, "frames_sent": frames_sent})
-            except Exception as e:
-                try:
-                    await websocket.send_text(_json_dumps({"t": "err", "code": "STREAM_ERROR", "msg": str(e)[:200]}))
-                except Exception:
-                    pass
-                return
-        player_task = asyncio.create_task(_run())
-
-    try:
-        while True:
-            data = await websocket.receive_text()
-            try:
-                payload: dict[str, Any] = json.loads(data)
-            except json.JSONDecodeError:
-                await websocket.send_text(
-                    json.dumps({"t": "err", "code": "VALIDATION", "msg": "invalid JSON"})
-                )
-                continue
-
-            t = payload.get("t")
-            if t == "ready":
-                # Frontend signals it's ready to receive frames
-                ready_received = True
-                logger.info("ws.ready_received", extra={"run_id": run_id})
-                # Acknowledge ready signal
-                await websocket.send_text(json.dumps({"t": "ready_ack"}))
-                # Auto-start streaming after ready signal
-                await _start_player()
-            elif t == "ctrl":
-                cmd = payload.get("cmd")
-                if cmd not in {"play", "pause", "seek", "speed"}:
-                    await websocket.send_text(
-                        json.dumps({"t": "err", "code": "VALIDATION", "msg": "invalid ctrl.cmd"})
-                    )
-                    continue
-                # Echo back for compatibility
-                payload["echo"] = True
-                await websocket.send_text(json.dumps(payload))
-                # Handle simple play/pause
-                if cmd == "play":
-                    await _start_player()
-                elif cmd == "pause":
-                    if player_task and not player_task.done():
-                        player_task.cancel()
-                        with contextlib.suppress(BaseException):
-                            await player_task
-                # seek/speed are acknowledged via echo; applied in future stories
-            else:
-                await websocket.send_text(
-                    json.dumps({"t": "err", "code": "VALIDATION", "msg": "unsupported message"})
-                )
-    except WebSocketDisconnect:
-        logger.info("ws.disconnect", extra={"run_id": run_id, "frames_sent": frames_sent, "frames_dropped": last_dropped})
-    finally:
-        hb.cancel()
-        with contextlib.suppress(BaseException):
-            await hb
-        if player_task and not player_task.done():
-            player_task.cancel()
-            with contextlib.suppress(BaseException):
-                await player_task
+    handler = _BacktestWSHandler(websocket, run_id)
+    await handler.run()
 
 
 @router.get("/backtests/{run_id}/stream")
@@ -391,7 +473,9 @@ async def stream_backtest(run_id: str, speed: float = 1.0):
         frames_sent = 0
         last_dropped = 0
         try:
-            async for fr in produce_frames(run_id=run_id, fps=DEFAULT_FPS, speed=float(speed), realtime=True, cadence="1h"):
+            async for fr in produce_frames(
+                run_id=run_id, fps=DEFAULT_FPS, speed=float(speed), realtime=True, cadence="1h"
+            ):
                 payload = {
                     "t": fr.t,
                     "ts": fr.ts,
@@ -412,7 +496,14 @@ async def stream_backtest(run_id: str, speed: float = 1.0):
             yield f"event: error\ndata: {_json_dumps(err)}\n\n"
         finally:
             try:
-                logger.info("sse.end", extra={"run_id": run_id, "frames_sent": frames_sent, "frames_dropped": last_dropped})
+                logger.info(
+                    "sse.end",
+                    extra={
+                        "run_id": run_id,
+                        "frames_sent": frames_sent,
+                        "frames_dropped": last_dropped,
+                    },
+                )
             except Exception:
                 pass
 

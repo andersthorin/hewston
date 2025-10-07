@@ -1,6 +1,6 @@
 /**
  * Development tools integration for feature flag visibility and debugging.
- * 
+ *
  * This module provides development tools integration to make feature flag
  * state and endpoint routing visible for debugging purposes.
  */
@@ -42,7 +42,7 @@ class DevelopmentToolsIntegration {
     this.exposeFeatureFlagState()
     this.setupConsoleCommands()
     this.logInitializationInfo()
-    
+
     this.isInitialized = true
   }
 
@@ -53,7 +53,7 @@ class DevelopmentToolsIntegration {
     if (typeof window === 'undefined') return
 
     const debugInfo = featureFlagService.getDebugInfo()
-    
+
     // Expose to global window object
     ;(window as any).__FEATURE_FLAGS__ = debugInfo
     ;(window as any).__FEATURE_FLAG_SERVICE__ = featureFlagService
@@ -73,7 +73,7 @@ class DevelopmentToolsIntegration {
 
     const timestamp = new Date().toISOString()
     const emoji = target === 'bff' ? '🚀' : '🔧'
-    
+
     console.log(`${emoji} [${timestamp}] API Route: ${endpoint} → ${target.toUpperCase()}`)
   }
 
@@ -108,9 +108,7 @@ class DevelopmentToolsIntegration {
    * Setup console commands for debugging.
    */
   private setupConsoleCommands(): void {
-    if (typeof window === 'undefined') return
-
-    // Add helper functions to window
+    if (typeof window === 'undefined') return // Add helper functions to window
     ;(window as any).__FF_HELP__ = () => {
       console.log(`
 🎛️ Feature Flags Debug Commands:
@@ -126,19 +124,16 @@ __FF_HELP__()              - Show this help
 Available flags: bffEnabled, chartDataEnabled, runDataEnabled, websocketEnabled
       `)
     }
-
     ;(window as any).__FF_STATUS__ = () => {
       const status = this.validateConfiguration()
       console.log('🔍 Configuration Status:', status)
       return status
     }
-
     ;(window as any).__FF_ENDPOINTS__ = () => {
       const config = featureFlagService.getEndpointConfiguration()
       console.log('🎯 Endpoint Mappings:', config.endpointMappings)
       return config.endpointMappings
     }
-
     ;(window as any).__FF_WEBSOCKET__ = () => {
       const wsEnabled = featureFlagService.isFeatureFlagEnabled('websocket')
       const config = featureFlagService.getEndpointConfiguration()
@@ -151,7 +146,6 @@ Available flags: bffEnabled, chartDataEnabled, runDataEnabled, websocketEnabled
       console.log('🔌 WebSocket Configuration:', wsInfo)
       return wsInfo
     }
-
     ;(window as any).__FF_RESET__ = () => {
       console.log('🔄 Resetting feature flags to defaults...')
       // Note: This would require a page reload to take effect
@@ -177,7 +171,7 @@ Available flags: bffEnabled, chartDataEnabled, runDataEnabled, websocketEnabled
     console.group('🎛️ Feature Flags Initialized')
     console.log('Configuration:', config)
     console.log('Status:', status.valid ? '✅ Valid' : '❌ Invalid')
-    
+
     if (!status.valid) {
       console.warn('Issues:', status.issues)
     }

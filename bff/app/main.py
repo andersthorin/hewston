@@ -5,27 +5,28 @@ Main application factory for the Backend-for-Frontend service.
 Follows the pattern established in backend/app/main.py with BFF-specific enhancements.
 """
 
-from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 import logging
 import time
-from uuid import uuid4
 from contextlib import asynccontextmanager
+from uuid import uuid4
 
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+
+from backend.app.logging_setup import configure_logging
+from bff.api.backtests import router as backtests_router
+from bff.api.chart_data import router as chart_data_router
 from bff.api.health import router as health_router
 from bff.api.proxy import router as proxy_router
-from bff.api.chart_data import router as chart_data_router
-from bff.api.backtests import router as backtests_router
 from bff.api.websocket import router as websocket_router
 from bff.app.config import (
+    BFF_API_DESCRIPTION,
     BFF_API_TITLE,
     BFF_API_VERSION,
-    BFF_API_DESCRIPTION,
     BFF_CORS_ORIGINS,
     LOG_LEVEL,
 )
 from bff.app.dependencies import cleanup_dependencies
-from backend.app.logging_setup import configure_logging
 
 
 @asynccontextmanager
@@ -120,23 +121,26 @@ def create_app() -> FastAPI:
     # Reset per-app backend client to avoid cross-test contamination from config reloads
     try:
         from bff.app import dependencies as _deps
+
         _deps._backend_client = None
         _deps._backend_client_loop_id = None
         _deps._backend_client_base_url = None
     except Exception:
         pass
 
-
     # Debug: log registered routes on startup to verify routing
     try:
         for r in app.routes:
-            methods = getattr(r, 'methods', None)
-            path = getattr(r, 'path', None)
+            methods = getattr(r, "methods", None)
+            path = getattr(r, "path", None)
             if path:
-                logging.getLogger('bff.routes').info('route.registered', extra={
-                    'path': path,
-                    'methods': sorted(list(methods)) if methods else 'WEBSOCKET/OTHER'
-                })
+                logging.getLogger("bff.routes").info(
+                    "route.registered",
+                    extra={
+                        "path": path,
+                        "methods": sorted(list(methods)) if methods else "WEBSOCKET/OTHER",
+                    },
+                )
     except Exception:
         pass
 
@@ -151,6 +155,7 @@ app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
+
     from bff.app.config import BFF_DEFAULT_HOST, BFF_DEFAULT_PORT
 
     uvicorn.run(

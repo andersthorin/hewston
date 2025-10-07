@@ -66,4 +66,3 @@ def test_retention_dry_run_and_apply(tmp_path, monkeypatch, capsys):
         rows = conn.execute("SELECT backtest_id FROM backtests").fetchall()
         have = {r[0] for r in rows}
         assert "r3" in have and not {"r1", "r2"} & have
-

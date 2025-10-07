@@ -37,4 +37,3 @@ def test_ws_err_on_invalid_messages():
         assert msg3["t"] == "err"
         assert msg3["code"] == "VALIDATION"
         ws.close()
-

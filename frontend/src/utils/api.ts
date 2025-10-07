@@ -28,10 +28,7 @@ export interface ApiRequestOptions {
  * Make an API request with consistent error handling and base URL.
  * Supports feature flag routing when endpointGroup is specified.
  */
-export async function apiRequest<T>(
-  endpoint: string,
-  options: ApiRequestOptions = {}
-): Promise<T> {
+export async function apiRequest<T>(endpoint: string, options: ApiRequestOptions = {}): Promise<T> {
   const {
     method = 'GET',
     headers = {},
@@ -95,7 +92,7 @@ export async function apiGet<T>(endpoint: string, headers?: Record<string, strin
 export async function apiPost<T>(
   endpoint: string,
   body?: unknown,
-  options?: { headers?: Record<string, string>; idempotencyKey?: string }
+  options?: { headers?: Record<string, string>; idempotencyKey?: string },
 ): Promise<T> {
   return apiRequest<T>(endpoint, {
     method: 'POST',
@@ -111,7 +108,7 @@ export async function apiPost<T>(
 export async function apiPut<T>(
   endpoint: string,
   body?: unknown,
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
 ): Promise<T> {
   return apiRequest<T>(endpoint, { method: 'PUT', body, headers })
 }
@@ -119,10 +116,7 @@ export async function apiPut<T>(
 /**
  * Make a DELETE request.
  */
-export async function apiDelete<T>(
-  endpoint: string,
-  headers?: Record<string, string>
-): Promise<T> {
+export async function apiDelete<T>(endpoint: string, headers?: Record<string, string>): Promise<T> {
   return apiRequest<T>(endpoint, { method: 'DELETE', headers })
 }
 
@@ -136,7 +130,7 @@ export async function apiGetWithFlags<T>(
   endpointGroup: EndpointGroup,
   headers?: Record<string, string>,
   timeoutMs?: number,
-  allowFallback?: boolean
+  allowFallback?: boolean,
 ): Promise<T> {
   return apiRequest<T>(endpoint, {
     method: 'GET',
@@ -155,7 +149,7 @@ export async function apiPostWithFlags<T>(
   endpoint: string,
   endpointGroup: EndpointGroup,
   body?: unknown,
-  options?: { headers?: Record<string, string>; idempotencyKey?: string; timeoutMs?: number }
+  options?: { headers?: Record<string, string>; idempotencyKey?: string; timeoutMs?: number },
 ): Promise<T> {
   return apiRequest<T>(endpoint, {
     method: 'POST',

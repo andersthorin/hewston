@@ -1,6 +1,7 @@
 """
 Test metrics extraction from Nautilus engine state.
 """
+
 import pytest
 from backend.adapters.nautilus import NautilusBacktestRunner
 
@@ -38,7 +39,7 @@ class TestMetricsExtraction:
         equity = [
             {"value": 10000.0},
             {"value": 12000.0},  # Peak
-            {"value": 9600.0},   # 20% drawdown from peak
+            {"value": 9600.0},  # 20% drawdown from peak
             {"value": 10000.0},
         ]
         result = runner._calculate_max_drawdown(equity)
@@ -77,7 +78,7 @@ class TestMetricsExtraction:
             {"side": "BUY", "price": 100.0, "qty": 10.0},
             {"side": "SELL", "price": 110.0, "qty": 10.0},  # Win
             {"side": "BUY", "price": 100.0, "qty": 10.0},
-            {"side": "SELL", "price": 95.0, "qty": 10.0},   # Loss
+            {"side": "SELL", "price": 95.0, "qty": 10.0},  # Loss
             {"side": "BUY", "price": 100.0, "qty": 10.0},
             {"side": "SELL", "price": 105.0, "qty": 10.0},  # Win
         ]
@@ -87,11 +88,11 @@ class TestMetricsExtraction:
     def test_extract_metrics_from_engine_with_equity(self):
         """Test metrics extraction with equity curve."""
         runner = NautilusBacktestRunner()
-        
+
         # Mock engine without portfolio access
         class MockEngine:
             pass
-        
+
         engine = MockEngine()
         equity = [
             {"value": 10000.0},
@@ -103,13 +104,12 @@ class TestMetricsExtraction:
             {"side": "BUY", "price": 100.0, "qty": 10.0},
             {"side": "SELL", "price": 110.0, "qty": 10.0},
         ]
-        
+
         metrics = runner._extract_metrics_from_engine(engine, equity, fills)
-        
+
         assert "total_return" in metrics
         assert "max_drawdown" in metrics
         assert "win_rate" in metrics
         assert metrics["total_return"] == pytest.approx(0.1, rel=1e-5)  # 10% return
         assert metrics["max_drawdown"] == pytest.approx(-0.2, rel=1e-5)  # 20% drawdown
         assert metrics["win_rate"] == 1.0  # 100% win rate
-
