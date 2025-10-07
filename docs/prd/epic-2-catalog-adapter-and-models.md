@@ -21,7 +21,7 @@ Deliverables
 - services/backtests.py (list/get wired to CatalogPort)
 
 Acceptance Criteria
-- `make db-apply` creates data/catalog.sqlite with tables/views
+- `make db-apply` creates data/catalog.db with tables/views
 - `GET /backtests` responds 200 with `{ items: [], total: 0, ... }` on fresh DB
 - `GET /backtests/{id}` 404 when not found
 

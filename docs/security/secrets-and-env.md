@@ -12,7 +12,7 @@ Status: v0.1 — Guidance for configuring local development without leaking secr
 - HEWSTON_API_HOST (default: 127.0.0.1)
 - HEWSTON_API_PORT (default: 8000)
 - HEWSTON_WS_URL (default: ws://localhost:8000)
-- SQLITE_CATALOG_PATH (default: data/catalog.sqlite)
+- HEWSTON_CATALOG_PATH (default: data/catalog.db)
 
 ## Local setup
 1) Copy the example file and edit:

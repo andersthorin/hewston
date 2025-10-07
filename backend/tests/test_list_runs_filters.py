@@ -152,7 +152,7 @@ def seed_sample_db(db_path: str):
 
 def test_list_runs_filters_and_order(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = os.path.join(tmpdir, "catalog.sqlite")
+        db_path = os.path.join(tmpdir, "catalog.db")
         seed_sample_db(db_path)
         # Force services to use our temp DB
         monkeypatch.setattr(svc, "get_catalog", lambda: SqliteCatalog(db_path))

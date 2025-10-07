@@ -64,7 +64,7 @@ def seed_one_run(db_path: str):
 
 def test_get_run_detail_shape(monkeypatch):
     with tempfile.TemporaryDirectory() as tmpdir:
-        db_path = os.path.join(tmpdir, "catalog.sqlite")
+        db_path = os.path.join(tmpdir, "catalog.db")
         seed_one_run(db_path)
         monkeypatch.setattr(svc, "get_catalog", lambda: SqliteCatalog(db_path))
 

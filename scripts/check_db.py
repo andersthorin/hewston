@@ -1,6 +1,6 @@
 import sqlite3
 
-c = sqlite3.connect("data/catalog.sqlite")
+c = sqlite3.connect("data/catalog.db")
 print("runs cols:", [x[1] for x in c.execute("PRAGMA table_info(runs)")])
 print("datasets cols:", [x[1] for x in c.execute("PRAGMA table_info(datasets)")])
 print(

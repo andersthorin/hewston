@@ -10,10 +10,8 @@ __pycache__/
 .env
 data/catalog.sqlite
 data/catalog.sqlite*
-
-# Local-only debug sandbox (do not commit)
-tmp_data_bff_debug/
-
+data/catalog.db
+data/catalog.db*
 
 # Coverage database
 .coverage

@@ -21,7 +21,7 @@ def setup_test_environment(
     """
     env_vars = {
         "HEWSTON_DATA_DIR": str(tmp_path),
-        "HEWSTON_CATALOG_PATH": str(tmp_path / "catalog.sqlite"),
+        "HEWSTON_CATALOG_PATH": str(tmp_path / "catalog.db"),
         "DATABENTO_API_KEY": api_key,
     }
 

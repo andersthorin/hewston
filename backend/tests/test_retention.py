@@ -20,7 +20,7 @@ def _insert_run(db_path: Path, run_id: str, created_at: str) -> None:
 
 def test_retention_dry_run_and_apply(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("HEWSTON_DATA_DIR", str(tmp_path))
-    dbp = tmp_path / "catalog.sqlite"
+    dbp = tmp_path / "catalog.db"
     monkeypatch.setenv("HEWSTON_CATALOG_PATH", str(dbp))
 
     # Bootstrap catalog

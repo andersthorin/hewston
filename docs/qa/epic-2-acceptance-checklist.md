@@ -4,7 +4,7 @@ Epic ID: E2
 
 
 Preconditions
-- `make db-apply` completed; data/catalog.sqlite created
+- `make db-apply` completed; data/catalog.db created
 - Backend skeleton from Epic 1 running
 
 Test Cases
