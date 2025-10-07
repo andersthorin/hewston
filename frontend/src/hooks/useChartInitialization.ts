@@ -49,10 +49,14 @@ export function useChartInitialization(
           textColor,
           background: { type: ColorType.Solid, color: backgroundColor }
         },
+        handleScroll: false,
+        handleScale: false,
         timeScale: {
           timeVisible,
           secondsVisible,
-          barSpacing: fixedBarSpacing
+          barSpacing: fixedBarSpacing,
+          minBarSpacing: fixedBarSpacing,
+          lockVisibleTimeRangeOnResize: true
         },
       }
 
@@ -86,8 +90,10 @@ export function useChartInitialization(
       // Apply additional chart options
       try {
         chart.applyOptions({
+          handleScroll: false,
+          handleScale: false,
           rightPriceScale: { mode: PriceScaleMode.Normal },
-          timeScale: { barSpacing: fixedBarSpacing }
+          timeScale: { barSpacing: fixedBarSpacing, minBarSpacing: fixedBarSpacing, lockVisibleTimeRangeOnResize: true }
         })
       } catch (error) {
         console.warn('Failed to apply chart options:', error)

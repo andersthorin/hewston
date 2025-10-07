@@ -1,4 +1,4 @@
-import { forwardRef, useImperativeHandle } from 'react'
+import { forwardRef, useEffect, useImperativeHandle } from 'react'
 import type { CandlestickData, Time } from 'lightweight-charts'
 import type {
   ChartOHLCProps,
@@ -8,7 +8,7 @@ import type {
 import { useCandlestickChart } from '../hooks/useChartInitialization'
 
 export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(function ChartOHLC(_props, ref) {
-  const FIXED_BAR_SPACING = 10
+  const FIXED_BAR_SPACING = 14
 
   const { chartRef, seriesRef, containerRef } = useCandlestickChart({
     height: 300,
@@ -18,6 +18,20 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
     timeVisible: false,
     secondsVisible: false
   })
+  // Apply time axis formatter if provided
+  useEffect(() => {
+    try {
+      if (_props.formatTime && chartRef.current) {
+        const fmt = _props.formatTime
+        // Apply both chart-level localization and timeScale tick formatter for compatibility
+        ;(chartRef.current as any).applyOptions?.({ localization: { timeFormatter: (t: any) => fmt(t) } })
+        chartRef.current.timeScale()?.applyOptions?.({ tickMarkFormatter: (t: any) => fmt(t) })
+      }
+    } catch (error) {
+      console.warn('Failed to apply time formatter:', error)
+    }
+  }, [_props.formatTime, chartRef])
+
 
   useImperativeHandle(ref, () => ({
     reset: (initial: CandlestickData[]) => {
@@ -65,7 +79,7 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
     },
     setBarSpacing: (px: number) => {
       try {
-        chartRef.current?.applyOptions({ timeScale: { barSpacing: px } })
+        chartRef.current?.applyOptions({ timeScale: { barSpacing: px, minBarSpacing: px } })
       } catch (error) {
         console.warn('Failed to set bar spacing:', error)
       }
