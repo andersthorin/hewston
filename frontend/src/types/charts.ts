@@ -1,6 +1,6 @@
 /**
  * Chart-related TypeScript interfaces and types.
- * 
+ *
  * This module provides proper type definitions for chart components
  * to replace any types and improve type safety.
  */
@@ -13,7 +13,7 @@ import type {
   DeepPartial,
   Time,
   TimeScaleOptions,
-  PriceScaleOptions
+  PriceScaleOptions,
 } from 'lightweight-charts'
 
 // Series API types are defined below as interfaces
@@ -71,12 +71,10 @@ export interface CandlestickChartAPI {
   setMarkers: (markers: Array<any>) => void
 }
 
-
 // Chart props interfaces
 export interface ChartOHLCProps {
   formatTime?: (t: Time, locale?: string) => string
 }
-
 
 // Mock interfaces for testing (using Vitest)
 export interface MockChart {
@@ -104,5 +102,5 @@ export interface MockSeries {
 // Chart creation function type
 export type CreateChartFunction = (
   container: HTMLElement,
-  options?: DeepPartial<ChartOptions>
+  options?: DeepPartial<ChartOptions>,
 ) => ChartInstance

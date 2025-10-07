@@ -3,28 +3,35 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from pathlib import Path
-from datetime import datetime as _dt
-from typing import AsyncGenerator, Dict, List, Optional, Tuple
 import math
-
 import time
-import polars as pl
-import pandas as pd
+from collections.abc import AsyncGenerator
+from datetime import UTC
 
-from backend.adapters.sqlite_catalog import SqliteCatalog
+from datetime import datetime as _dt
+from pathlib import Path
+
+import pandas as pd
+import polars as pl
+
 from backend.constants import DEFAULT_FPS
 from backend.domain.types import StreamFrame
+from backend.ports.catalog import CatalogPort
 from backend.utils.datetime import normalize_timestamp
 
 logger = logging.getLogger(__name__)
 
-def _get_catalog() -> SqliteCatalog:
-    # Use default env-based constructor
-    return SqliteCatalog()
+
+def _get_catalog() -> CatalogPort:
+    """Return a CatalogPort without static dependency on adapters."""
+    import importlib
+
+    module = importlib.import_module("backend.adapters.sqlite_catalog")
+    SqliteCatalog = getattr(module, "SqliteCatalog")
+    return SqliteCatalog()  # type: ignore[return-value]
 
 
-def _resolve_artifacts(run_id: str) -> Tuple[Dict[str, str], Optional[str]]:
+def _resolve_artifacts(run_id: str) -> tuple[dict[str, str], str | None]:
     """Return artifact paths and dataset_id for a run_id."""
     cat = _get_catalog()
     row = cat.get_backtest(run_id)
@@ -40,12 +47,12 @@ def _resolve_artifacts(run_id: str) -> Tuple[Dict[str, str], Optional[str]]:
     }, dsid
 
 
-def _resolve_bars_path(dataset_id: str) -> Optional[str]:
-    import sqlite3
-
+def _resolve_bars_path(dataset_id: str) -> str | None:
     cat = _get_catalog()
     with cat._connect() as conn:  # type: ignore[attr-defined]
-        r = conn.execute("SELECT bars_parquet_json FROM datasets WHERE dataset_id = ?", (dataset_id,)).fetchone()
+        r = conn.execute(
+            "SELECT bars_parquet_json FROM datasets WHERE dataset_id = ?", (dataset_id,)
+        ).fetchone()
         if not r:
             return None
         try:
@@ -68,14 +75,14 @@ def _resolve_bars_path(dataset_id: str) -> Optional[str]:
             return None
 
 
-def _iter_parquet_dicts(path: str, select: Optional[List[str]] = None) -> List[dict]:
+def _iter_parquet_dicts(path: str, select: list[str] | None = None) -> list[dict]:
     df = pl.read_parquet(path, columns=select)
     return df.to_dicts()
 
 
-def _load_bars_data(dataset_id: Optional[str]) -> Dict[int, dict]:
+def _load_bars_data(dataset_id: str | None) -> dict[int, dict]:
     """Load and normalize bars data into a timestamp-keyed dictionary."""
-    bars_map: Dict[int, dict] = {}
+    bars_map: dict[int, dict] = {}
     if not dataset_id:
         return bars_map
 
@@ -101,24 +108,24 @@ def _load_bars_data(dataset_id: Optional[str]) -> Dict[int, dict]:
     return bars_map
 
 
-def _organize_orders_by_timestamp(orders_rows: List[dict]) -> Dict[int, List[dict]]:
+def _organize_orders_by_timestamp(orders_rows: list[dict]) -> dict[int, list[dict]]:
     """Organize orders by normalized timestamp for efficient lookup."""
-    orders_by_ts: Dict[int, List[dict]] = {}
+    orders_by_ts: dict[int, list[dict]] = {}
     for o in orders_rows:
         key, _ = normalize_timestamp(o.get("ts_utc"))
         orders_by_ts.setdefault(key, []).append(o)
     return orders_by_ts
 
 
-def _normalize_order_timestamps(orders: List[dict]) -> List[dict]:
+def _normalize_order_timestamps(orders: list[dict]) -> list[dict]:
     """Normalize datetime values in orders to ISO strings for JSON serialization."""
-    orders_payload: List[dict] = []
+    orders_payload: list[dict] = []
     for o in orders:
         o2 = dict(o)
         # normalize any datetime-like values to ISO strings
         for kk, vv in list(o2.items()):
             try:
-                if isinstance(vv, (_dt, pd.Timestamp)):
+                if isinstance(vv, _dt | pd.Timestamp):
                     _, iso_v = normalize_timestamp(vv)
                     o2[kk] = iso_v
             except Exception:
@@ -137,38 +144,26 @@ def _calculate_decimation_stride(total_frames: int, fps: int, realtime: bool) ->
         return 1
 
 
-def _precompute_metrics_from_equity(equity_rows: List[dict]) -> Dict[str, List[Optional[float]]]:
-    """Compute per-index running metrics for finished runs.
-    Returns dict of arrays aligned to equity_rows order with possible None entries.
-    Metrics:
-      - total_return_so_far: equity[i]/equity[0] - 1
-      - max_drawdown_so_far: max_{tau<=i} (peak_to_date - equity[tau]) / peak_to_date
-      - sharpe_so_far: mean(r[1..i]) / std(r[1..i]) with r_t = equity[t]/equity[t-1]-1, r_f=0 (no annualization)
-    """
-    n = len(equity_rows)
+def _compute_total_return_series(vals: list[float]) -> list[float | None]:
+    n = len(vals)
     if n == 0:
-        return {"total_return_so_far": [], "max_drawdown_so_far": [], "sharpe_so_far": []}
-
-    vals = [float(er.get("value", float("nan"))) for er in equity_rows]
+        return []
     base = vals[0]
-
-    trs: List[Optional[float]] = [None] * n
-    mdd: List[Optional[float]] = [None] * n
-    shp: List[Optional[float]] = [None] * n
-
-    # total return so far
-    for i in range(n):
-        v = vals[i]
+    trs: list[float | None] = [None] * n
+    for i, v in enumerate(vals):
         if base and base != 0.0 and math.isfinite(v):
             trs[i] = (v / base) - 1.0
         else:
             trs[i] = None
+    return trs
 
-    # max drawdown so far
+
+def _compute_max_drawdown_series(vals: list[float]) -> list[float | None]:
+    n = len(vals)
+    mdd: list[float | None] = [None] * n
     peak = -float("inf")
     cur_mdd = 0.0
-    for i in range(n):
-        v = vals[i]
+    for i, v in enumerate(vals):
         if math.isfinite(v):
             if v > peak:
                 peak = v
@@ -181,8 +176,14 @@ def _precompute_metrics_from_equity(equity_rows: List[dict]) -> Dict[str, List[O
                 mdd[i] = None
         else:
             mdd[i] = None
+    return mdd
 
-    # sharpe so far (run-to-date, r_f=0, no annualization)
+
+def _compute_running_sharpe_series(vals: list[float]) -> list[float | None]:
+    n = len(vals)
+    if n == 0:
+        return []
+    shp: list[float | None] = [None] * n
     sum_r = 0.0
     sum_r2 = 0.0
     count = 0
@@ -198,13 +199,30 @@ def _precompute_metrics_from_equity(equity_rows: List[dict]) -> Dict[str, List[O
             mean = sum_r / count
             var = (sum_r2 / count) - (mean * mean)
             std = math.sqrt(var) if var > 0 else 0.0
-            if std > 0:
-                shp[i] = mean / std
-            else:
-                shp[i] = None
+            shp[i] = (mean / std) if std > 0 else None
         else:
             shp[i] = None
         prev = v
+    return shp
+
+
+def _precompute_metrics_from_equity(equity_rows: list[dict]) -> dict[str, list[float | None]]:
+    """Compute per-index running metrics for finished runs.
+    Returns dict of arrays aligned to equity_rows order with possible None entries.
+    Metrics:
+      - total_return_so_far: equity[i]/equity[0] - 1
+      - max_drawdown_so_far: max_{tau<=i} (peak_to_date - equity[tau]) / peak_to_date
+      - sharpe_so_far: mean(r[1..i]) / std(r[1..i]) with r_t = equity[t]/equity[t-1]-1, r_f=0 (no annualization)
+    """
+    n = len(equity_rows)
+    if n == 0:
+        return {"total_return_so_far": [], "max_drawdown_so_far": [], "sharpe_so_far": []}
+
+    vals = [float(er.get("value", float("nan"))) for er in equity_rows]
+
+    trs = _compute_total_return_series(vals)
+    mdd = _compute_max_drawdown_series(vals)
+    shp = _compute_running_sharpe_series(vals)
 
     return {
         "total_return_so_far": trs,
@@ -213,131 +231,112 @@ def _precompute_metrics_from_equity(equity_rows: List[dict]) -> Dict[str, List[O
     }
 
 
+def _is_rth_epoch(epoch_sec: int, *, include_close: bool = False) -> bool:
+    """Return True if epoch_sec is within RTH (America/New_York).
+    include_close=True allows exactly 16:00:00, but excludes >16:00.
+    On tz errors, conservatively return True to avoid over-filtering.
+    """
+    try:
+        from zoneinfo import ZoneInfo  # type: ignore
+
+        dt_utc = _dt.fromtimestamp(epoch_sec, tz=UTC)
+        ny = dt_utc.astimezone(ZoneInfo("America/New_York"))
+        if ny.weekday() > 4:
+            return False
+        h, m = ny.hour, ny.minute
+        # Start: 09:30+
+        if h < 9 or (h == 9 and m < 30):
+            return False
+        # End: < 16:00, or ==16:00 if include_close
+        if h < 16:
+            return True
+        if h > 16:
+            return False
+        # h == 16
+        return include_close and m == 0
+    except Exception:
+        return True
 
 
-def _select_hourly_indices(equity_rows: List[dict], rth_only: bool = False) -> List[int]:
+def _ny_date_key(epoch_sec: int) -> str:
+    """Return ISO date string for America/New_York; fallback to UTC on errors."""
+    try:
+        from zoneinfo import ZoneInfo  # type: ignore
+
+        dt_utc = _dt.fromtimestamp(epoch_sec, tz=UTC)
+        return dt_utc.astimezone(ZoneInfo("America/New_York")).date().isoformat()
+    except Exception:
+        return _dt.fromtimestamp(epoch_sec, tz=UTC).date().isoformat()
+
+
+def _hour_bucket(epoch_sec: int) -> int:
+    return int(epoch_sec) // 3600
+
+
+def _select_hourly_indices(equity_rows: list[dict], rth_only: bool = False) -> list[int]:
     """Return indices of the last equity point within each UTC hour.
     Optionally filter to Regular Trading Hours (RTH) in America/New_York (09:30–16:00), Mon–Fri.
     Uses epoch seconds from normalize_timestamp(ts_utc) to bucket by hour.
     """
-    hour_to_idx: Dict[int, int] = {}
-
-    def _is_rth(epoch_sec: int) -> bool:
-        if not rth_only:
-            return True
-        try:
-            from datetime import datetime, timezone
-            try:
-                from zoneinfo import ZoneInfo  # Python 3.9+
-            except Exception:
-                # Fallback: treat as always RTH if zoneinfo missing
-                return True
-            dt_utc = _dt.fromtimestamp(epoch_sec, tz=_dt.timezone.utc) if hasattr(_dt, 'timezone') else datetime.fromtimestamp(epoch_sec, tz=timezone.utc)
-            ny = dt_utc.astimezone(ZoneInfo("America/New_York"))
-            # Weekday 0=Mon..4=Fri
-            if ny.weekday() > 4:
-                return False
-            h, m = ny.hour, ny.minute
-            # RTH: 09:30 <= time < 16:00 local
-            if h < 9 or h > 15:
-                # allow 9:30+ and any 10..15; exclude 16:xx
-                return (h == 9 and m >= 30) if h == 9 else False
-            if h == 9:
-                return m >= 30
-            return True
-        except Exception:
-            return True
+    hour_to_idx: dict[int, int] = {}
 
     for i, er in enumerate(equity_rows):
         try:
             epoch, _ = normalize_timestamp(er.get("ts_utc"))
-            if not _is_rth(int(epoch)):
+            epoch_i = int(epoch)
+            if rth_only and not _is_rth_epoch(epoch_i):
                 continue
-            hour_bucket = int(epoch) // 3600
             # Keep last index encountered for this hour
-            hour_to_idx[hour_bucket] = i
+            hour_to_idx[_hour_bucket(epoch_i)] = i
         except Exception:
-            # Skip rows with invalid timestamps
             continue
-    # Return indices ordered by hour
     return [hour_to_idx[h] for h in sorted(hour_to_idx.keys())]
 
 
-
-def _select_daily_close_indices(equity_rows: List[dict], rth_only: bool = True) -> List[int]:
+def _select_daily_close_indices(equity_rows: list[dict], rth_only: bool = True) -> list[int]:
     """Return indices of the last equity point for each trading day (America/New_York),
     using Regular Trading Hours (RTH) 09:30–16:00 if rth_only=True.
     The "daily close" is treated as the last equity observation within RTH for that local day.
     """
-    day_to_idx: Dict[str, int] = {}
-
-    def _is_rth_close_candidate(epoch_sec: int) -> bool:
-        # Allow points from 09:30 up to and including 16:00 local time
-        try:
-            from zoneinfo import ZoneInfo  # Python 3.9+
-            dt_utc = _dt.fromtimestamp(epoch_sec, tz=_dt.timezone.utc)
-            ny = dt_utc.astimezone(ZoneInfo("America/New_York"))
-            # Weekday 0=Mon..4=Fri
-            if ny.weekday() > 4:
-                return False
-            h, m = ny.hour, ny.minute
-            # RTH window: 09:30 <= t <= 16:00
-            if h < 9 or h > 16:
-                return False
-            if h == 9 and m < 30:
-                return False
-            if h == 16 and m > 0:
-                return False
-            return True
-        except Exception:
-            # If timezone conversion fails, allow as a conservative fallback
-            return True
+    day_to_idx: dict[str, int] = {}
 
     for i, er in enumerate(equity_rows):
         try:
             epoch, _ = normalize_timestamp(er.get("ts_utc"))
             epoch_i = int(epoch)
             # Only consider RTH points if required
-            if not _is_rth_close_candidate(epoch_i) and rth_only:
+            if rth_only and not _is_rth_epoch(epoch_i, include_close=True):
                 continue
-            try:
-                from zoneinfo import ZoneInfo
-                dt_utc = _dt.fromtimestamp(epoch_i, tz=_dt.timezone.utc)
-                ny = dt_utc.astimezone(ZoneInfo("America/New_York"))
-                day_key = ny.date().isoformat()
-            except Exception:
-                # Fallback to UTC date key
-                day_key = _dt.fromtimestamp(epoch_i, tz=_dt.timezone.utc).date().isoformat()
+            day_key = _ny_date_key(epoch_i)
             # Keep last index encountered for the trading day within RTH
             day_to_idx[day_key] = i
         except Exception:
             continue
 
-    # Return indices ordered by local day
     return [day_to_idx[k] for k in sorted(day_to_idx.keys())]
 
 
 def _compute_daily_return_series_aligned(
-    equity_rows: List[dict], daily_close_indices: List[int]
-) -> List[Optional[float]]:
+    equity_rows: list[dict], daily_close_indices: list[int]
+) -> list[float | None]:
     """Compute simple daily close-to-close returns aligned to each equity index.
     For indices up to a daily close, fill with that day's close-to-close return.
     Between close days, the last completed daily return is propagated.
     """
     n = len(equity_rows)
-    daily_ret_by_idx: List[Optional[float]] = [None] * n
+    daily_ret_by_idx: list[float | None] = [None] * n
     if n == 0 or not daily_close_indices:
         return daily_ret_by_idx
 
-    prev_close_val: Optional[float] = None
-    prev_close_idx: Optional[int] = None
+    prev_close_val: float | None = None
+    prev_close_idx: int | None = None
 
     for di in daily_close_indices:
         try:
             v = float(equity_rows[di].get("value", float("nan")))
         except Exception:
             v = float("nan")
-        r: Optional[float] = None
+        r: float | None = None
         if (
             prev_close_val is not None
             and math.isfinite(prev_close_val)
@@ -360,23 +359,24 @@ def _compute_daily_return_series_aligned(
 
     return daily_ret_by_idx
 
+
 def _compute_daily_sharpe_series_aligned(
-    equity_rows: List[dict], daily_close_indices: List[int]
-) -> List[Optional[float]]:
+    equity_rows: list[dict], daily_close_indices: list[int]
+) -> list[float | None]:
     """Compute daily Sharpe-so-far (annualized with sqrt(252)) and align to each equity index.
     For any minute index between two daily closes, we use the Sharpe computed up to the last
     completed daily close.
     """
     n = len(equity_rows)
-    sharpe_ann_by_idx: List[Optional[float]] = [None] * n
+    sharpe_ann_by_idx: list[float | None] = [None] * n
     if n == 0 or not daily_close_indices:
         return sharpe_ann_by_idx
 
     sum_r = 0.0
     sum_r2 = 0.0
     count = 0
-    prev_close_val: Optional[float] = None
-    prev_close_idx: Optional[int] = None
+    prev_close_val: float | None = None
+    prev_close_idx: int | None = None
 
     for di in daily_close_indices:
         try:
@@ -396,7 +396,7 @@ def _compute_daily_sharpe_series_aligned(
             count += 1
         prev_close_val = v
 
-        sharpe_rt: Optional[float] = None
+        sharpe_rt: float | None = None
         if count >= 2:
             mean = sum_r / count
             var = (sum_r2 / count) - (mean * mean)
@@ -420,6 +420,197 @@ def _compute_daily_sharpe_series_aligned(
     return sharpe_ann_by_idx
 
 
+def _normalize_orders_payload(orders_by_ts: dict[int, list[dict]], key: int) -> list[dict]:
+    orders_payload: list[dict] = []
+    for o in orders_by_ts.get(key, []) or []:
+        o2 = dict(o)
+        for kk, vv in list(o2.items()):
+            try:
+                if isinstance(vv, _dt | pd.Timestamp):
+                    _, iso_v = normalize_timestamp(vv)
+                    o2[kk] = iso_v
+            except Exception:
+                pass
+        orders_payload.append(o2)
+    return orders_payload
+
+
+def _complete_metrics(
+    mi: dict,
+    i: int,
+    n_equity: int,
+    metrics_arrays: dict,
+    daily_sharpe_ann_by_index: list,
+    daily_return_by_index: list,
+    annualization_P: float | None,
+    r_cur: float | None,
+) -> dict:
+    # Fill return only if not present (preserve precomputed None)
+    if "return" not in mi:
+        daily_r = daily_return_by_index[i] if i < len(daily_return_by_index) else None
+        mi["return"] = daily_r if daily_r is not None else r_cur
+
+    # total_return / drawdown from arrays
+    if ("total_return" not in mi) or (mi.get("total_return") is None):
+        mi["total_return"] = metrics_arrays.get("total_return_so_far", [None] * n_equity)[i]
+    if ("drawdown" not in mi) or (mi.get("drawdown") is None):
+        mi["drawdown"] = metrics_arrays.get("max_drawdown_so_far", [None] * n_equity)[i]
+
+    # Sharpe: prefer daily aligned; fallback to running Sharpe; annualize if P provided
+    if ("sharpe" not in mi) or (mi.get("sharpe") is None):
+        shp_daily = daily_sharpe_ann_by_index[i] if i < len(daily_sharpe_ann_by_index) else None
+        if shp_daily is not None:
+            mi["sharpe"] = shp_daily
+        else:
+            shp_rt = metrics_arrays.get("sharpe_so_far", [None] * n_equity)[i]
+            try:
+                if shp_rt is not None and annualization_P and annualization_P > 0:
+                    import math as _math
+
+                    mi["sharpe"] = shp_rt * (_math.sqrt(float(annualization_P)))
+                else:
+                    mi["sharpe"] = shp_rt
+            except Exception:
+                mi["sharpe"] = shp_rt
+    return mi
+
+
+def _load_metrics_artifact(
+    artifacts: dict[str, str]
+) -> tuple[list[tuple[int, dict]], float | None]:
+    metrics_lookup: list[tuple[int, dict]] = []
+    annualization_P: float | None = None
+    try:
+        mpath = artifacts.get("metrics")
+        if mpath and Path(mpath).exists():
+            with open(mpath) as f:
+                mj = json.load(f)
+            series_items = mj.get("series") or []
+            for item in series_items:
+                try:
+                    if isinstance(item, list) and len(item) >= 2:
+                        epoch, _ = normalize_timestamp(item[0])
+                        metrics_obj = item[1] if isinstance(item[1], dict) else {}
+                        metrics_lookup.append((int(epoch), metrics_obj))
+                    elif isinstance(item, dict) and "ts" in item:
+                        epoch, _ = normalize_timestamp(item.get("ts"))
+                        metrics_obj = item.get("metrics", {}) or {}
+                        metrics_lookup.append((int(epoch), metrics_obj))
+                except Exception:
+                    continue
+            metrics_lookup.sort(key=lambda x: x[0])
+            try:
+                v = mj.get("annualization_P")
+                annualization_P = float(v) if v is not None else None
+            except Exception:
+                annualization_P = None
+    except Exception:
+        return [], None
+    return metrics_lookup, annualization_P
+
+
+def _advance_metrics_cursor(
+    metrics_lookup: list[tuple[int, dict]], m_idx: int, key: int, last_metrics: dict | None
+) -> tuple[int, dict | None]:
+    """Advance metrics cursor so that last_metrics is the latest metrics with ts <= key."""
+    if not metrics_lookup:
+        return m_idx, last_metrics
+    while (m_idx + 1) < len(metrics_lookup) and metrics_lookup[m_idx + 1][0] <= key:
+        last_metrics = metrics_lookup[m_idx + 1][1]
+        m_idx += 1
+    return m_idx, last_metrics
+
+
+def _compute_r_cur(prev_equity_val: float | None, v_cur: float) -> tuple[float | None, float]:
+    """Compute per-frame return and updated prev equity value, preserving None when not computable."""
+    if prev_equity_val is None:
+        return None, v_cur
+    if prev_equity_val != 0.0:
+        return (v_cur / prev_equity_val) - 1.0, v_cur
+    return None, v_cur
+
+
+def _log_backend_emit(logger, run_id: str, iso: str, last_emit: float) -> float:
+    """Log backend emit diagnostics and return updated last_emit timestamp."""
+    try:
+        now = time.perf_counter()
+        dt_ms = (now - last_emit) * 1000.0 if last_emit > 0.0 else 0.0
+        logger.info(
+            "diag.backend.emit",
+            extra={"run_id": run_id, "dt_ms": round(dt_ms, 2), "ts": iso},
+        )
+        return now
+    except Exception:
+        return last_emit
+
+
+def _log_temp_debug(logger, run_id: str, debug_count: int, er: dict, iso: str) -> int:
+    """Log first 20 frames for local debugging; return updated debug_count."""
+    if debug_count < 20:
+        try:
+            logger.info(
+                f"TEMP_DEBUG.backend.frame run_id={run_id} n={debug_count + 1} ts={iso} eq={float(er['value'])}"
+            )
+        except Exception:
+            pass
+        return debug_count + 1
+    return debug_count
+
+
+def _compute_frame_metrics(
+    i: int,
+    er: dict,
+    *,
+    metrics_lookup: list[tuple[int, dict]] | None,
+    m_idx: int | None,
+    last_metrics: dict | None,
+    prev_equity_val: float | None,
+    n_equity: int,
+    metrics_arrays: dict,
+    daily_sharpe_ann_by_index: list,
+    daily_return_by_index: list,
+    annualization_P: float | None,
+) -> tuple[dict, int, dict | None, float | None]:
+    """Return (metrics, m_idx, last_metrics, prev_equity_val) for current equity row."""
+    if metrics_lookup:
+        m_idx = -1 if m_idx is None else m_idx
+        m_idx, last_metrics = _advance_metrics_cursor(
+            metrics_lookup, m_idx, normalize_timestamp(er["ts_utc"])[0], last_metrics
+        )
+        mi = dict(last_metrics or {})
+    else:
+        mi = {}
+    # Compute per-frame return (fallback) and prefer aligned daily return
+    r_cur = None
+    try:
+        v_cur = float(er["value"])
+        r_cur, prev_equity_val = _compute_r_cur(prev_equity_val, v_cur)
+    except Exception:
+        pass
+    mi = _complete_metrics(
+        mi,
+        i,
+        n_equity,
+        metrics_arrays,
+        daily_sharpe_ann_by_index,
+        daily_return_by_index,
+        annualization_P,
+        r_cur,
+    )
+    if not metrics_lookup:
+        mi.setdefault("realized_pnl", None)
+        mi.setdefault("win_rate", None)
+    return mi, (m_idx or -1), last_metrics, prev_equity_val
+
+
+def _attach_total_frames(frame: StreamFrame, produced: int, total: int) -> None:
+    if produced == 0:
+        try:
+            frame.total_frames = total  # type: ignore[attr-defined]
+        except Exception:
+            pass
+
+
 async def produce_frames(
     *,
     run_id: str,
@@ -441,45 +632,18 @@ async def produce_frames(
         raise FileNotFoundError("missing artifacts")
 
     # Load data from parquet files
-    equity_rows = _iter_parquet_dicts(artifacts["equity"], select=["ts_utc", "value"]) if artifacts.get("equity") else []
+    equity_rows = (
+        _iter_parquet_dicts(artifacts["equity"], select=["ts_utc", "value"])
+        if artifacts.get("equity")
+        else []
+    )
     orders_rows = _iter_parquet_dicts(artifacts["orders"]) if artifacts.get("orders") else []
 
     # Precompute basic metrics from equity for finished runs (fallback; Sharpe not annualized)
     metrics_arrays = _precompute_metrics_from_equity(equity_rows)
 
     # Load metrics artifact (optional) for precomputed cumulative metrics series
-    metrics_lookup: List[Tuple[int, dict]] = []
-    try:
-        mpath = artifacts.get("metrics")
-        if mpath and Path(mpath).exists():
-            with open(mpath, "r") as f:
-                mj = json.load(f)
-            # Expect series as [[iso, {..metrics..}], ...]
-            series_items = mj.get("series") or []
-            for item in series_items:
-                try:
-                    if isinstance(item, list) and len(item) >= 2:
-                        epoch, _ = normalize_timestamp(item[0])
-                        metrics_obj = item[1] if isinstance(item[1], dict) else {}
-                        metrics_lookup.append((int(epoch), metrics_obj))
-                    elif isinstance(item, dict) and "ts" in item:
-                        epoch, _ = normalize_timestamp(item.get("ts"))
-                        metrics_obj = item.get("metrics", {}) or {}
-                        metrics_lookup.append((int(epoch), metrics_obj))
-                except Exception:
-                    continue
-            metrics_lookup.sort(key=lambda x: x[0])
-            # Annualization factor for running Sharpe (if present)
-            try:
-                annualization_P = float(mj.get("annualization_P")) if mj.get("annualization_P") is not None else None
-            except Exception:
-                annualization_P = None
-
-        else:
-            annualization_P = None
-    except Exception:
-        metrics_lookup = []
-        annualization_P = None
+    metrics_lookup, annualization_P = _load_metrics_artifact(artifacts)
 
     # Prepare data structures
     bars_map = _load_bars_data(dataset_id)
@@ -488,12 +652,15 @@ async def produce_frames(
     # Precompute daily series aligned to index
     try:
         daily_close_indices = _select_daily_close_indices(equity_rows, rth_only=rth_only)
-        daily_sharpe_ann_by_index = _compute_daily_sharpe_series_aligned(equity_rows, daily_close_indices)
-        daily_return_by_index = _compute_daily_return_series_aligned(equity_rows, daily_close_indices)
+        daily_sharpe_ann_by_index = _compute_daily_sharpe_series_aligned(
+            equity_rows, daily_close_indices
+        )
+        daily_return_by_index = _compute_daily_return_series_aligned(
+            equity_rows, daily_close_indices
+        )
     except Exception:
         daily_sharpe_ann_by_index = [None] * len(equity_rows)
         daily_return_by_index = [None] * len(equity_rows)
-
 
     # Determine indices to emit based on cadence
     n_equity = len(equity_rows)
@@ -521,7 +688,6 @@ async def produce_frames(
     debug_count = 0
     last_emit = 0.0
 
-
     # Produce frames
     try:
         for pos in range(0, total, stride):
@@ -529,100 +695,24 @@ async def produce_frames(
             er = equity_rows[i]
             key, iso = normalize_timestamp(er["ts_utc"])
             ohlc = bars_map.get(key)
-            # normalize orders to JSON-serializable (ts_utc -> ISO string)
-            orders_payload: List[dict] = []
-            for o in orders_by_ts.get(key, []) or []:
-                o2 = dict(o)
-                # normalize any datetime-like values to ISO strings
-                for kk, vv in list(o2.items()):
-                    try:
-                        if isinstance(vv, (_dt, pd.Timestamp)):
-                            _, iso_v = normalize_timestamp(vv)
-                            o2[kk] = iso_v
-                    except Exception:
-                        pass
-                orders_payload.append(o2)
+            orders_payload = _normalize_orders_payload(orders_by_ts, key)
             # Prefer precomputed metrics if available; otherwise fallback to on-the-fly estimates
-            if 'm_idx' not in locals():
+            if "m_idx" not in locals():
                 m_idx = -1
                 last_metrics = None
-            if metrics_lookup:
-                while (m_idx + 1) < len(metrics_lookup) and metrics_lookup[m_idx + 1][0] <= key:
-                    last_metrics = metrics_lookup[m_idx + 1][1]
-                    m_idx += 1
-                # Start with precomputed (may be sparse/partial), then fill missing keys from fallback computations
-                mi = dict(last_metrics or {})
-
-                # Compute per-frame return (fallback) and prefer aligned daily return for UI
-                r_cur = None
-                try:
-                    v_cur = float(er["value"])
-                    if 'prev_equity_val' not in locals():
-                        prev_equity_val = v_cur
-                    if prev_equity_val and prev_equity_val != 0.0:
-                        r_cur = (v_cur / prev_equity_val) - 1.0
-                    prev_equity_val = v_cur
-                except Exception:
-                    pass
-                if "return" not in mi:
-                    daily_r = daily_return_by_index[i] if i < len(daily_return_by_index) else None
-                    mi["return"] = daily_r if daily_r is not None else r_cur
-
-                # Fill total_return / drawdown / sharpe from precomputed arrays (cheap, from equity)
-                if ("total_return" not in mi) or (mi.get("total_return") is None):
-                    mi["total_return"] = metrics_arrays.get("total_return_so_far", [None]*n_equity)[i]
-                if ("drawdown" not in mi) or (mi.get("drawdown") is None):
-                    mi["drawdown"] = metrics_arrays.get("max_drawdown_so_far", [None]*n_equity)[i]
-                if ("sharpe" not in mi) or (mi.get("sharpe") is None):
-                    # Prefer daily-based Sharpe aligned to index (annualized, sqrt(252)), to match Nautilus semantics
-                    mi["sharpe"] = daily_sharpe_ann_by_index[i] if i < len(daily_sharpe_ann_by_index) else None
-                    if mi.get("sharpe") is None:
-                        # Fallback: running Sharpe from equity (updates every frame); annualize if P is known
-                        shp_rt = metrics_arrays.get("sharpe_so_far", [None]*n_equity)[i]
-                        try:
-                            if shp_rt is not None and 'annualization_P' in locals() and annualization_P and annualization_P > 0:
-                                import math as _math
-                                mi["sharpe"] = (shp_rt * (_math.sqrt(float(annualization_P))))
-                            else:
-                                mi["sharpe"] = shp_rt
-                        except Exception:
-                            mi["sharpe"] = shp_rt
-            else:
-                # Fallback path (legacy): compute minimal metrics from equity only
-                r_cur = None
-                try:
-                    v_cur = float(er["value"])
-                    if 'prev_equity_val' not in locals():
-                        prev_equity_val = v_cur
-                    if prev_equity_val and prev_equity_val != 0.0:
-                        r_cur = (v_cur / prev_equity_val) - 1.0
-                    prev_equity_val = v_cur
-                except Exception:
-                    pass
-                daily_r = daily_return_by_index[i] if i < len(daily_return_by_index) else None
-
-                # Prefer daily-based Sharpe aligned to index (annualized sqrt(252)) to match Nautilus; fallback to per-frame running Sharpe
-                shp_daily = daily_sharpe_ann_by_index[i] if i < len(daily_sharpe_ann_by_index) else None
-                shp_ann = shp_daily
-                if shp_ann is None:
-                    shp_rt = metrics_arrays.get("sharpe_so_far", [None]*n_equity)[i]
-                    try:
-                        if shp_rt is not None and 'annualization_P' in locals() and annualization_P and annualization_P > 0:
-                            import math as _math
-                            shp_ann = shp_rt * (_math.sqrt(float(annualization_P)))
-                        else:
-                            shp_ann = shp_rt
-                    except Exception:
-                        shp_ann = shp_rt
-
-                mi = {
-                    "return": (daily_r if daily_r is not None else r_cur),
-                    "realized_pnl": None,
-                    "total_return": metrics_arrays.get("total_return_so_far", [None]*n_equity)[i],
-                    "drawdown": metrics_arrays.get("max_drawdown_so_far", [None]*n_equity)[i],
-                    "sharpe": shp_ann,
-                    "win_rate": None,
-                }
+            mi, m_idx, last_metrics, prev_equity_val = _compute_frame_metrics(
+                i,
+                er,
+                metrics_lookup=metrics_lookup,
+                m_idx=locals().get("m_idx"),
+                last_metrics=locals().get("last_metrics"),
+                prev_equity_val=locals().get("prev_equity_val"),
+                n_equity=n_equity,
+                metrics_arrays=metrics_arrays,
+                daily_sharpe_ann_by_index=daily_sharpe_ann_by_index,
+                daily_return_by_index=daily_return_by_index,
+                annualization_P=annualization_P,
+            )
             frame = StreamFrame(
                 t="frame",
                 ts=iso,
@@ -632,32 +722,14 @@ async def produce_frames(
                 metrics=mi,
                 dropped=dropped,
             )
-            # Include total_frames on the first emitted frame for UI progress
-            if produced == 0:
-                try:
-                    # dataclass has optional field; attach if available
-                    frame.total_frames = total  # type: ignore[attr-defined]
-                except Exception:
-                    pass
+            _attach_total_frames(frame, produced, total)
 
             # Diagnostics: backend emit delta
-            try:
-                now = time.perf_counter()
-                dt_ms = (now - last_emit) * 1000.0 if last_emit > 0.0 else 0.0
-                last_emit = now
-                logger.info("diag.backend.emit", extra={"run_id": run_id, "dt_ms": round(dt_ms, 2), "ts": iso})
-            except Exception:
-                pass
+            last_emit = _log_backend_emit(logger, run_id, iso, last_emit)
             # TEMP DEBUG: log first 20 backend frames with ts and equity
-            if debug_count < 20:
-                try:
-                    logger.info(
-                        f"TEMP_DEBUG.backend.frame run_id={run_id} n={debug_count + 1} ts={iso} eq={float(er['value'])}"
-                    )
-                except Exception:
-                    pass
-                debug_count += 1
+            debug_count = _log_temp_debug(logger, run_id, debug_count, er, iso)
             yield frame
+
             produced += 1
             if realtime:
                 await asyncio.sleep(max(0.0, (1.0 / float(fps)) / max(1.0, speed)))
@@ -676,4 +748,3 @@ async def produce_frames(
             )
         except Exception:
             pass
-

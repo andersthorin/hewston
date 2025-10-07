@@ -19,12 +19,12 @@ The feature flag system (`frontend/src/services/featureFlags.ts`) controls BFF v
 
 ```typescript
 // Environment variables control BFF usage (defaults: BFF-only)
-VITE_BFF_ENABLED=true               // Master toggle (default)
-VITE_BFF_CHART_DATA_ENABLED=true    // Chart data endpoints (default)
-VITE_BFF_RUN_DATA_ENABLED=true      // Run data endpoints  (default)
-VITE_BFF_WEBSOCKET_ENABLED=true     // WebSocket endpoints (default)
+VITE_BFF_ENABLED = true // Master toggle (default)
+VITE_BFF_CHART_DATA_ENABLED = true // Chart data endpoints (default)
+VITE_BFF_RUN_DATA_ENABLED = true // Run data endpoints  (default)
+VITE_BFF_WEBSOCKET_ENABLED = true // WebSocket endpoints (default)
 // Emergency-only fallback (disabled by default)
-VITE_BFF_FALLBACK_ENABLED=false
+VITE_BFF_FALLBACK_ENABLED = false
 ```
 
 ### API Router
@@ -37,6 +37,7 @@ const response = await apiGetWithFlags('/api/v1/chart-data', 'chartData')
 ```
 
 Note: The API router maps frontend paths to canonical BFF paths. For example:
+
 - '/chart-data' → '/api/v1/chart-data'
 - '/backtests/:id' → '/api/v1/backtests/:id/complete' (canonical alias)
 - '/backtests/:id/ws' → '/api/v1/backtests/:id/stream' (canonical backtests stream)
@@ -53,6 +54,7 @@ const data = await chartDataService.fetchDailyData('AAPL', '2023-01-01', '2023-1
 ```
 
 **BFF Benefits:**
+
 - Single API call replaces multiple backend requests
 - Data decimation handled server-side
 - Caching and performance optimization
@@ -67,6 +69,7 @@ const complete = await backtestDataService.getCompleteBacktest('bt-123')
 ```
 
 **BFF Benefits:**
+
 - Aggregated response combines run details, metrics, equity, and orders
 - Single request replaces 3+ backend calls
 - Simplified loading states
@@ -122,6 +125,7 @@ VITE_BFF_RUN_DATA_ENABLED=true
 Components automatically use BFF when feature flags are enabled. No code changes required for basic migration.
 
 #### Component Example (BFF)
+
 ```typescript
 // Uses BFF exclusively
 const { data } = useHourChartData(symbol, from, to)
@@ -210,16 +214,19 @@ VITE_BFF_FALLBACK_ENABLED=true npm test -- -t "fallback"
 ## Performance Benefits
 
 ### Chart Data
+
 - **Backend**: 3+ API calls for different timeframes
 - **BFF**: 1 API call with server-side aggregation
 - **Improvement**: ~60% reduction in network requests
 
 ### Run Data
+
 - **Backend**: 3+ API calls (run details + metrics + equity + orders)
 - **BFF**: 1 API call with complete aggregated data
 - **Improvement**: ~70% reduction in network requests
 
 ### Caching
+
 - BFF provides server-side caching
 - Reduced backend load
 - Faster subsequent requests
@@ -229,13 +236,13 @@ VITE_BFF_FALLBACK_ENABLED=true npm test -- -t "fallback"
 ### Emergency Fallback (env-gated)
 
 Fallback to backend is disabled by default and only available behind the environment flag `VITE_BFF_FALLBACK_ENABLED=true`. Use only for operational emergencies; not a normal code path.
+
 ## Migration Notes
 
 - Direct backend access from the frontend (e.g., `/bars`, `/backtests`) is deprecated.
 - Frontend must use canonical BFF endpoints under `/api/v1/*`.
 - Ops-only emergency fallback can be temporarily enabled with `VITE_BFF_FALLBACK_ENABLED=true`.
 - Remove any remaining references to backend endpoints in new code; the API router will not fallback unless explicitly allowed and env-gated.
-
 
 ### Error Types
 
@@ -248,11 +255,13 @@ Fallback to backend is disabled by default and only available behind the environ
 ### Common Issues
 
 1. **Feature flags not working**
+
    - Check `.env.local` file exists
    - Verify environment variable names (must start with `VITE_`)
    - Restart development server after changes
 
 2. **BFF endpoints not found**
+
    - Verify BFF service is running on port 8001
    - Check Vite proxy configuration
    - Confirm BFF endpoints are implemented
@@ -333,11 +342,11 @@ When `VITE_FEATURE_FLAG_DEBUG=true`, a performance monitor appears in developmen
 
 ```javascript
 // WebSocket-specific debugging
-__FF_WEBSOCKET__()         // Show WebSocket configuration and routing
+__FF_WEBSOCKET__() // Show WebSocket configuration and routing
 
 // Performance monitoring
-__PERFORMANCE_TEST__()     // Run WebSocket performance test
-__HEALTH_REPORT__()        // Get detailed connection health report
+__PERFORMANCE_TEST__() // Run WebSocket performance test
+__HEALTH_REPORT__() // Get detailed connection health report
 ```
 
 ## Complete Epic 9 Implementation

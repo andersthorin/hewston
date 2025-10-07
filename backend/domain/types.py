@@ -1,19 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
 class StreamFrame:
     t: str  # "frame"
     ts: str  # ISO-8601 UTC string
-    ohlc: Optional[Dict[str, Any]]
-    orders: List[Dict[str, Any]]
-    equity: Optional[Dict[str, Any]]  # { ts, value }
-    metrics: Optional[Dict[str, float]] = None  # E11: per-frame running metrics
+    ohlc: dict[str, Any] | None
+    orders: list[dict[str, Any]]
+    equity: dict[str, Any] | None  # { ts, value }
+    metrics: dict[str, float] | None = None  # E11: per-frame running metrics
     dropped: int = 0
-    total_frames: Optional[int] = None  # optional total number of frames for this stream
+    total_frames: int | None = None  # optional total number of frames for this stream
 
 
 class Control:
@@ -21,4 +21,3 @@ class Control:
     PAUSE = "pause"
     SEEK = "seek"
     SPEED = "speed"
-

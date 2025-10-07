@@ -1,0 +1,26 @@
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+exclude = '''
+/(\
+  \.venv\
+| node_modules\
+| frontend\
+)/
+'''
+
+
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+  ".venv",
+  "node_modules",
+  "frontend",
+]
+
+
+[tool.ruff.lint]
+# Temporarily relax some checks to get CI green for Epic 14; tighten later.
+ignore = []

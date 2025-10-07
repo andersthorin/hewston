@@ -1,65 +1,61 @@
 /**
  * Streaming data TypeScript interfaces and types.
- * 
+ *
  * This module provides proper type definitions for streaming data
  * to replace any types in StreamFrame and related interfaces.
  */
 
 // OHLC data structure
 export interface OHLCData {
-  o?: number  // open
-  h?: number  // high
-  l?: number  // low
-  c?: number  // close
-  v?: number  // volume
+  o?: number // open
+  h?: number // high
+  l?: number // low
+  c?: number // close
+  v?: number // volume
 }
 
 // Equity data structure
 export interface EquityData {
-  ts: string    // timestamp in ISO format
+  ts: string // timestamp in ISO format
   value: number // equity value
 }
 
 // Order data structure
 export interface OrderData {
-  ts_utc: string           // timestamp in UTC
-  side?: 'buy' | 'sell'    // order side
-  quantity?: number        // order quantity
-  price?: number          // order price
-  order_id?: string       // unique order identifier
-  symbol?: string         // trading symbol
+  ts_utc: string // timestamp in UTC
+  side?: 'buy' | 'sell' // order side
+  quantity?: number // order quantity
+  price?: number // order price
+  order_id?: string // unique order identifier
+  symbol?: string // trading symbol
   status?: 'pending' | 'filled' | 'cancelled' | 'rejected'
-  fill_price?: number     // actual fill price
-  fill_quantity?: number  // actual fill quantity
-  commission?: number     // commission paid
-  [key: string]: unknown  // Allow additional fields for flexibility
+  fill_price?: number // actual fill price
+  fill_quantity?: number // actual fill quantity
+  commission?: number // commission paid
+  [key: string]: unknown // Allow additional fields for flexibility
 }
 
 // Stream frame structure
 export interface StreamFrameData {
-  t: 'frame'                    // frame type identifier
-  ts?: string                   // timestamp in ISO format (optional, may be inferred from equity.ts)
-  ohlc?: OHLCData | null       // OHLC bar data
-  orders?: OrderData[]         // array of orders for this timestamp
-  equity?: EquityData | null   // equity curve data point
+  t: 'frame' // frame type identifier
+  ts?: string // timestamp in ISO format (optional, may be inferred from equity.ts)
+  ohlc?: OHLCData | null // OHLC bar data
+  orders?: OrderData[] // array of orders for this timestamp
+  equity?: EquityData | null // equity curve data point
   metrics?: {
     total_return_so_far?: number | null
     max_drawdown_so_far?: number | null
     sharpe_so_far?: number | null
   } | null
   total_frames?: number | null // total number of frames to expect (optional, first frame)
-  dropped?: number             // number of dropped frames
+  dropped?: number // number of dropped frames
 }
 
 // WebSocket message types
-export type WebSocketMessage = 
-  | StreamFrameData
-  | HeartbeatMessage
-  | ErrorMessage
-  | EndMessage
+export type WebSocketMessage = StreamFrameData | HeartbeatMessage | ErrorMessage | EndMessage
 
 export interface HeartbeatMessage {
-  t: 'hb'  // heartbeat type
+  t: 'hb' // heartbeat type
 }
 
 export interface ErrorMessage {
@@ -85,7 +81,7 @@ export interface StreamingState {
   isConnected: boolean
   isPlaying: boolean
   currentSpeed: number
-  currentPosition?: string  // ISO timestamp
+  currentPosition?: string // ISO timestamp
   totalFrames?: number
   processedFrames: number
   droppedFrames: number

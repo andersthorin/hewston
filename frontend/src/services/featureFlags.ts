@@ -1,16 +1,16 @@
 /**
  * Feature flag service for BFF endpoint selection and configuration management.
- * 
+ *
  * This service provides centralized feature flag evaluation and configuration
  * management for BFF vs backend endpoint selection.
  */
 
-import type { 
-  FeatureFlagConfiguration, 
-  BFFEndpointConfiguration, 
-  EndpointGroup, 
+import type {
+  FeatureFlagConfiguration,
+  BFFEndpointConfiguration,
+  EndpointGroup,
   FeatureFlagEvaluation,
-  FeatureFlagDebugInfo 
+  FeatureFlagDebugInfo,
 } from '../types/featureFlags'
 
 /**
@@ -25,7 +25,7 @@ class FeatureFlagService {
     this.configuration = this.loadConfiguration()
     this.endpointConfig = this.buildEndpointConfiguration()
     this.debugInfo = this.initializeDebugInfo()
-    
+
     // Expose debug info to browser console if enabled
     if (this.isDebugEnabled()) {
       this.exposeDebugInfo()
@@ -57,14 +57,26 @@ class FeatureFlagService {
 
     return {
       apiBaseUrl: this.configuration.bffEnabled ? bffUrl : backendUrl,
-      wsBaseUrl: this.configuration.bffEnabled && this.configuration.websocketEnabled ? bffWsUrl : backendWsUrl,
+      wsBaseUrl:
+        this.configuration.bffEnabled && this.configuration.websocketEnabled
+          ? bffWsUrl
+          : backendWsUrl,
       endpointMappings: {
         // Chart data endpoints
-        chartData: (this.configuration.bffEnabled && this.configuration.chartDataEnabled) ? `${bffUrl}/api/v1/chart-data` : `${backendUrl}/bars`,
+        chartData:
+          this.configuration.bffEnabled && this.configuration.chartDataEnabled
+            ? `${bffUrl}/api/v1/chart-data`
+            : `${backendUrl}/bars`,
         // Backtest data endpoints
-        runData: (this.configuration.bffEnabled && this.configuration.runDataEnabled) ? `${bffUrl}/api/v1/backtests` : `${backendUrl}/backtests`,
+        runData:
+          this.configuration.bffEnabled && this.configuration.runDataEnabled
+            ? `${bffUrl}/api/v1/backtests`
+            : `${backendUrl}/backtests`,
         // WebSocket endpoints
-        websocket: (this.configuration.bffEnabled && this.configuration.websocketEnabled) ? `${bffWsUrl}/api/v1/backtests/{id}/stream` : `${backendWsUrl}/backtests/{id}/ws`,
+        websocket:
+          this.configuration.bffEnabled && this.configuration.websocketEnabled
+            ? `${bffWsUrl}/api/v1/backtests/{id}/stream`
+            : `${backendWsUrl}/backtests/{id}/ws`,
         // Health check
         health: `${backendUrl}/healthz`,
       },
@@ -108,7 +120,7 @@ class FeatureFlagService {
    */
   private exposeDebugInfo(): void {
     if (typeof window !== 'undefined') {
-      (window as any).__FEATURE_FLAGS__ = this.debugInfo
+      ;(window as any).__FEATURE_FLAGS__ = this.debugInfo
       console.log('🎛️ Feature Flags Debug Info:', this.debugInfo)
     }
   }
@@ -140,7 +152,7 @@ class FeatureFlagService {
     }
 
     const evaluation: FeatureFlagEvaluation = { enabled, endpointUrl, source }
-    
+
     // Update debug info
     this.debugInfo.lastEvaluations[flagName] = evaluation
     this.debugInfo.lastUpdated = Date.now()
@@ -205,8 +217,12 @@ class FeatureFlagService {
     }
 
     // Check for conflicting configurations
-    if (!this.configuration.bffEnabled && 
-        (this.configuration.chartDataEnabled || this.configuration.runDataEnabled || this.configuration.websocketEnabled)) {
+    if (
+      !this.configuration.bffEnabled &&
+      (this.configuration.chartDataEnabled ||
+        this.configuration.runDataEnabled ||
+        this.configuration.websocketEnabled)
+    ) {
       issues.push('Individual endpoint flags require VITE_BFF_ENABLED=true')
     }
 

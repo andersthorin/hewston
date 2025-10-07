@@ -17,10 +17,17 @@ function handleFrame(payload: unknown) {
   if (!parsed.success) {
     // drop invalid
     if (seen < 50) {
-      const obj = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null
+      const obj =
+        payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : null
       const keys = obj ? Object.keys(obj) : []
       const hasTs = !!(obj && (obj.ts || (obj.equity as Record<string, unknown> | undefined)?.ts))
-      console.debug('[worker] drop invalid frame', { t: obj?.t, hasTs, keys, issues: parsed.error?.issues, sample: obj })
+      console.debug('[worker] drop invalid frame', {
+        t: obj?.t,
+        hasTs,
+        keys,
+        issues: parsed.error?.issues,
+        sample: obj,
+      })
     }
     return
   }
@@ -33,7 +40,11 @@ function handleFrame(payload: unknown) {
   if (seen <= 50) {
     try {
       const parseMs = +(tParse1 - tParse0).toFixed(2)
-      console.debug('[worker] handleFrame', { n: seen, ts: f?.equity?.ts || f?.ts, parse_ms: parseMs })
+      console.debug('[worker] handleFrame', {
+        n: seen,
+        ts: f?.equity?.ts || f?.ts,
+        parse_ms: parseMs,
+      })
       if (parseMs > 5) {
         // eslint-disable-next-line no-console
         console.debug('[diag][worker.parse_ms]', { ms: parseMs })
@@ -83,10 +94,12 @@ self.onmessage = (ev: MessageEvent<InMsg>) => {
       // End messages don't need to be forwarded in current implementation
       break
     case 'err': {
-      const errorMessage: OutMsg = { type: 'error', error: String(msg.error ?? 'Unknown worker error') }
+      const errorMessage: OutMsg = {
+        type: 'error',
+        error: String(msg.error ?? 'Unknown worker error'),
+      }
       postMessage(errorMessage)
       break
     }
   }
 }
-

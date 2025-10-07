@@ -49,7 +49,7 @@ describe('FeatureFlagService', () => {
   describe('Default Configuration', () => {
     it('should have all flags disabled by default', () => {
       const config = service.getConfiguration()
-      
+
       expect(config.bffEnabled).toBe(false)
       expect(config.chartDataEnabled).toBe(false)
       expect(config.runDataEnabled).toBe(false)
@@ -59,7 +59,7 @@ describe('FeatureFlagService', () => {
 
     it('should use backend URLs when BFF is disabled', () => {
       const endpointConfig = service.getEndpointConfiguration()
-      
+
       expect(endpointConfig.apiBaseUrl).toBe('http://127.0.0.1:8000')
       expect(endpointConfig.wsBaseUrl).toBe('ws://127.0.0.1:8000')
     })
@@ -68,7 +68,7 @@ describe('FeatureFlagService', () => {
   describe('Feature Flag Evaluation', () => {
     it('should evaluate chartData flag correctly when disabled', () => {
       const evaluation = service.evaluateFeatureFlag('chartData')
-      
+
       expect(evaluation.enabled).toBe(false)
       expect(evaluation.source).toBe('backend')
       expect(evaluation.endpointUrl).toContain('127.0.0.1:8000')
@@ -94,9 +94,9 @@ describe('FeatureFlagService', () => {
       mockEnv.VITE_BFF_CHART_DATA_ENABLED = 'true'
       // VITE_BFF_ENABLED remains false
       service = new FeatureFlagService()
-      
+
       const evaluation = service.evaluateFeatureFlag('chartData')
-      
+
       expect(evaluation.enabled).toBe(false)
       expect(evaluation.source).toBe('backend')
     })
@@ -237,7 +237,7 @@ describe('FeatureFlagService', () => {
   describe('Debug Information', () => {
     it('should provide debug information', () => {
       const debugInfo = service.getDebugInfo()
-      
+
       expect(debugInfo.configuration).toBeDefined()
       expect(debugInfo.endpointMappings).toBeDefined()
       expect(debugInfo.lastEvaluations).toBeDefined()
@@ -247,7 +247,7 @@ describe('FeatureFlagService', () => {
     it('should update debug info on evaluation', () => {
       const initialDebugInfo = service.getDebugInfo()
       const initialTimestamp = initialDebugInfo.lastUpdated
-      
+
       // Wait a bit to ensure timestamp difference
       setTimeout(() => {
         service.evaluateFeatureFlag('chartData')

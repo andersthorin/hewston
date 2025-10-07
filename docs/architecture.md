@@ -533,7 +533,7 @@ Milestone 1 — Contracts and Catalog (docs-first)
 - Output: docs/api/openapi.yaml; scripts/catalog_init.sql applied; Makefile targets ready
 - Acceptance:
   - openapi.yaml passes a basic lint (structure valid)
-  - `make db-apply` creates data/catalog.sqlite with tables/views
+  - `make db-apply` creates data/catalog.db with tables/views
 
 Milestone 2 — Backend skeleton
 - Output: backend/app/main.py (/healthz), api/routes/backtests.py (stubs), WS echo endpoint, DI wiring

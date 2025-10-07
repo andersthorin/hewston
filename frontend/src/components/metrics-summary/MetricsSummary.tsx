@@ -1,4 +1,3 @@
-
 export type MetricsSummaryProps = {
   metrics?: Partial<{
     // Cumulative metrics
@@ -32,7 +31,6 @@ function formatRatio(v: number | null | undefined, digits = 2): string {
   }
 }
 
-
 function formatCurrency(v: number | null | undefined): string {
   if (v === null || v === undefined || Number.isNaN(v)) return '—'
   try {
@@ -48,15 +46,47 @@ const metricDefs: Array<{
   formatter: (v: number | null | undefined) => string
   title?: string
 }> = [
-  { key: 'total_return', label: 'Total return', formatter: formatPercent, title: 'End-to-start equity change' },
-  { key: 'return', label: 'Daily return', formatter: formatPercent, title: 'Close-to-close return (last completed day)' },
-  { key: 'win_rate', label: 'Win rate', formatter: formatPercent, title: 'Winning trades / total trades' },
-  { key: 'max_drawdown', label: 'Max drawdown', formatter: formatPercent, title: 'Peak-to-trough equity drawdown' },
-  { key: 'sharpe_ratio', label: 'Sharpe', formatter: (v) => formatRatio(v, 2), title: 'Return / volatility (unitless), daily (√252)' },
-  { key: 'realized_pnl', label: 'Realized PnL', formatter: formatCurrency, title: 'Cumulative realized PnL (USD)' },
+  {
+    key: 'total_return',
+    label: 'Total return',
+    formatter: formatPercent,
+    title: 'End-to-start equity change',
+  },
+  {
+    key: 'return',
+    label: 'Daily return',
+    formatter: formatPercent,
+    title: 'Close-to-close return (last completed day)',
+  },
+  {
+    key: 'win_rate',
+    label: 'Win rate',
+    formatter: formatPercent,
+    title: 'Winning trades / total trades',
+  },
+  {
+    key: 'max_drawdown',
+    label: 'Max drawdown',
+    formatter: formatPercent,
+    title: 'Peak-to-trough equity drawdown',
+  },
+  {
+    key: 'sharpe_ratio',
+    label: 'Sharpe',
+    formatter: (v) => formatRatio(v, 2),
+    title: 'Return / volatility (unitless), daily (√252)',
+  },
+  {
+    key: 'realized_pnl',
+    label: 'Realized PnL',
+    formatter: formatCurrency,
+    title: 'Cumulative realized PnL (USD)',
+  },
 ]
 
-function getCurrentEquity(equity: Array<{ ts: string; value: number }> | null | undefined): number | undefined {
+function getCurrentEquity(
+  equity: Array<{ ts: string; value: number }> | null | undefined,
+): number | undefined {
   if (!equity || equity.length === 0) return undefined
   return equity[equity.length - 1]?.value
 }
@@ -66,7 +96,9 @@ export default function MetricsSummary({ metrics, equity, loading }: MetricsSumm
 
   return (
     <section aria-label="Performance metrics" className="rounded border border-slate-200 bg-white">
-      <div className="px-3 py-2 border-b border-slate-200 text-slate-700 font-semibold">Performance</div>
+      <div className="px-3 py-2 border-b border-slate-200 text-slate-700 font-semibold">
+        Performance
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-3 p-3">
         {/* Current Equity - first position */}
         <div className="flex flex-col gap-1" title="Current portfolio value from Nautilus">
@@ -79,7 +111,7 @@ export default function MetricsSummary({ metrics, equity, loading }: MetricsSumm
           type M = NonNullable<MetricsSummaryProps['metrics']>
           const m = metrics as M | undefined
           const raw = m ? m[def.key] : undefined
-          const val = loading ? null : (typeof raw === 'number' ? raw : undefined)
+          const val = loading ? null : typeof raw === 'number' ? raw : undefined
           return (
             <div key={String(def.key)} className="flex flex-col gap-1" title={def.title}>
               <div className="text-xs text-slate-500">{def.label}</div>
@@ -91,4 +123,3 @@ export default function MetricsSummary({ metrics, equity, loading }: MetricsSumm
     </section>
   )
 }
-

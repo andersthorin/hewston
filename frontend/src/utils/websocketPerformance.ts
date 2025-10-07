@@ -1,6 +1,6 @@
 /**
  * WebSocket performance testing and optimization utilities.
- * 
+ *
  * This module provides tools for measuring and optimizing WebSocket performance
  * in both BFF and direct backend modes for comparison and validation.
  */
@@ -19,7 +19,7 @@ export interface PerformanceTestResult {
     connectionSource: 'bff' | 'backend'
     testType: 'streaming' | 'latency' | 'throughput'
   }
-  
+
   /** Connection metrics */
   connection: {
     establishmentTime: number
@@ -27,7 +27,7 @@ export interface PerformanceTestResult {
     totalUptime: number
     totalDowntime: number
   }
-  
+
   /** Streaming metrics */
   streaming: {
     totalFrames: number
@@ -37,7 +37,7 @@ export interface PerformanceTestResult {
     maxFPS: number
     fpsStability: number // Standard deviation
   }
-  
+
   /** Latency metrics */
   latency: {
     average: number
@@ -48,7 +48,7 @@ export interface PerformanceTestResult {
     p99: number
     samples: number[]
   }
-  
+
   /** Throughput metrics */
   throughput: {
     messagesReceived: number
@@ -57,7 +57,7 @@ export interface PerformanceTestResult {
     bytesSent: number
     averageMessageSize: number
   }
-  
+
   /** Test metadata */
   metadata: {
     startTime: number
@@ -96,18 +96,33 @@ export class WebSocketPerformanceTester {
   public async runPerformanceTest(
     runId: string,
     duration: number = 30000, // 30 seconds
-    testType: 'streaming' | 'latency' | 'throughput' = 'streaming'
+    testType: 'streaming' | 'latency' | 'throughput' = 'streaming',
   ): Promise<PerformanceTestResult> {
     const startTime = Date.now()
-    const connectionSource = featureFlagService.isFeatureFlagEnabled('websocket') ? 'bff' : 'backend'
-    
+    const connectionSource = featureFlagService.isFeatureFlagEnabled('websocket')
+      ? 'bff'
+      : 'backend'
+
     const result: PerformanceTestResult = {
       config: { runId, duration, connectionSource, testType },
       connection: { establishmentTime: 0, reconnections: 0, totalUptime: 0, totalDowntime: 0 },
-      streaming: { totalFrames: 0, droppedFrames: 0, averageFPS: 0, minFPS: Infinity, maxFPS: 0, fpsStability: 0 },
+      streaming: {
+        totalFrames: 0,
+        droppedFrames: 0,
+        averageFPS: 0,
+        minFPS: Infinity,
+        maxFPS: 0,
+        fpsStability: 0,
+      },
       latency: { average: 0, min: Infinity, max: 0, p50: 0, p95: 0, p99: 0, samples: [] },
-      throughput: { messagesReceived: 0, messagesSent: 0, bytesReceived: 0, bytesSent: 0, averageMessageSize: 0 },
-      metadata: { startTime, endTime: 0, testDuration: 0, success: false, errors: [] }
+      throughput: {
+        messagesReceived: 0,
+        messagesSent: 0,
+        bytesReceived: 0,
+        bytesSent: 0,
+        averageMessageSize: 0,
+      },
+      metadata: { startTime, endTime: 0, testDuration: 0, success: false, errors: [] },
     }
 
     try {
@@ -149,7 +164,7 @@ export class WebSocketPerformanceTester {
         this.wsManager.close()
         this.wsManager = null
       }
-      
+
       result.metadata.endTime = Date.now()
       result.metadata.testDuration = result.metadata.endTime - result.metadata.startTime
     }
@@ -170,29 +185,32 @@ export class WebSocketPerformanceTester {
     let isConnected = false
 
     // Track connection state changes
-    this.wsManager.addEventListener('stateChange', (event: { oldState: string; newState: string; health: unknown }) => {
-      const now = Date.now()
-      const { newState } = event
+    this.wsManager.addEventListener(
+      'stateChange',
+      (event: { oldState: string; newState: string; health: unknown }) => {
+        const now = Date.now()
+        const { newState } = event
 
-      if (newState === 'connected') {
-        if (!isConnected) {
-          connectionDowntime += now - lastConnectionTime
-          isConnected = true
+        if (newState === 'connected') {
+          if (!isConnected) {
+            connectionDowntime += now - lastConnectionTime
+            isConnected = true
+            lastConnectionTime = now
+          }
+        } else if (isConnected) {
+          connectionUptime += now - lastConnectionTime
+          isConnected = false
           lastConnectionTime = now
-        }
-      } else if (isConnected) {
-        connectionUptime += now - lastConnectionTime
-        isConnected = false
-        lastConnectionTime = now
 
-        if (newState === 'reconnecting') {
-          result.connection.reconnections++
+          if (newState === 'reconnecting') {
+            result.connection.reconnections++
+          }
         }
-      }
 
-      result.connection.totalUptime = connectionUptime
-      result.connection.totalDowntime = connectionDowntime
-    })
+        result.connection.totalUptime = connectionUptime
+        result.connection.totalDowntime = connectionDowntime
+      },
+    )
 
     // Track messages for throughput
     this.wsManager.addEventListener('message', (event: MessageEvent) => {
@@ -235,26 +253,27 @@ export class WebSocketPerformanceTester {
     // Calculate FPS every second
     const fpsInterval = setInterval(() => {
       const now = Date.now()
-      const recentFrames = frameTimestamps.filter(ts => now - ts <= 1000)
+      const recentFrames = frameTimestamps.filter((ts) => now - ts <= 1000)
       const fps = recentFrames.length
-      
+
       fpsReadings.push(fps)
       result.streaming.minFPS = Math.min(result.streaming.minFPS, fps)
       result.streaming.maxFPS = Math.max(result.streaming.maxFPS, fps)
     }, 1000)
 
     // Wait for test duration
-    await new Promise(resolve => setTimeout(resolve, duration))
+    await new Promise((resolve) => setTimeout(resolve, duration))
 
     clearInterval(fpsInterval)
 
     // Calculate final metrics
     if (fpsReadings.length > 0) {
       result.streaming.averageFPS = fpsReadings.reduce((a, b) => a + b, 0) / fpsReadings.length
-      
+
       // Calculate FPS stability (standard deviation)
       const mean = result.streaming.averageFPS
-      const variance = fpsReadings.reduce((acc, fps) => acc + Math.pow(fps - mean, 2), 0) / fpsReadings.length
+      const variance =
+        fpsReadings.reduce((acc, fps) => acc + Math.pow(fps - mean, 2), 0) / fpsReadings.length
       result.streaming.fpsStability = Math.sqrt(variance)
     }
   }
@@ -290,14 +309,14 @@ export class WebSocketPerformanceTester {
     this.wsManager.addEventListener('message', messageListener)
 
     // Wait for test duration
-    await new Promise(resolve => setTimeout(resolve, duration))
+    await new Promise((resolve) => setTimeout(resolve, duration))
 
     clearInterval(pingTimer)
 
     // Calculate latency statistics
     if (latencySamples.length > 0) {
       latencySamples.sort((a, b) => a - b)
-      
+
       result.latency.samples = latencySamples
       result.latency.min = latencySamples[0]
       result.latency.max = latencySamples[latencySamples.length - 1]
@@ -334,7 +353,7 @@ export class WebSocketPerformanceTester {
     this.wsManager.addEventListener('message', messageListener)
 
     // Wait for test duration
-    await new Promise(resolve => setTimeout(resolve, duration))
+    await new Promise((resolve) => setTimeout(resolve, duration))
 
     clearInterval(sendInterval)
 
@@ -347,13 +366,16 @@ export class WebSocketPerformanceTester {
   /**
    * Compare BFF vs backend performance.
    */
-  public async comparePerformance(runId: string, duration: number = 30000): Promise<PerformanceComparison> {
+  public async comparePerformance(
+    runId: string,
+    duration: number = 30000,
+  ): Promise<PerformanceComparison> {
     // Test with BFF enabled
     // Note: In a real implementation, we'd need a way to temporarily override feature flags
     // For now, we'll test with current settings and document the limitation
 
     const bffResult = await this.runPerformanceTest(runId, duration, 'streaming')
-    
+
     // Test with backend mode
     // Note: This would require temporarily disabling BFF flags
     const backendResult = await this.runPerformanceTest(runId, duration, 'streaming')
@@ -362,28 +384,36 @@ export class WebSocketPerformanceTester {
     const comparison = {
       connectionTimeImprovement: this.calculateImprovement(
         backendResult.connection.establishmentTime,
-        bffResult.connection.establishmentTime
+        bffResult.connection.establishmentTime,
       ),
       fpsImprovement: this.calculateImprovement(
         backendResult.streaming.averageFPS,
         bffResult.streaming.averageFPS,
-        true // Higher is better
+        true, // Higher is better
       ),
       latencyImprovement: this.calculateImprovement(
         backendResult.latency.average,
-        bffResult.latency.average
+        bffResult.latency.average,
       ),
       stabilityImprovement: this.calculateImprovement(
         backendResult.streaming.fpsStability,
-        bffResult.streaming.fpsStability
+        bffResult.streaming.fpsStability,
       ),
-      overallScore: 0
+      overallScore: 0,
     }
 
     // Calculate overall score (0-100)
-    comparison.overallScore = Math.max(0, Math.min(100, 
-      50 + (comparison.fpsImprovement + comparison.latencyImprovement + comparison.stabilityImprovement) / 3
-    ))
+    comparison.overallScore = Math.max(
+      0,
+      Math.min(
+        100,
+        50 +
+          (comparison.fpsImprovement +
+            comparison.latencyImprovement +
+            comparison.stabilityImprovement) /
+            3,
+      ),
+    )
 
     return { bff: bffResult, backend: backendResult, comparison }
   }
@@ -391,13 +421,17 @@ export class WebSocketPerformanceTester {
   /**
    * Calculate percentage improvement.
    */
-  private calculateImprovement(baseline: number, improved: number, higherIsBetter: boolean = false): number {
+  private calculateImprovement(
+    baseline: number,
+    improved: number,
+    higherIsBetter: boolean = false,
+  ): number {
     if (baseline === 0) return 0
-    
-    const improvement = higherIsBetter 
+
+    const improvement = higherIsBetter
       ? ((improved - baseline) / baseline) * 100
       : ((baseline - improved) / baseline) * 100
-    
+
     return Math.round(improvement * 100) / 100
   }
 

@@ -13,7 +13,7 @@ vi.mock('../featureFlags', () => ({
     getConfiguration: vi.fn(),
     getEffectiveWsBaseUrl: vi.fn(),
     evaluateFeatureFlag: vi.fn(),
-  }
+  },
 }))
 
 // Mock constants
@@ -41,7 +41,7 @@ describe('BFFWebSocketManager', () => {
     vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
       enabled: false,
       source: 'backend',
-      endpointUrl: 'ws://127.0.0.1:8000'
+      endpointUrl: 'ws://127.0.0.1:8000',
     })
   })
 
@@ -59,7 +59,7 @@ describe('BFFWebSocketManager', () => {
       vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: false,
         source: 'backend',
-        endpointUrl: 'ws://127.0.0.1:8000'
+        endpointUrl: 'ws://127.0.0.1:8000',
       })
 
       manager = new BFFWebSocketManager('test-run-123')
@@ -75,12 +75,12 @@ describe('BFFWebSocketManager', () => {
       vi.mocked(featureFlagService.evaluateFeatureFlag).mockReturnValue({
         enabled: true,
         source: 'bff',
-        endpointUrl: 'ws://127.0.0.1:8001'
+        endpointUrl: 'ws://127.0.0.1:8001',
       })
-      
+
       manager = new BFFWebSocketManager('test-run-123')
       await manager.connect()
-      
+
       expect(manager.isReady()).toBe(true)
       expect(manager.getHealth().connectionSource).toBe('bff')
     })
@@ -98,8 +98,12 @@ describe('BFFWebSocketManager', () => {
         onclose: ((ev: any) => void) | null = null
         onerror: ((ev: any) => void) | null = null
         constructor(_url: string) {}
-        close() { /* noop */ }
-        send(_data: any) { /* noop */ }
+        close() {
+          /* noop */
+        }
+        send(_data: any) {
+          /* noop */
+        }
       }
       vi.stubGlobal('WebSocket', NeverOpensWebSocket as any)
 
@@ -110,14 +114,14 @@ describe('BFFWebSocketManager', () => {
 
     it('should emit state change events', async () => {
       const stateChanges: string[] = []
-      
+
       manager = new BFFWebSocketManager('test-run-123')
       manager.addEventListener('stateChange', ({ newState }: any) => {
         stateChanges.push(newState)
       })
-      
+
       await manager.connect()
-      
+
       expect(stateChanges).toContain('connecting')
       expect(stateChanges).toContain('connected')
     })
@@ -144,7 +148,7 @@ describe('BFFWebSocketManager', () => {
       // Send message while disconnected
       manager.close()
       manager.send('queued message')
-      
+
       // Reconnect and verify message is sent
       await manager.connect()
       expect(manager.getHealth().messagesSent).toBeGreaterThan(0)
@@ -153,7 +157,7 @@ describe('BFFWebSocketManager', () => {
     it('should track message statistics', () => {
       manager.send('test message 1')
       manager.send('test message 2')
-      
+
       const health = manager.getHealth()
       expect(health.messagesSent).toBe(2)
     })
@@ -162,17 +166,17 @@ describe('BFFWebSocketManager', () => {
   describe('Auto-Reconnection', () => {
     it('should attempt reconnection on connection loss', async () => {
       const reconnectAttempts: number[] = []
-      
+
       manager = new BFFWebSocketManager('test-run-123', {
         autoReconnect: true,
         reconnectDelay: 50,
         maxReconnectAttempts: 3,
       })
-      
+
       manager.addEventListener('stateChange', () => {
         reconnectAttempts.push(manager.getHealth().reconnectAttempts)
       })
-      
+
       await manager.connect()
 
       // Simulate connection loss
@@ -181,8 +185,8 @@ describe('BFFWebSocketManager', () => {
       ws.onclose?.(new CloseEvent('close', { wasClean: false }))
 
       // Wait for reconnection attempts
-      await new Promise(resolve => setTimeout(resolve, 200))
-      
+      await new Promise((resolve) => setTimeout(resolve, 200))
+
       expect(Math.max(...reconnectAttempts)).toBeGreaterThan(0)
     })
 
@@ -192,17 +196,17 @@ describe('BFFWebSocketManager', () => {
         maxReconnectAttempts: 2,
         reconnectDelay: 10,
       })
-      
+
       await manager.connect()
-      
+
       // Simulate multiple connection failures
       for (let i = 0; i < 5; i++) {
         const ws = (manager as any).ws as any
         ws.readyState = (globalThis as any).WebSocket.CLOSED
         ws.onclose?.(new CloseEvent('close', { wasClean: false }))
-        await new Promise(resolve => setTimeout(resolve, 20))
+        await new Promise((resolve) => setTimeout(resolve, 20))
       }
-      
+
       expect(manager.getHealth().reconnectAttempts).toBeLessThanOrEqual(2)
     })
   })
@@ -215,7 +219,7 @@ describe('BFFWebSocketManager', () => {
 
     it('should track connection health metrics', () => {
       const health = manager.getHealth()
-      
+
       expect(health.state).toBe('connected')
       expect(health.lastConnected).toBeTypeOf('number')
       expect(health.reconnectAttempts).toBe(0)
@@ -226,7 +230,7 @@ describe('BFFWebSocketManager', () => {
 
     it('should update health on message activity', () => {
       manager.send('test message')
-      
+
       const health = manager.getHealth()
       expect(health.messagesSent).toBe(1)
     })
@@ -236,9 +240,11 @@ describe('BFFWebSocketManager', () => {
 
       // Simulate pong response
       const ws = (manager as any).ws as any
-      ws.onmessage?.(new MessageEvent('message', {
-        data: JSON.stringify({ t: 'pong', ts: Date.now() - 50 })
-      }))
+      ws.onmessage?.(
+        new MessageEvent('message', {
+          data: JSON.stringify({ t: 'pong', ts: Date.now() - 50 }),
+        }),
+      )
 
       const health = manager.getHealth()
       expect(health.latency ?? 0).toBeGreaterThanOrEqual(0)
@@ -265,24 +271,29 @@ describe('BFFWebSocketManager', () => {
   describe('Error Handling', () => {
     it('should handle WebSocket creation errors', async () => {
       // Mock WebSocket constructor that throws
-      vi.stubGlobal('WebSocket', class {
-        constructor() {
-          throw new Error('WebSocket creation failed')
-        }
-      })
-      
+      vi.stubGlobal(
+        'WebSocket',
+        class {
+          constructor() {
+            throw new Error('WebSocket creation failed')
+          }
+        },
+      )
+
       manager = new BFFWebSocketManager('test-run-123')
-      
+
       await expect(manager.connect()).rejects.toThrow('WebSocket creation failed')
     })
 
     it('should handle send errors gracefully', async () => {
       manager = new BFFWebSocketManager('test-run-123')
       await manager.connect()
-      
+
       // Mock send method to throw
       const ws = (manager as any).ws as any
-      ws.send = () => { throw new Error('Send failed') }
+      ws.send = () => {
+        throw new Error('Send failed')
+      }
 
       const result = manager.send('test message')
       expect(result).toBe(false)
@@ -302,7 +313,7 @@ describe('createWebSocketManager', () => {
       autoReconnect: false,
       maxReconnectAttempts: 10,
     }
-    
+
     const manager = createWebSocketManager('test-run-123', options)
     expect(manager).toBeInstanceOf(BFFWebSocketManager)
     manager.close()

@@ -203,7 +203,7 @@ ws.send(JSON.stringify({t: 'ctrl', cmd: 'play', speed: 60}));
 
 ### Health Checks
 - **Backend Health**: http://127.0.0.1:8000/healthz
-- **Database Status**: Check `data/catalog.sqlite` exists
+- **Database Status**: Check `data/catalog.db` exists
 - **Frontend Build**: `cd frontend && npm run build`
 
 ### Logging

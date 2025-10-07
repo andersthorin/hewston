@@ -5,7 +5,12 @@ import { render, screen } from '@testing-library/react'
 
 vi.mock('../../hooks/useRunData', () => ({
   useBacktestDetail: (id: string) => ({
-    data: { backtest_id: id, strategy_id: 'sma_crossover', status: 'ERROR', error_message: 'ImportError: nautilus-trader not installed' },
+    data: {
+      backtest_id: id,
+      strategy_id: 'sma_crossover',
+      status: 'ERROR',
+      error_message: 'ImportError: nautilus-trader not installed',
+    },
     isLoading: false,
     isError: false,
     error: undefined,
@@ -16,7 +21,6 @@ vi.mock('../../containers/RunPlayerContainer', () => ({
   default: () => <div data-testid="player-stub" />,
 }))
 
-
 import BacktestDetailView from '../BacktestDetail'
 
 function renderAt(path: string) {
@@ -25,7 +29,7 @@ function renderAt(path: string) {
       <Routes>
         <Route path="/backtests/:backtest_id" element={<BacktestDetailView />} />
       </Routes>
-    </MemoryRouter>
+    </MemoryRouter>,
   )
 }
 
@@ -37,4 +41,3 @@ describe('BacktestDetailView (error)', () => {
     expect(screen.queryByText(/Transport:/)).toBeNull()
   })
 })
-

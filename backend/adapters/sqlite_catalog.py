@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import os
 import sqlite3
-from typing import Optional, List, Tuple, Dict, Any
+from datetime import UTC
+from typing import Any
 
 from backend.domain.models import BacktestSummary, Dataset
 from backend.ports.catalog import CatalogPort
@@ -55,7 +56,7 @@ CREATE TABLE IF NOT EXISTS backtest_metrics (
 
 class SqliteCatalog(CatalogPort):
     def __init__(self, db_path: str | None = None) -> None:
-        resolved = db_path or os.getenv("HEWSTON_CATALOG_PATH", "data/catalog.sqlite")
+        resolved = db_path or os.getenv("HEWSTON_CATALOG_PATH", "data/catalog.db")
         self.db_path = resolved
         self._conn: sqlite3.Connection | None = None
         if resolved != ":memory:":
@@ -114,12 +115,10 @@ class SqliteCatalog(CatalogPort):
             if not db_exists:
                 # Fresh database - initialize schema
                 if os.path.isfile(ddl_path):
-                    with open(ddl_path, "r") as f:
+                    with open(ddl_path) as f:
                         conn.executescript(f.read())
                 else:
                     conn.executescript(DDL)
-
-
 
     def _migrate_schema(self) -> None:
         """Best-effort lightweight migration to ensure required columns/tables exist.
@@ -132,7 +131,9 @@ class SqliteCatalog(CatalogPort):
                 return any(r[1] == col for r in rows)
 
             # datasets: ensure extended columns used by upsert_dataset
-            if conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='datasets'").fetchone():
+            if conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='datasets'"
+            ).fetchone():
                 for col, decl in [
                     ("products_json", "TEXT"),
                     ("calendar_version", "TEXT"),
@@ -148,7 +149,9 @@ class SqliteCatalog(CatalogPort):
                         conn.execute(f"ALTER TABLE datasets ADD COLUMN {col} {decl}")
 
             # backtests: ensure columns used by create_run and set_run_status
-            if conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='backtests'").fetchone():
+            if conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name='backtests'"
+            ).fetchone():
                 for col, decl in [
                     ("params_json", "TEXT"),
                     ("seed", "INTEGER"),
@@ -182,21 +185,27 @@ class SqliteCatalog(CatalogPort):
         with self._connect() as conn:
             conn.executescript(DDL)
 
-    def get_backtest(self, run_id: str) -> Optional[Dict[str, Any]]:
+    def get_backtest(self, run_id: str) -> dict[str, Any] | None:
         import json as _json
+
         with self._connect() as conn:
-            row = conn.execute("SELECT * FROM backtests WHERE backtest_id = ?", (run_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM backtests WHERE backtest_id = ?", (run_id,)
+            ).fetchone()
             if not row:
                 return None
             cols = row.keys() if hasattr(row, "keys") else []
+
             def _col(name: str):
                 return row[name] if name in cols else None
+
             # Parse JSON columns safely
             def _parse(j):
                 try:
                     return _json.loads(j) if j is not None else None
                 except Exception:
                     return None
+
             run_manifest_path = _col("run_manifest_path")
             return {
                 "run_id": row["backtest_id"],
@@ -224,14 +233,14 @@ class SqliteCatalog(CatalogPort):
     def list_backtests(
         self,
         *,
-        symbol: Optional[str] = None,
-        strategy_id: Optional[str] = None,
-        from_date: Optional[str] = None,
-        to_date: Optional[str] = None,
+        symbol: str | None = None,
+        strategy_id: str | None = None,
+        from_date: str | None = None,
+        to_date: str | None = None,
         limit: int = 20,
         offset: int = 0,
         order: str = "-created_at",
-    ) -> tuple[List[BacktestSummary], int]:
+    ) -> tuple[list[BacktestSummary], int]:
         clauses = []
         params: list = []
         if symbol:
@@ -279,9 +288,11 @@ class SqliteCatalog(CatalogPort):
             ]
             return items, total
 
-    def get_dataset(self, dataset_id: str) -> Optional[Dataset]:
+    def get_dataset(self, dataset_id: str) -> Dataset | None:
         with self._connect() as conn:
-            row = conn.execute("SELECT * FROM datasets WHERE dataset_id = ?", (dataset_id,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM datasets WHERE dataset_id = ?", (dataset_id,)
+            ).fetchone()
             if not row:
                 return None
             return Dataset(
@@ -292,12 +303,15 @@ class SqliteCatalog(CatalogPort):
             )
 
     # Stubs
-    def upsert_dataset(self, dataset: Dict[str, Any]) -> None:
+    def upsert_dataset(self, dataset: dict[str, Any]) -> None:
         import json as _json
+
         rec = dict(dataset)
+
         # Ensure JSON TEXT fields are serialized deterministically
         def dumps(o):
             return _json.dumps(o, sort_keys=True)
+
         rec["products_json"] = dumps(rec.get("products", []))
         rec["raw_dbn_json"] = dumps(rec.get("raw_dbn", []))
         rec["bars_parquet_json"] = dumps(rec.get("bars_parquet", []))
@@ -339,7 +353,6 @@ class SqliteCatalog(CatalogPort):
                 "  status=excluded.status",
                 values,
             )
-
 
     def create_backtest(
         self,
@@ -415,10 +428,10 @@ class SqliteCatalog(CatalogPort):
         with self._connect() as conn:
             conn.execute(f"UPDATE backtests SET {', '.join(sets)} WHERE backtest_id = ?", params)
 
-    def upsert_backtest_metrics(self, run_id: str, metrics: Dict[str, Any]) -> None:
-        from datetime import datetime, timezone
+    def upsert_backtest_metrics(self, run_id: str, metrics: dict[str, Any]) -> None:
+        from datetime import datetime
 
-        computed_at = datetime.now(timezone.utc).isoformat()
+        computed_at = datetime.now(UTC).isoformat()
 
         # Extract metrics (map win_rate to hit_rate for DB schema compatibility)
         total_return = metrics.get("total_return")
@@ -437,17 +450,20 @@ class SqliteCatalog(CatalogPort):
                 (run_id, total_return, max_drawdown, hit_rate, computed_at),
             )
 
-
-    def find_backtest_by_input_hash(self, input_hash: str) -> Optional[Dict[str, Any]]:
+    def find_backtest_by_input_hash(self, input_hash: str) -> dict[str, Any] | None:
         with self._connect() as conn:
-            row = conn.execute("SELECT backtest_id FROM backtests WHERE input_hash = ?", (input_hash,)).fetchone()
+            row = conn.execute(
+                "SELECT backtest_id FROM backtests WHERE input_hash = ?", (input_hash,)
+            ).fetchone()
             if not row:
                 return None
             return {"run_id": row["backtest_id"]}
 
-    def find_backtest_by_idempotency_key(self, idem: str) -> Optional[Dict[str, Any]]:
+    def find_backtest_by_idempotency_key(self, idem: str) -> dict[str, Any] | None:
         with self._connect() as conn:
-            row = conn.execute("SELECT backtest_id FROM backtests WHERE idempotency_key = ?", (idem,)).fetchone()
+            row = conn.execute(
+                "SELECT backtest_id FROM backtests WHERE idempotency_key = ?", (idem,)
+            ).fetchone()
             if not row:
                 return None
             return {"run_id": row["backtest_id"]}

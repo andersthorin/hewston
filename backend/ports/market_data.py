@@ -9,4 +9,3 @@ class MarketDataPort(Protocol):
         Implementations may ingest, derive, and upsert into catalog.
         """
         ...
-

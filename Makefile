@@ -8,10 +8,10 @@ NPM := npm
 BACKEND_DIR := backend
 FRONTEND_DIR := frontend
 BFF_DIR := bff
-CATALOG_DB := data/catalog.sqlite
+CATALOG_DB := data/catalog.db
 # default envs for local dev (override as needed)
 DATABENTO_API_KEY ?= test-key
-HEWSTON_CATALOG_PATH ?= data/catalog.sqlite
+HEWSTON_CATALOG_PATH ?= data/catalog.db
 HEWSTON_DATA_DIR ?= data
 
 # Defaults (override on CLI: make data SYMBOL=AAPL YEAR=2023)
@@ -99,17 +99,29 @@ start:
 .PHONY: start-backend
 start-backend:
 	@test -d $(BACKEND_DIR) && \
-	  (echo "[backend] starting uvicorn" && \
-	   DATABENTO_API_KEY=$(DATABENTO_API_KEY) HEWSTON_CATALOG_PATH=$(HEWSTON_CATALOG_PATH) HEWSTON_DATA_DIR=$(HEWSTON_DATA_DIR) \
-	   $(PYTHON) uvicorn $(BACKEND_DIR).app.main:app --reload --host 127.0.0.1 --port 8000) \
+	  (echo "[backend] starting uvicorn"; \
+	   export DATABENTO_API_KEY=$(DATABENTO_API_KEY) HEWSTON_CATALOG_PATH=$(HEWSTON_CATALOG_PATH) HEWSTON_DATA_DIR=$(HEWSTON_DATA_DIR); \
+	   if [ -x .venv/bin/uvicorn ]; then \
+	     .venv/bin/uvicorn $(BACKEND_DIR).app.main:app --reload --host 127.0.0.1 --port 8000; \
+	   elif command -v uv >/dev/null 2>&1; then \
+	     uv run uvicorn $(BACKEND_DIR).app.main:app --reload --host 127.0.0.1 --port 8000; \
+	   else \
+	     python3 -m uvicorn $(BACKEND_DIR).app.main:app --reload --host 127.0.0.1 --port 8000; \
+	   fi ) \
 	|| (echo "[backend] missing $(BACKEND_DIR)/ — scaffold later" && true)
 
 .PHONY: start-bff
 start-bff:
 	@test -d $(BFF_DIR) && \
-	  (echo "[bff] starting uvicorn" && \
-	   HEWSTON_BACKEND_URL=http://127.0.0.1:8000 BFF_LOG_LEVEL=INFO \
-	   $(PYTHON) uvicorn $(BFF_DIR).app.main:app --reload --host 127.0.0.1 --port 8001) \
+	  (echo "[bff] starting uvicorn"; \
+	   export HEWSTON_BACKEND_URL=http://127.0.0.1:8000 BFF_LOG_LEVEL=INFO; \
+	   if [ -x .venv/bin/uvicorn ]; then \
+	     .venv/bin/uvicorn $(BFF_DIR).app.main:app --reload --host 127.0.0.1 --port 8001; \
+	   elif command -v uv >/dev/null 2>&1; then \
+	     uv run uvicorn $(BFF_DIR).app.main:app --reload --host 127.0.0.1 --port 8001; \
+	   else \
+	     python3 -m uvicorn $(BFF_DIR).app.main:app --reload --host 127.0.0.1 --port 8001; \
+	   fi ) \
 	|| (echo "[bff] missing $(BFF_DIR)/ — scaffold later" && true)
 
 .PHONY: start-frontend
@@ -225,3 +237,39 @@ clean:
 	@echo "[clean] removing caches" && \
 	rm -rf .pytest_cache __pycache__ */__pycache__ .ruff_cache || true
 
+
+
+# -------- CI parity helpers --------
+.PHONY: dev-install
+dev-install:
+	@echo "[dev-install] installing pinned toolchain (requirements-dev.txt)" && \
+	$(UV) pip install -r requirements-dev.txt
+
+.PHONY: ci-versions
+ci-versions:
+	@$(PYTHON) python -V && \
+	$(PYTHON) ruff --version && \
+	$(PYTHON) black --version && \
+	$(PYTHON) mypy --version && \
+	$(PYTHON) pytest --version && \
+	$(PYTHON) bandit --version && \
+	$(PYTHON) pip-audit --version && \
+	$(PYTHON) python -c "import importlinter, grimp; print('import-linter', getattr(importlinter, '__version__', 'unknown')); print('grimp', getattr(grimp, '__version__', 'unknown'))"
+
+.PHONY: ci-architecture
+ci-architecture:
+	@echo "[ci-architecture] import-linter" && \
+	$(PYTHON) lint-imports --config linter.ini
+
+.PHONY: ci-local
+ci-local:
+	@echo "[ci] Using pinned toolchain — run: make setup && make dev-install (once)" && \
+	$(MAKE) ci-versions && \
+	echo "[ci] Ruff (lint)" && $(PYTHON) ruff check backend bff && \
+	echo "[ci] Black (format check)" && $(PYTHON) black --check backend bff && \
+	echo "[ci] MyPy (type check)" && $(PYTHON) mypy backend bff && \
+	echo "[ci] Import Linter (architecture)" && $(PYTHON) lint-imports --config linter.ini && \
+	echo "[ci] PyTest (backend)" && PYTHONPATH=. $(PYTHON) pytest -q backend/tests --cov=backend --cov-report=term-missing && \
+	echo "[ci] PyTest (bff)" && PYTHONPATH=. $(PYTHON) pytest -q bff/tests --cov=bff --cov-report=term-missing && \
+	echo "[ci] Bandit (security)" && $(PYTHON) bandit -q -r backend bff || true && \
+	echo "[ci] pip-audit (dependencies)" && $(PYTHON) pip-audit --progress-spinner=off || true

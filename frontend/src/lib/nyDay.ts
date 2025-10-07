@@ -4,7 +4,8 @@ export function nyBusinessDayKey(isoTs: string): string {
   // Use en-CA to get zero-padded YYYY-MM-DD reliably
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/New_York',
-    year: 'numeric', month: '2-digit', day: '2-digit',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
   }).format(d)
 }
-

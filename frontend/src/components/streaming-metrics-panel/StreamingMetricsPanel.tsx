@@ -39,20 +39,22 @@ export default function StreamingMetricsPanel({ finalMetrics }: { finalMetrics?:
   // Playback behavior:
   // - Use streaming equity while playing/scrubbing
   // - If we're at the final frame and finalMetrics exist, snap to the exact Nautilus Balances ending (cash)
-  const endValue = (finalMetrics && typeof finalMetrics.ending_balance === 'number')
-    ? finalMetrics.ending_balance as number
-    : (finalMetrics && typeof finalMetrics.ending_equity === 'number'
-        ? finalMetrics.ending_equity as number
-        : (finalMetrics && typeof finalMetrics.total_return === 'number'
-            ? 10000 * (1 + (finalMetrics.total_return as number))
-            : undefined))
-  const equityList = (atEnd && typeof endValue === 'number')
-    ? [{ ts: (ts as string) || new Date().toISOString(), value: endValue }]
-    : (eq && typeof eq.value === 'number'
+  const endValue =
+    finalMetrics && typeof finalMetrics.ending_balance === 'number'
+      ? (finalMetrics.ending_balance as number)
+      : finalMetrics && typeof finalMetrics.ending_equity === 'number'
+        ? (finalMetrics.ending_equity as number)
+        : finalMetrics && typeof finalMetrics.total_return === 'number'
+          ? 10000 * (1 + (finalMetrics.total_return as number))
+          : undefined
+  const equityList =
+    atEnd && typeof endValue === 'number'
+      ? [{ ts: (ts as string) || new Date().toISOString(), value: endValue }]
+      : eq && typeof eq.value === 'number'
         ? [{ ts: eq.ts, value: eq.value }]
-        : (typeof endValue === 'number'
-            ? [{ ts: (ts as string) || new Date().toISOString(), value: endValue }]
-            : null))
+        : typeof endValue === 'number'
+          ? [{ ts: (ts as string) || new Date().toISOString(), value: endValue }]
+          : null
 
   // On the final frame, force Sharpe to the canonical Nautilus value if available
   if (atEnd && finalMetrics && typeof finalMetrics.sharpe_ratio === 'number') {
@@ -60,7 +62,12 @@ export default function StreamingMetricsPanel({ finalMetrics }: { finalMetrics?:
   }
 
   // Debug: log only when values change; cap to first 20 lines
-  const lastRef = useRef<{ ts?: string|null, tr?: number|null, dd?: number|null, sh?: number|null }>({})
+  const lastRef = useRef<{
+    ts?: string | null
+    tr?: number | null
+    dd?: number | null
+    sh?: number | null
+  }>({})
   const dbgCountRef = useRef(0)
   useEffect(() => {
     if (!import.meta.env.DEV) return
@@ -68,7 +75,11 @@ export default function StreamingMetricsPanel({ finalMetrics }: { finalMetrics?:
     const tr = mapped.total_return ?? null
     const dd = mapped.max_drawdown ?? null
     const sh = mapped.sharpe_ratio ?? null
-    const changed = ts !== lastRef.current.ts || tr !== lastRef.current.tr || dd !== lastRef.current.dd || sh !== lastRef.current.sh
+    const changed =
+      ts !== lastRef.current.ts ||
+      tr !== lastRef.current.tr ||
+      dd !== lastRef.current.dd ||
+      sh !== lastRef.current.sh
     if (changed) {
       console.debug('[metrics-frame]', { ts, tr, dd, sh, hasEquity: !!eq, eq: eq?.value })
       lastRef.current = { ts, tr, dd, sh }
@@ -78,4 +89,3 @@ export default function StreamingMetricsPanel({ finalMetrics }: { finalMetrics?:
 
   return <MetricsSummary metrics={mapped} equity={equityList} />
 }
-

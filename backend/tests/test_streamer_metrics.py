@@ -1,4 +1,3 @@
-import asyncio
 import json
 from pathlib import Path
 
@@ -16,10 +15,12 @@ async def test_streamer_uses_precomputed_metrics(tmp_path: Path, monkeypatch):
     met_path = tmp_path / "metrics.json"
 
     # Two equity points, 1-minute apart
-    eq_df = pl.DataFrame({
-        "ts_utc": ["2024-01-01T00:00:00Z", "2024-01-01T00:01:00Z"],
-        "value": [100.0, 101.0],
-    })
+    eq_df = pl.DataFrame(
+        {
+            "ts_utc": ["2024-01-01T00:00:00Z", "2024-01-01T00:01:00Z"],
+            "value": [100.0, 101.0],
+        }
+    )
     eq_df.write_parquet(eq_path)
 
     # Empty orders
@@ -27,8 +28,28 @@ async def test_streamer_uses_precomputed_metrics(tmp_path: Path, monkeypatch):
 
     # Precomputed metrics artifact: series is list of [iso, metrics]
     series = [
-        ["2024-01-01T00:00:00Z", {"return": None, "realized_pnl": None, "total_return": 0.0, "drawdown": 0.0, "sharpe": None, "win_rate": None}],
-        ["2024-01-01T00:01:00Z", {"return": 0.01, "realized_pnl": 5.0, "total_return": 0.01, "drawdown": 0.0, "sharpe": 1.23, "win_rate": 1.0}],
+        [
+            "2024-01-01T00:00:00Z",
+            {
+                "return": None,
+                "realized_pnl": None,
+                "total_return": 0.0,
+                "drawdown": 0.0,
+                "sharpe": None,
+                "win_rate": None,
+            },
+        ],
+        [
+            "2024-01-01T00:01:00Z",
+            {
+                "return": 0.01,
+                "realized_pnl": 5.0,
+                "total_return": 0.01,
+                "drawdown": 0.0,
+                "sharpe": 1.23,
+                "win_rate": 1.0,
+            },
+        ],
     ]
     met_path.write_text(json.dumps({"series": series, "bar_interval_minutes": 1}))
 
@@ -56,4 +77,3 @@ async def test_streamer_uses_precomputed_metrics(tmp_path: Path, monkeypatch):
     assert pytest.approx(frames[1].metrics["return"], rel=1e-12) == 0.01
     assert frames[1].metrics["realized_pnl"] == 5.0
     assert frames[1].metrics["win_rate"] == 1.0
-

@@ -4,7 +4,14 @@ import playbackStore, { selectors } from '../playbackClock'
 
 function seedFrame(orders: Array<any>) {
   // @ts-ignore test shape
-  playbackStore._setFrame({ t: 'frame', ts: '2024-01-01T00:00:00Z', dropped: 0, ohlc: null, equity: null, orders })
+  playbackStore._setFrame({
+    t: 'frame',
+    ts: '2024-01-01T00:00:00Z',
+    dropped: 0,
+    ohlc: null,
+    equity: null,
+    orders,
+  })
 }
 
 describe('Playback Clock symbol focus filtering', () => {
@@ -32,4 +39,3 @@ describe('Playback Clock symbol focus filtering', () => {
     expect(all).toEqual(['2024-01-01T00:00:00Z', '2024-01-01T00:10:00Z', '2024-01-01T00:20:00Z'])
   })
 })
-

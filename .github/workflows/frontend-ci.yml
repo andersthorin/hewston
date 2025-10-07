@@ -32,21 +32,22 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Type check
+      - name: Type check (TypeScript)
         run: npm run type-check
 
-      - name: Lint (app code)
+      - name: Lint (components/containers/views)
         run: npm run lint
+
+      - name: Lint (services/hooks/utils/store)
+        run: npm run lint:services
 
       - name: Build
         run: npm run build
 
-      - name: Run targeted tests
-        run: |
-          npm run test -- --run --reporter=dot src/components/__tests__/MetricsSummary.test.tsx
-          npm run test -- --run --reporter=dot src/components/__tests__/StreamingMetricsPanel.test.tsx
-          npm run test -- --run --reporter=dot src/components/__tests__/SymbolFocus.test.tsx
-          npm run test -- --run --reporter=dot src/components/__tests__/TimelineScrubber.test.tsx
-          npm run test -- --run --reporter=dot src/components/runs-table/RunsTable.test.tsx
+      - name: Unit tests (Vitest) with coverage
+        run: npm run test -- --run --coverage --reporter=dot
+
+      - name: Prettier check
+        run: npx -y prettier@3.3.3 --check .
 
 

@@ -6,12 +6,9 @@ across the backend codebase.
 """
 
 import subprocess
-from typing import Optional
 
 
-from typing import Optional
-
-def get_git_commit_hash() -> Optional[str]:
+def get_git_commit_hash() -> str | None:
     """
     Get the current git commit hash.
 
@@ -32,7 +29,7 @@ def get_git_commit_hash() -> Optional[str]:
         return None
 
 
-def get_git_branch() -> Optional[str]:
+def get_git_branch() -> str | None:
     """
     Get the current git branch name.
 

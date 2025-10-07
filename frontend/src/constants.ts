@@ -19,7 +19,7 @@ export const BFF_WS_URL = import.meta.env.VITE_BFF_WS_BASE_URL || 'ws://127.0.0.
 
 // Chart Configuration
 export const DEFAULT_CHART_HEIGHT = 400
-export const CANDLESTICK_BAR_WIDTH = 14  // Fixed daily bar width (12-16px range)
+export const CANDLESTICK_BAR_WIDTH = 14 // Fixed daily bar width (12-16px range)
 export const CHART_MARGIN = { top: 10, right: 30, bottom: 30, left: 60 }
 
 // Streaming Configuration
@@ -31,11 +31,11 @@ export const MAX_RECONNECT_ATTEMPTS = 5
 
 // Worker Configuration
 export const STREAM_PARSER_TARGET_MS = 1000 / DEFAULT_FPS
-export const MIN_FRAME_INTERVAL_MS = 16  // ~60 FPS max
+export const MIN_FRAME_INTERVAL_MS = 16 // ~60 FPS max
 
 // Query Configuration
-export const DEFAULT_STALE_TIME = 5 * 60 * 1000  // 5 minutes
-export const DEFAULT_CACHE_TIME = 10 * 60 * 1000  // 10 minutes
+export const DEFAULT_STALE_TIME = 5 * 60 * 1000 // 5 minutes
+export const DEFAULT_CACHE_TIME = 10 * 60 * 1000 // 10 minutes
 
 // Pagination
 export const DEFAULT_PAGE_SIZE = 20
@@ -54,19 +54,19 @@ export const LOADING_SPINNER_DELAY_MS = 200
 
 // Chart Colors
 export const CHART_COLORS = {
-  BULLISH: '#22c55e',    // green-500
-  BEARISH: '#ef4444',    // red-500
-  NEUTRAL: '#6b7280',    // gray-500
+  BULLISH: '#22c55e', // green-500
+  BEARISH: '#ef4444', // red-500
+  NEUTRAL: '#6b7280', // gray-500
   BACKGROUND: '#ffffff',
-  GRID: '#f3f4f6',       // gray-100
-  TEXT: '#374151',       // gray-700
+  GRID: '#f3f4f6', // gray-100
+  TEXT: '#374151', // gray-700
 } as const
 
 // Baseline Values (from docs/prd/features/00-baselines.md)
 export const BASELINE_SYMBOL = 'AAPL'
 export const BASELINE_YEAR = 2023
-export const BASELINE_FROM_DATE = '2023-01-01'
-export const BASELINE_TO_DATE = '2023-12-31'
+export const BASELINE_FROM_DATE = '2024-10-01'
+export const BASELINE_TO_DATE = '2024-10-31'
 export const BASELINE_STRATEGY = 'sma_crossover'
 export const BASELINE_FAST_PERIOD = 20
 export const BASELINE_SLOW_PERIOD = 50

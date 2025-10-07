@@ -17,7 +17,11 @@ export const DailyResponseSchema = z.object({
 })
 export type DailyResponse = z.infer<typeof DailyResponseSchema>
 
-export async function fetchDaily(symbol: string, from?: string, to?: string): Promise<DailyResponse> {
+export async function fetchDaily(
+  symbol: string,
+  from?: string,
+  to?: string,
+): Promise<DailyResponse> {
   const params = new URLSearchParams({ symbol })
   if (from) params.set('from', from)
   if (to) params.set('to', to)
@@ -40,11 +44,19 @@ export type MinuteBar = z.infer<typeof MinuteBarSchema>
 export const MinuteResponseSchema = z.object({
   symbol: z.string(),
   bars: z.array(MinuteBarSchema),
-  meta: z.object({ stride_minutes: z.number().optional(), points: z.number().optional() }).optional().nullable(),
+  meta: z
+    .object({ stride_minutes: z.number().optional(), points: z.number().optional() })
+    .optional()
+    .nullable(),
 })
 export type MinuteResponse = z.infer<typeof MinuteResponseSchema>
 
-export async function fetchMinute(symbol: string, from: string, to: string, rth_only: boolean = true): Promise<MinuteResponse> {
+export async function fetchMinute(
+  symbol: string,
+  from: string,
+  to: string,
+  rth_only: boolean = true,
+): Promise<MinuteResponse> {
   const params = new URLSearchParams({ symbol, from, to })
   if (rth_only) params.set('rth_only', '1')
   const res = await fetch(`/bars/minute?${params.toString()}`)
@@ -53,7 +65,13 @@ export async function fetchMinute(symbol: string, from: string, to: string, rth_
   return MinuteResponseSchema.parse(json)
 }
 
-export async function fetchMinuteDecimated(symbol: string, from: string, to: string, target = 10000, rth_only: boolean = true): Promise<MinuteResponse> {
+export async function fetchMinuteDecimated(
+  symbol: string,
+  from: string,
+  to: string,
+  target = 10000,
+  rth_only: boolean = true,
+): Promise<MinuteResponse> {
   const params = new URLSearchParams({ symbol, from, to, target: String(target) })
   if (rth_only) params.set('rth_only', '1')
   const res = await fetch(`/bars/minute_decimated?${params.toString()}`)
@@ -78,7 +96,12 @@ export const HourResponseSchema = z.object({
 })
 export type HourResponse = z.infer<typeof HourResponseSchema>
 
-export async function fetchHour(symbol: string, from: string, to: string, rth_only: boolean = true): Promise<HourResponse> {
+export async function fetchHour(
+  symbol: string,
+  from: string,
+  to: string,
+  rth_only: boolean = true,
+): Promise<HourResponse> {
   const params = new URLSearchParams({ symbol, from, to })
   if (rth_only) params.set('rth_only', '1')
   const res = await fetch(`/bars/hour?${params.toString()}`)
@@ -86,4 +109,3 @@ export async function fetchHour(symbol: string, from: string, to: string, rth_on
   const json = await res.json()
   return HourResponseSchema.parse(json)
 }
-

@@ -79,7 +79,7 @@ scripts/
 - data: ingest Databento DBN assets (SYMBOL, YEAR)
 - materialize-day: Quotes+Trades → MID bars for one day
 - backfill-warehouse: Backfill warehouse over a date range
-- db-apply: apply scripts/catalog_init.sql to data/catalog.sqlite
+- db-apply: apply scripts/catalog_init.sql to data/catalog.db
 
 ## Cross-References
 - PRD §4.3 Architecture and Interfaces; §6 Next Steps

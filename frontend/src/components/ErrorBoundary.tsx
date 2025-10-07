@@ -1,10 +1,13 @@
 import React from 'react'
 
-export default class ErrorBoundary extends React.Component<{
-  children?: React.ReactNode
-  fallback?: React.ReactNode
-  title?: string
-}, { hasError: boolean; error?: Error }>{
+export default class ErrorBoundary extends React.Component<
+  {
+    children?: React.ReactNode
+    fallback?: React.ReactNode
+    title?: string
+  },
+  { hasError: boolean; error?: Error }
+> {
   constructor(props: { children?: React.ReactNode; fallback?: React.ReactNode; title?: string }) {
     super(props)
     this.state = { hasError: false }
@@ -37,11 +40,16 @@ export default class ErrorBoundary extends React.Component<{
       if (Fallback) return <>{Fallback}</>
       const message = this.state.error?.message || String(this.state.error || 'Unknown error')
       return (
-        <div role="alert" className="rounded border border-amber-300 bg-amber-50 text-amber-700 p-3">
+        <div
+          role="alert"
+          className="rounded border border-amber-300 bg-amber-50 text-amber-700 p-3"
+        >
           <div className="font-medium mb-1">{this.props.title || 'Something went wrong'}</div>
           <div className="text-xs whitespace-pre-wrap break-all">{message}</div>
-          <button className="mt-2 inline-flex items-center rounded border border-amber-400 px-2 py-1 text-xs"
-                  onClick={this.handleReload}>
+          <button
+            className="mt-2 inline-flex items-center rounded border border-amber-400 px-2 py-1 text-xs"
+            onClick={this.handleReload}
+          >
             Reload page
           </button>
         </div>
@@ -50,4 +58,3 @@ export default class ErrorBoundary extends React.Component<{
     return this.props.children as React.ReactNode
   }
 }
-

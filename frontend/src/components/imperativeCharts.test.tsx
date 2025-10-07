@@ -37,15 +37,20 @@ describe('imperative charts API', () => {
     const chart = getChartMock()
     const series = chart.addCandlestickSeries.mock.results[0].value
 
-    const initial: CandlestickData[] = [{ time: 1 as CandlestickData['time'], open: 1, high: 2, low: 0.5, close: 1.5 }]
+    const initial: CandlestickData[] = [
+      { time: 1 as CandlestickData['time'], open: 1, high: 2, low: 0.5, close: 1.5 },
+    ]
     ref.current!.reset(initial)
     expect(series.setData).toHaveBeenCalledWith(initial)
 
-    const dp: CandlestickData = { time: 2 as CandlestickData['time'], open: 2, high: 3, low: 1, close: 2.5 }
+    const dp: CandlestickData = {
+      time: 2 as CandlestickData['time'],
+      open: 2,
+      high: 3,
+      low: 1,
+      close: 2.5,
+    }
     ref.current!.update(dp)
     expect(series.update).toHaveBeenCalledWith(dp)
   })
-
-
 })
-

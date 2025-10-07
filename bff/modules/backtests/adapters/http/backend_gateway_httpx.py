@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
+
 import httpx
 
 from bff.modules.backtests.application.ports.backend_gateway import BackendGatewayPort
@@ -11,18 +12,18 @@ class BackendGatewayHTTPX(BackendGatewayPort):
     Note: Not wired yet; pilot exemplar only.
     """
 
-    def __init__(self, base_url: str, client: Optional[httpx.AsyncClient] = None) -> None:
+    def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.client = client or httpx.AsyncClient(base_url=self.base_url, timeout=10.0)
 
-    async def create_backtest(self, body: dict, idempotency_key: Optional[str]) -> tuple[dict, int]:
+    async def create_backtest(self, body: dict, idempotency_key: str | None) -> tuple[dict, int]:
         headers = {}
         if idempotency_key:
             headers["Idempotency-Key"] = idempotency_key
         resp = await self.client.post("/backtests", json=body, headers=headers)
         return resp.json(), resp.status_code
 
-    async def get_backtest(self, run_id: str) -> Optional[dict[str, Any]]:
+    async def get_backtest(self, run_id: str) -> dict[str, Any] | None:
         resp = await self.client.get(f"/backtests/{run_id}")
         if resp.status_code == 404:
             return None
@@ -32,13 +33,13 @@ class BackendGatewayHTTPX(BackendGatewayPort):
     async def list_backtests(
         self,
         *,
-        symbol: Optional[str] = None,
-        strategy_id: Optional[str] = None,
-        run_from: Optional[str] = None,
-        run_to: Optional[str] = None,
+        symbol: str | None = None,
+        strategy_id: str | None = None,
+        run_from: str | None = None,
+        run_to: str | None = None,
         limit: int = 20,
         offset: int = 0,
-        order: Optional[str] = None,
+        order: str | None = None,
     ) -> dict[str, Any]:
         params = {
             "symbol": symbol,
@@ -54,4 +55,3 @@ class BackendGatewayHTTPX(BackendGatewayPort):
         resp = await self.client.get("/backtests", params=params)
         resp.raise_for_status()
         return resp.json()
-

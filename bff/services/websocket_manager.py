@@ -8,24 +8,24 @@ Handles connection lifecycle and error recovery.
 import asyncio
 import json
 import logging
-from typing import Dict, Set, Optional, Any
 from datetime import datetime
-import websockets
-from websockets.exceptions import ConnectionClosed, WebSocketException
+from typing import Any
 
+import websockets
 from fastapi import WebSocket, WebSocketDisconnect
+from websockets.exceptions import ConnectionClosed
+
+from bff.app.config import BACKEND_BASE_URL
 from bff.models.websocket import (
-    MessageType,
     ConnectionStatus,
-    WebSocketMessage,
+    ConnectionStatusMessage,
+    ErrorMessage,
+    MessageType,
+    PingMessage,
+    PongMessage,
     SubscribeMessage,
     UnsubscribeMessage,
-    ErrorMessage,
-    ConnectionStatusMessage,
-    PingMessage,
-    PongMessage
 )
-from bff.app.config import BACKEND_BASE_URL
 
 
 class WebSocketConnectionManager:
@@ -35,17 +35,16 @@ class WebSocketConnectionManager:
         self.logger = logging.getLogger("bff.websocket_manager")
 
         # Client connections: {connection_id: WebSocket}
-        self.active_connections: Dict[str, WebSocket] = {}
+        self.active_connections: dict[str, WebSocket] = {}
 
         # Run subscriptions: {run_id: {connection_id}}
-        self.run_subscriptions: Dict[str, Set[str]] = {}
+        self.run_subscriptions: dict[str, set[str]] = {}
 
         # Backend connections: {run_id: backend_websocket}
-        self.backend_connections: Dict[str, Any] = {}
+        self.backend_connections: dict[str, Any] = {}
 
         # Connection metadata
-        self.connection_metadata: Dict[str, Dict[str, Any]] = {}
-
+        self.connection_metadata: dict[str, dict[str, Any]] = {}
 
     async def connect_client(self, websocket: WebSocket, connection_id: str) -> None:
         """
@@ -60,7 +59,7 @@ class WebSocketConnectionManager:
         self.connection_metadata[connection_id] = {
             "connected_at": datetime.utcnow().isoformat(),
             "subscriptions": set(),
-            "last_ping": None
+            "last_ping": None,
         }
 
         self.logger.info(
@@ -68,7 +67,7 @@ class WebSocketConnectionManager:
             extra={
                 "connection_id": connection_id,
                 "total_connections": len(self.active_connections),
-            }
+            },
         )
 
         # Send connection status
@@ -77,8 +76,8 @@ class WebSocketConnectionManager:
             ConnectionStatusMessage(
                 status=ConnectionStatus.CONNECTED,
                 message="Connected to BFF WebSocket",
-                backend_connected=False
-            )
+                backend_connected=False,
+            ),
         )
 
     async def disconnect_client(self, connection_id: str) -> None:
@@ -108,14 +107,10 @@ class WebSocketConnectionManager:
             extra={
                 "connection_id": connection_id,
                 "total_connections": len(self.active_connections),
-            }
+            },
         )
 
-    async def handle_client_message(
-        self,
-        connection_id: str,
-        message_data: str
-    ) -> None:
+    async def handle_client_message(self, connection_id: str, message_data: str) -> None:
         """
         Handle incoming message from client.
 
@@ -132,7 +127,7 @@ class WebSocketConnectionManager:
                 extra={
                     "connection_id": connection_id,
                     "message_type": message_type,
-                }
+                },
             )
 
             if message_type == MessageType.SUBSCRIBE:
@@ -149,32 +144,24 @@ class WebSocketConnectionManager:
                 await self._handle_ready_signal(connection_id, message_dict)
             else:
                 await self._send_error(
-                    connection_id,
-                    "UNKNOWN_MESSAGE_TYPE",
-                    f"Unknown message type: {message_type}"
+                    connection_id, "UNKNOWN_MESSAGE_TYPE", f"Unknown message type: {message_type}"
                 )
 
         except json.JSONDecodeError as e:
-            await self._send_error(
-                connection_id,
-                "INVALID_JSON",
-                f"Invalid JSON message: {str(e)}"
-            )
+            await self._send_error(connection_id, "INVALID_JSON", f"Invalid JSON message: {str(e)}")
         except Exception as e:
             self.logger.exception(
                 "client.message_error",
                 extra={
                     "connection_id": connection_id,
                     "error": str(e),
-                }
+                },
             )
             await self._send_error(
-                connection_id,
-                "MESSAGE_PROCESSING_ERROR",
-                f"Error processing message: {str(e)}"
+                connection_id, "MESSAGE_PROCESSING_ERROR", f"Error processing message: {str(e)}"
             )
 
-    async def _handle_subscribe(self, connection_id: str, message_dict: Dict[str, Any]) -> None:
+    async def _handle_subscribe(self, connection_id: str, message_dict: dict[str, Any]) -> None:
         """Handle subscription request."""
         try:
             subscribe_msg = SubscribeMessage(**message_dict)
@@ -198,7 +185,7 @@ class WebSocketConnectionManager:
                     "connection_id": connection_id,
                     "run_id": run_id,
                     "total_subscribers": len(self.run_subscriptions[run_id]),
-                }
+                },
             )
 
             # Send confirmation
@@ -207,18 +194,16 @@ class WebSocketConnectionManager:
                 ConnectionStatusMessage(
                     status=ConnectionStatus.CONNECTED,
                     message=f"Subscribed to run {run_id}",
-                    backend_connected=run_id in self.backend_connections
-                )
+                    backend_connected=run_id in self.backend_connections,
+                ),
             )
 
         except Exception as e:
             await self._send_error(
-                connection_id,
-                "SUBSCRIPTION_ERROR",
-                f"Error subscribing to run: {str(e)}"
+                connection_id, "SUBSCRIPTION_ERROR", f"Error subscribing to run: {str(e)}"
             )
 
-    async def _handle_unsubscribe(self, connection_id: str, message_dict: Dict[str, Any]) -> None:
+    async def _handle_unsubscribe(self, connection_id: str, message_dict: dict[str, Any]) -> None:
         """Handle unsubscription request."""
         try:
             unsubscribe_msg = UnsubscribeMessage(**message_dict)
@@ -231,18 +216,16 @@ class WebSocketConnectionManager:
                 ConnectionStatusMessage(
                     status=ConnectionStatus.CONNECTED,
                     message=f"Unsubscribed from run {run_id}",
-                    backend_connected=False
-                )
+                    backend_connected=False,
+                ),
             )
 
         except Exception as e:
             await self._send_error(
-                connection_id,
-                "UNSUBSCRIPTION_ERROR",
-                f"Error unsubscribing from run: {str(e)}"
+                connection_id, "UNSUBSCRIPTION_ERROR", f"Error unsubscribing from run: {str(e)}"
             )
 
-    async def _handle_ping(self, connection_id: str, message_dict: Dict[str, Any]) -> None:
+    async def _handle_ping(self, connection_id: str, message_dict: dict[str, Any]) -> None:
         """Handle ping message."""
         try:
             ping_msg = PingMessage(**message_dict)
@@ -256,13 +239,11 @@ class WebSocketConnectionManager:
             await self._send_to_client(connection_id, pong_msg)
 
         except Exception as e:
-            await self._send_error(
-                connection_id,
-                "PING_ERROR",
-                f"Error handling ping: {str(e)}"
-            )
+            await self._send_error(connection_id, "PING_ERROR", f"Error handling ping: {str(e)}")
 
-    async def _handle_control_message(self, connection_id: str, message_dict: Dict[str, Any]) -> None:
+    async def _handle_control_message(
+        self, connection_id: str, message_dict: dict[str, Any]
+    ) -> None:
         """Handle frontend control messages by forwarding to backend."""
         try:
             # Find which run this connection is subscribed to
@@ -270,7 +251,7 @@ class WebSocketConnectionManager:
                 await self._send_error(
                     connection_id,
                     "NO_SUBSCRIPTION",
-                    "Must be subscribed to a run to send control messages"
+                    "Must be subscribed to a run to send control messages",
                 )
                 return
 
@@ -279,7 +260,7 @@ class WebSocketConnectionManager:
                 await self._send_error(
                     connection_id,
                     "NO_SUBSCRIPTION",
-                    "Must be subscribed to a run to send control messages"
+                    "Must be subscribed to a run to send control messages",
                 )
                 return
 
@@ -295,7 +276,7 @@ class WebSocketConnectionManager:
                                 "connection_id": connection_id,
                                 "run_id": run_id,
                                 "command": message_dict.get("cmd"),
-                            }
+                            },
                         )
                     except Exception as e:
                         self.logger.warning(
@@ -304,17 +285,15 @@ class WebSocketConnectionManager:
                                 "connection_id": connection_id,
                                 "run_id": run_id,
                                 "error": str(e),
-                            }
+                            },
                         )
 
         except Exception as e:
             await self._send_error(
-                connection_id,
-                "CONTROL_ERROR",
-                f"Error handling control message: {str(e)}"
+                connection_id, "CONTROL_ERROR", f"Error handling control message: {str(e)}"
             )
 
-    async def _handle_ready_signal(self, connection_id: str, message_dict: Dict[str, Any]) -> None:
+    async def _handle_ready_signal(self, connection_id: str, message_dict: dict[str, Any]) -> None:
         """Handle frontend ready signal by forwarding to backend."""
         try:
             # Find which run this connection is subscribed to
@@ -322,7 +301,7 @@ class WebSocketConnectionManager:
                 await self._send_error(
                     connection_id,
                     "NO_SUBSCRIPTION",
-                    "Must be subscribed to a run to send ready signal"
+                    "Must be subscribed to a run to send ready signal",
                 )
                 return
 
@@ -331,7 +310,7 @@ class WebSocketConnectionManager:
                 await self._send_error(
                     connection_id,
                     "NO_SUBSCRIPTION",
-                    "Must be subscribed to a run to send ready signal"
+                    "Must be subscribed to a run to send ready signal",
                 )
                 return
 
@@ -346,7 +325,7 @@ class WebSocketConnectionManager:
                             extra={
                                 "connection_id": connection_id,
                                 "run_id": run_id,
-                            }
+                            },
                         )
                     except Exception as e:
                         self.logger.warning(
@@ -355,14 +334,12 @@ class WebSocketConnectionManager:
                                 "connection_id": connection_id,
                                 "run_id": run_id,
                                 "error": str(e),
-                            }
+                            },
                         )
 
         except Exception as e:
             await self._send_error(
-                connection_id,
-                "READY_ERROR",
-                f"Error handling ready signal: {str(e)}"
+                connection_id, "READY_ERROR", f"Error handling ready signal: {str(e)}"
             )
 
     async def _ensure_backend_connection(self, run_id: str) -> None:
@@ -377,7 +354,9 @@ class WebSocketConnectionManager:
 
         try:
             # Convert HTTP URL to WebSocket URL
-            backend_ws_url = BACKEND_BASE_URL.replace("http://", "ws://").replace("https://", "wss://")
+            backend_ws_url = BACKEND_BASE_URL.replace("http://", "ws://").replace(
+                "https://", "wss://"
+            )
             # Use canonical /api/v1 prefix for backend WebSocket endpoint
             ws_url = f"{backend_ws_url}/api/v1/backtests/{run_id}/ws"
 
@@ -386,7 +365,7 @@ class WebSocketConnectionManager:
                 extra={
                     "run_id": run_id,
                     "ws_url": ws_url,
-                }
+                },
             )
 
             # Connect to backend WebSocket
@@ -401,7 +380,7 @@ class WebSocketConnectionManager:
                 extra={
                     "run_id": run_id,
                     "ws_url": ws_url,
-                }
+                },
             )
 
         except Exception as e:
@@ -410,7 +389,7 @@ class WebSocketConnectionManager:
                 extra={
                     "run_id": run_id,
                     "error": str(e),
-                }
+                },
             )
             # Notify subscribers of connection failure
             await self._broadcast_to_run_subscribers(
@@ -418,8 +397,8 @@ class WebSocketConnectionManager:
                 ErrorMessage(
                     error_code="BACKEND_CONNECTION_FAILED",
                     error_message=f"Failed to connect to backend for run {run_id}",
-                    run_id=run_id
-                )
+                    run_id=run_id,
+                ),
             )
 
     async def _forward_backend_messages(self, run_id: str, backend_ws: Any) -> None:
@@ -436,7 +415,6 @@ class WebSocketConnectionManager:
                     # Parse and forward message to subscribers
                     message_dict = json.loads(message)
 
-
                     await self._broadcast_to_run_subscribers(run_id, message_dict)
 
                 except json.JSONDecodeError:
@@ -445,21 +423,18 @@ class WebSocketConnectionManager:
                         extra={
                             "run_id": run_id,
                             "message": message,
-                        }
+                        },
                     )
 
         except ConnectionClosed:
-            self.logger.info(
-                "backend.disconnected",
-                extra={"run_id": run_id}
-            )
+            self.logger.info("backend.disconnected", extra={"run_id": run_id})
         except Exception as e:
             self.logger.error(
                 "backend.message_error",
                 extra={
                     "run_id": run_id,
                     "error": str(e),
-                }
+                },
             )
         finally:
             # Clean up backend connection (safe deletion)
@@ -471,8 +446,8 @@ class WebSocketConnectionManager:
                 ConnectionStatusMessage(
                     status=ConnectionStatus.DISCONNECTED,
                     message="Backend connection closed",
-                    backend_connected=False
-                )
+                    backend_connected=False,
+                ),
             )
 
     async def _unsubscribe_from_run(self, connection_id: str, run_id: str) -> None:
@@ -498,7 +473,6 @@ class WebSocketConnectionManager:
         if run_id not in self.run_subscriptions:
             return
 
-
         subscribers = self.run_subscriptions[run_id].copy()
         for connection_id in subscribers:
             await self._send_to_client(connection_id, message)
@@ -516,6 +490,7 @@ class WebSocketConnectionManager:
             if hasattr(websocket, "application_state"):
                 try:
                     from starlette.websockets import WebSocketState
+
                     app_state = getattr(websocket, "application_state", None)
                     if isinstance(app_state, WebSocketState):
                         if app_state != WebSocketState.CONNECTED:
@@ -524,7 +499,7 @@ class WebSocketConnectionManager:
                                 extra={
                                     "connection_id": connection_id,
                                     "app_state": app_state.name,
-                                }
+                                },
                             )
                             await self.disconnect_client(connection_id)
                             return
@@ -533,9 +508,9 @@ class WebSocketConnectionManager:
                     pass
 
             # Convert message to JSON
-            if hasattr(message, 'model_dump_json'):
+            if hasattr(message, "model_dump_json"):
                 message_json = message.model_dump_json()
-            elif hasattr(message, 'json'):
+            elif hasattr(message, "json"):
                 message_json = message.json()
             else:
                 message_json = json.dumps(message)
@@ -552,7 +527,7 @@ class WebSocketConnectionManager:
                     "connection_id": connection_id,
                     "error": str(e),
                     "error_type": type(e).__name__,
-                }
+                },
             )
             await self.disconnect_client(connection_id)
         except Exception as e:
@@ -562,17 +537,14 @@ class WebSocketConnectionManager:
                     "connection_id": connection_id,
                     "error": str(e),
                     "error_type": type(e).__name__,
-                }
+                },
             )
             await self.disconnect_client(connection_id)
 
     async def _send_error(self, connection_id: str, error_code: str, error_message: str) -> None:
         """Send error message to client with error handling to prevent cascades."""
         try:
-            error_msg = ErrorMessage(
-                error_code=error_code,
-                error_message=error_message
-            )
+            error_msg = ErrorMessage(error_code=error_code, error_message=error_message)
             await self._send_to_client(connection_id, error_msg)
         except Exception as e:
             # If we can't send the error message, log it but don't raise
@@ -584,14 +556,14 @@ class WebSocketConnectionManager:
                     "error_code": error_code,
                     "error_message": error_message,
                     "send_error": str(e),
-                }
+                },
             )
 
-    def get_connection_stats(self) -> Dict[str, Any]:
+    def get_connection_stats(self) -> dict[str, Any]:
         """Get connection statistics."""
         return {
             "active_connections": len(self.active_connections),
             "run_subscriptions": len(self.run_subscriptions),
             "backend_connections": len(self.backend_connections),
-            "total_subscribers": sum(len(subs) for subs in self.run_subscriptions.values())
+            "total_subscribers": sum(len(subs) for subs in self.run_subscriptions.values()),
         }

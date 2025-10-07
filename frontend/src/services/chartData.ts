@@ -1,6 +1,6 @@
 /**
  * BFF Chart Data Service - Unified chart data fetching with feature flag support.
- * 
+ *
  * This service provides a unified interface for fetching chart data via the BFF
  * aggregated endpoints exclusively. Direct backend access from the frontend is
  * deprecated and disabled by default.
@@ -10,32 +10,35 @@ import { z } from 'zod'
 import { apiGetWithFlags } from '../utils/api'
 import { featureFlagService } from './featureFlags'
 
-
 /**
  * BFF Chart Data Response Schema - Unified response format from BFF.
  */
 export const BFFChartDataResponseSchema = z.object({
   symbol: z.string(),
   timeframe: z.enum(['daily', 'minute', 'hour']),
-  bars: z.array(z.object({
-    t: z.string(),
-    o: z.number(),
-    h: z.number(),
-    l: z.number(),
-    c: z.number(),
-    v: z.number().optional().default(0),
-    n: z.number().optional().default(0),
-  })),
-  meta: z.object({
-    from: z.string().optional(),
-    to: z.string().optional(),
-    stride_minutes: z.number().optional(),
-    points: z.number(),
-    decimated: z.boolean().optional().default(false),
-    cache_hit: z.boolean().optional().default(false),
-    load_time_ms: z.number().optional(),
-    source: z.enum(['bff', 'backend']).optional().default('bff'),
-  }).optional(),
+  bars: z.array(
+    z.object({
+      t: z.string(),
+      o: z.number(),
+      h: z.number(),
+      l: z.number(),
+      c: z.number(),
+      v: z.number().optional().default(0),
+      n: z.number().optional().default(0),
+    }),
+  ),
+  meta: z
+    .object({
+      from: z.string().optional(),
+      to: z.string().optional(),
+      stride_minutes: z.number().optional(),
+      points: z.number(),
+      decimated: z.boolean().optional().default(false),
+      cache_hit: z.boolean().optional().default(false),
+      load_time_ms: z.number().optional(),
+      source: z.enum(['bff', 'backend']).optional().default('bff'),
+    })
+    .optional(),
 })
 
 export type BFFChartDataResponse = z.infer<typeof BFFChartDataResponseSchema>
@@ -48,7 +51,7 @@ export interface ChartDataRequest {
   timeframe: 'daily' | 'minute' | 'hour'
   from?: string
   to?: string
-  target?: number  // For decimation
+  target?: number // For decimation
   rth_only?: boolean
 }
 
@@ -70,7 +73,14 @@ export class ChartDataService {
     const params = new URLSearchParams({
       symbol: request.symbol,
       // Map UI timeframe to BFF enum values
-      timeframe: request.timeframe === 'daily' ? '1D' : request.timeframe === 'hour' ? '1H' : request.timeframe === 'minute' ? '1M' : request.timeframe,
+      timeframe:
+        request.timeframe === 'daily'
+          ? '1D'
+          : request.timeframe === 'hour'
+            ? '1H'
+            : request.timeframe === 'minute'
+              ? '1M'
+              : request.timeframe,
     })
 
     if (request.from) params.set('from', request.from)
@@ -84,12 +94,18 @@ export class ChartDataService {
       'chartData',
       undefined,
       15000, // Cap BFF attempt at 15s for profiling; no fallback (diagnostics)
-      false
+      false,
     )
 
     // Normalize BFF response (timestamp/open/high/low/close) to frontend shape (t/o/h/l/c)
     const timeframeOut: 'daily' | 'minute' | 'hour' =
-      raw?.timeframe === '1D' ? 'daily' : raw?.timeframe === '1H' ? 'hour' : raw?.timeframe === '1M' ? 'minute' : request.timeframe
+      raw?.timeframe === '1D'
+        ? 'daily'
+        : raw?.timeframe === '1H'
+          ? 'hour'
+          : raw?.timeframe === '1M'
+            ? 'minute'
+            : request.timeframe
 
     const bars = Array.isArray(raw?.bars) ? raw.bars : []
     const barsOut = bars.map((b: any) => ({
@@ -113,7 +129,8 @@ export class ChartDataService {
         points: barsOut.length,
         decimated: Boolean(raw?.metadata?.decimated),
         cache_hit: Boolean(raw?.metadata?.cache_hit),
-        load_time_ms: typeof raw?.metadata?.load_time_ms === 'number' ? raw.metadata.load_time_ms : undefined,
+        load_time_ms:
+          typeof raw?.metadata?.load_time_ms === 'number' ? raw.metadata.load_time_ms : undefined,
         source: 'bff' as const,
       },
     }
@@ -121,15 +138,13 @@ export class ChartDataService {
     return BFFChartDataResponseSchema.parse(out)
   }
 
-
-
   /**
    * Fetch daily chart data.
    */
   public async fetchDailyData(
-    symbol: string, 
-    from?: string, 
-    to?: string
+    symbol: string,
+    from?: string,
+    to?: string,
   ): Promise<BFFChartDataResponse> {
     return this.fetchChartData({
       symbol,
@@ -147,7 +162,7 @@ export class ChartDataService {
     from: string,
     to: string,
     target?: number,
-    rth_only: boolean = true
+    rth_only: boolean = true,
   ): Promise<BFFChartDataResponse> {
     return this.fetchChartData({
       symbol,
@@ -166,7 +181,7 @@ export class ChartDataService {
     symbol: string,
     from: string,
     to: string,
-    rth_only: boolean = true
+    rth_only: boolean = true,
   ): Promise<BFFChartDataResponse> {
     return this.fetchChartData({
       symbol,

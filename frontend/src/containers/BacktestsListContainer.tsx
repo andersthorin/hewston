@@ -5,7 +5,15 @@ import BacktestsTable from '../components/BacktestsTable'
 import FiltersBar, { type Filters } from '../components/FiltersBar'
 import { useNavigate } from 'react-router-dom'
 
-function CreateBacktestForm({ onCreated, creating, setCreating }: { onCreated: (id: string) => void; creating: boolean; setCreating: (v: boolean) => void }) {
+function CreateBacktestForm({
+  onCreated,
+  creating,
+  setCreating,
+}: {
+  onCreated: (id: string) => void
+  creating: boolean
+  setCreating: (v: boolean) => void
+}) {
   const createBacktest = useCreateBacktest()
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
@@ -89,7 +97,7 @@ export function BacktestsListContainer() {
           speed: 60,
           seed: 42,
         },
-        idempotencyKey: `sample-${Date.now()}`
+        idempotencyKey: `sample-${Date.now()}`,
       })
       const r = resp as { backtest_id?: string; run_id?: string }
       const id = r.backtest_id ?? r.run_id
@@ -104,8 +112,18 @@ export function BacktestsListContainer() {
   return (
     <div className="p-4">
       <h1>Backtests</h1>
-      <FiltersBar initial={filters} onApply={(f) => { setFilters(f); setOffset(0) }} />
-      <CreateBacktestForm onCreated={(id) => navigate(`/backtests/${id}`)} creating={creating} setCreating={setCreating} />
+      <FiltersBar
+        initial={filters}
+        onApply={(f) => {
+          setFilters(f)
+          setOffset(0)
+        }}
+      />
+      <CreateBacktestForm
+        onCreated={(id) => navigate(`/backtests/${id}`)}
+        creating={creating}
+        setCreating={setCreating}
+      />
 
       {isLoading && <div>Loading…</div>}
       {isError && (
@@ -145,4 +163,3 @@ export function BacktestsListContainer() {
 }
 
 export default BacktestsListContainer
-

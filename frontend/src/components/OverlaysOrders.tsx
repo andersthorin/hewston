@@ -2,16 +2,37 @@ import { useEffect, useMemo, useRef } from 'react'
 import type { CandlestickChartAPI } from '../types/charts'
 import { usePlaybackSelector, selectors } from '../store/playbackClock'
 
-export default function OverlaysOrders({ chartRef }: { chartRef: React.MutableRefObject<CandlestickChartAPI | null> }) {
+export default function OverlaysOrders({
+  chartRef,
+}: {
+  chartRef: React.MutableRefObject<CandlestickChartAPI | null>
+}) {
   const frame = usePlaybackSelector(selectors.frame)
   const focus = usePlaybackSelector(selectors.focusedSymbol)
 
-  type OrderMarker = { time: string; position: string; color: string; shape: string; text: string; price?: number }
+  type OrderMarker = {
+    time: string
+    position: string
+    color: string
+    shape: string
+    text: string
+    price?: number
+  }
   const accRef = useRef<Map<string, OrderMarker>>(new Map())
 
   const filtered = useMemo(() => {
     const orders = frame?.orders ?? []
-    type OrderLike = { symbol?: string; sym?: string; instrument?: string; inst?: string; ts_utc?: unknown; ts?: unknown; order_id?: unknown; price?: unknown; side?: unknown }
+    type OrderLike = {
+      symbol?: string
+      sym?: string
+      instrument?: string
+      inst?: string
+      ts_utc?: unknown
+      ts?: unknown
+      order_id?: unknown
+      price?: unknown
+      side?: unknown
+    }
     return orders.filter((o) => {
       const ord = o as OrderLike
       if (!focus) return true
@@ -61,7 +82,14 @@ export default function OverlaysOrders({ chartRef }: { chartRef: React.MutableRe
         }
       })()
       if (!day) continue
-      acc.set(key, { time: day, position, color, shape: 'arrowUp', text: side.startsWith('b') ? 'B' : 'S', price })
+      acc.set(key, {
+        time: day,
+        position,
+        color,
+        shape: 'arrowUp',
+        text: side.startsWith('b') ? 'B' : 'S',
+        price,
+      })
     }
     const markers = Array.from(acc.values())
     chartRef.current?.setMarkers(markers)
@@ -69,4 +97,3 @@ export default function OverlaysOrders({ chartRef }: { chartRef: React.MutableRe
 
   return null
 }
-

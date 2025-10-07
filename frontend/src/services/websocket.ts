@@ -1,6 +1,6 @@
 /**
  * BFF WebSocket Service - Enhanced WebSocket connection management with BFF integration.
- * 
+ *
  * This service provides WebSocket connections that can route to either BFF proxy
  * or direct backend based on feature flag configuration, with enhanced connection
  * management features like auto-reconnection and health monitoring.
@@ -12,7 +12,13 @@ import { BFF_WS_URL, BACKEND_WS_URL } from '../constants'
 /**
  * WebSocket connection state.
  */
-export type WebSocketState = 'idle' | 'connecting' | 'connected' | 'reconnecting' | 'error' | 'closed'
+export type WebSocketState =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'error'
+  | 'closed'
 
 /**
  * WebSocket connection health metrics.
@@ -76,10 +82,7 @@ export class BFFWebSocketManager {
   private lastPingTime: number = 0
   private backtestId: string
 
-  constructor(
-    backtestId: string,
-    options: WebSocketOptions = {}
-  ) {
+  constructor(backtestId: string, options: WebSocketOptions = {}) {
     this.options = { ...DEFAULT_OPTIONS, ...options }
     this.backtestId = backtestId
     this.health = {
@@ -90,7 +93,7 @@ export class BFFWebSocketManager {
       droppedFrames: 0,
       connectionSource: this.getConnectionSource(),
     }
-    
+
     this.setupEventListeners()
   }
 
@@ -137,7 +140,7 @@ export class BFFWebSocketManager {
       this.eventListeners.set(event, new Set())
     }
     this.eventListeners.get(event)!.add(listener)
-    
+
     return () => {
       this.eventListeners.get(event)?.delete(listener)
     }
@@ -147,7 +150,7 @@ export class BFFWebSocketManager {
    * Emit event to all listeners.
    */
   private emit(event: string, ...args: any[]): void {
-    this.eventListeners.get(event)?.forEach(listener => {
+    this.eventListeners.get(event)?.forEach((listener) => {
       try {
         listener(...args)
       } catch (error) {
@@ -164,10 +167,10 @@ export class BFFWebSocketManager {
       const oldState = this.state
       this.state = newState
       this.health.state = newState
-      
+
       this.emit('stateChange', { oldState, newState, health: this.health })
       this.emit('healthUpdate', this.health)
-      
+
       this.logStateChange(oldState, newState)
     }
   }
@@ -177,7 +180,9 @@ export class BFFWebSocketManager {
    */
   private logStateChange(oldState: WebSocketState, newState: WebSocketState): void {
     if (import.meta.env.DEV || featureFlagService.getConfiguration().bffEnabled) {
-      console.log(`🔌 WebSocket [${this.backtestId}] ${oldState} → ${newState} (${this.health.connectionSource})`)
+      console.log(
+        `🔌 WebSocket [${this.backtestId}] ${oldState} → ${newState} (${this.health.connectionSource})`,
+      )
     }
   }
 
@@ -194,10 +199,10 @@ export class BFFWebSocketManager {
       this.setState('connecting')
       const url = this.getWebSocketUrl()
       this.health.connectionSource = this.getConnectionSource()
-      
+
       try {
         this.ws = new WebSocket(url)
-        
+
         // Connection timeout
         this.connectionTimer = setTimeout(() => {
           if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
@@ -212,27 +217,27 @@ export class BFFWebSocketManager {
             clearTimeout(this.connectionTimer)
             this.connectionTimer = null
           }
-          
+
           this.setState('connected')
           this.health.lastConnected = Date.now()
           this.health.reconnectAttempts = 0
-          
+
           // Process queued messages
           this.processMessageQueue()
-          
+
           this.emit('open')
           resolve()
         }
 
         this.ws.onmessage = (event) => {
           this.health.messagesReceived++
-          
+
           // Calculate latency if this is a pong response
           if (this.lastPingTime > 0) {
             this.health.latency = Date.now() - this.lastPingTime
             this.lastPingTime = 0
           }
-          
+
           this.emit('message', event)
         }
 
@@ -241,10 +246,10 @@ export class BFFWebSocketManager {
             clearTimeout(this.connectionTimer)
             this.connectionTimer = null
           }
-          
+
           this.setState('closed')
           this.emit('close', event)
-          
+
           // Auto-reconnect if enabled and not manually closed
           if (this.options.autoReconnect && !event.wasClean) {
             this.scheduleReconnect()
@@ -256,12 +261,11 @@ export class BFFWebSocketManager {
             clearTimeout(this.connectionTimer)
             this.connectionTimer = null
           }
-          
+
           this.setState('error')
           this.emit('error', error)
           reject(error)
         }
-
       } catch (error) {
         this.setState('error')
         reject(error)
@@ -280,14 +284,14 @@ export class BFFWebSocketManager {
 
     this.setState('reconnecting')
     this.health.reconnectAttempts++
-    
+
     const delay = Math.min(
       this.options.reconnectDelay * Math.pow(2, this.health.reconnectAttempts - 1),
-      this.options.maxReconnectDelay
+      this.options.maxReconnectDelay,
     )
-    
+
     this.reconnectTimer = setTimeout(() => {
-      this.connect().catch(error => {
+      this.connect().catch((error) => {
         console.warn(`WebSocket reconnection failed for backtest ${this.backtestId}:`, error)
         this.scheduleReconnect()
       })
@@ -319,11 +323,11 @@ export class BFFWebSocketManager {
    */
   private queueMessage(message: string): void {
     if (!this.options.enableMessageQueue) return
-    
+
     if (this.messageQueue.length >= this.options.maxQueueSize) {
       this.messageQueue.shift() // Remove oldest message
     }
-    
+
     this.messageQueue.push(message)
   }
 
@@ -361,17 +365,17 @@ export class BFFWebSocketManager {
       clearTimeout(this.reconnectTimer)
       this.reconnectTimer = null
     }
-    
+
     if (this.connectionTimer) {
       clearTimeout(this.connectionTimer)
       this.connectionTimer = null
     }
-    
+
     if (this.ws) {
       this.ws.close(1000, 'Client closing')
       this.ws = null
     }
-    
+
     this.setState('closed')
     this.messageQueue = []
   }
@@ -410,8 +414,8 @@ export class BFFWebSocketManager {
  * Create BFF-aware WebSocket manager instance.
  */
 export function createWebSocketManager(
-  runId: string, 
-  options?: WebSocketOptions
+  runId: string,
+  options?: WebSocketOptions,
 ): BFFWebSocketManager {
   return new BFFWebSocketManager(runId, options)
 }

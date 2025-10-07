@@ -31,26 +31,29 @@ This is the web interface for Hewston, providing interactive visualization of ba
 ## 🚀 Quick Start
 
 ### Development Server
+
 ```bash
 npm install
 npm run dev
 ```
+
 The app will be available at http://127.0.0.1:5173
 
 ### Available Scripts
 
-| Script | Description |
-|--------|-------------|
-| `npm run dev` | Start development server with HMR |
-| `npm run build` | Build for production |
-| `npm run preview` | Preview production build locally |
-| `npm run lint` | Run ESLint for code quality |
-| `npm run test` | Run Vitest test suite |
-| `npm run type-check` | Run TypeScript compiler check |
+| Script               | Description                       |
+| -------------------- | --------------------------------- |
+| `npm run dev`        | Start development server with HMR |
+| `npm run build`      | Build for production              |
+| `npm run preview`    | Preview production build locally  |
+| `npm run lint`       | Run ESLint for code quality       |
+| `npm run test`       | Run Vitest test suite             |
+| `npm run type-check` | Run TypeScript compiler check     |
 
 ## 🏗 Architecture
 
 ### Component Structure
+
 ```
 src/
 ├── components/          # Presentational components
@@ -76,16 +79,19 @@ src/
 ### Design Principles
 
 #### Separation of Concerns
+
 - **Presentational Components**: Pure UI components with no side effects
 - **Containers**: Handle data fetching, state management, and business logic
 - **Services**: Encapsulate API communication and external integrations
 
 #### Type Safety
+
 - **Strict TypeScript**: No `any` types in production code
 - **Zod Validation**: Runtime type checking at API boundaries
 - **Interface Contracts**: Clear type definitions for all component props
 
 #### Performance
+
 - **Imperative Chart APIs**: Direct chart manipulation for high-frequency updates
 - **Web Workers**: Stream parsing off the main thread
 - **React Query**: Intelligent caching and background updates
@@ -93,44 +99,40 @@ src/
 ## 🔌 API Integration
 
 ### REST API
+
 ```typescript
 // Fetch backtests
 const backtests = await listBacktests({
   symbol: 'AAPL',
   limit: 20,
-  offset: 0
-});
+  offset: 0,
+})
 
 // Get backtest details
-const detail = await getBacktestDetail(backtest_id);
+const detail = await getBacktestDetail(backtest_id)
 ```
 
 ### WebSocket Streaming
+
 ```typescript
 // Real-time playback hook
-const {
-  status,
-  playing,
-  speed,
-  play,
-  pause,
-  setSpeed
-} = useRunPlayback(run_id);
+const { status, playing, speed, play, pause, setSpeed } = useRunPlayback(run_id)
 
 // Subscribe to streaming frames
 useEffect(() => {
   const unsubscribe = subscribe((frame) => {
     // Update charts with new data
-    chartAPI.updateCandles(frame.ohlc);
-    chartAPI.updateOrders(frame.orders);
-  });
-  return unsubscribe;
-}, []);
+    chartAPI.updateCandles(frame.ohlc)
+    chartAPI.updateOrders(frame.orders)
+  })
+  return unsubscribe
+}, [])
 ```
 
 ## 📊 Chart Integration
 
 ### Candlestick Chart
+
 ```typescript
 <ChartOHLC
   height={400}
@@ -145,27 +147,16 @@ chartRef.current?.updateCandles(candleData);
 chartRef.current?.updateOrders(orderData);
 ```
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 ## 🧪 Testing
 
 ### Test Structure
+
 - **Unit Tests**: Component logic and utility functions
 - **Integration Tests**: API integration and data flow
 - **Mock Services**: Isolated testing with mock data
 
 ### Running Tests
+
 ```bash
 npm run test          # Run all tests
 npm run test:watch    # Watch mode for development
@@ -175,12 +166,14 @@ npm run test:coverage # Generate coverage report
 ## 🎨 Styling Guidelines
 
 ### TailwindCSS Usage
+
 - **Utility Classes**: Prefer utility classes over custom CSS
 - **Responsive Design**: Mobile-first responsive breakpoints
 - **Consistent Spacing**: Use Tailwind spacing scale (4, 8, 16, etc.)
 - **Color Palette**: Stick to defined color scheme
 
 ### Component Styling
+
 ```typescript
 // Good: Utility classes with consistent spacing
 <div className="p-4 bg-white rounded-lg shadow-sm">
@@ -192,18 +185,21 @@ npm run test:coverage # Generate coverage report
 ## 🔧 Development Guidelines
 
 ### Code Quality
+
 - **ESLint**: Enforced code style and best practices
 - **TypeScript**: Strict mode with comprehensive type checking
 - **Prettier**: Consistent code formatting
 - **Husky**: Pre-commit hooks for quality gates
 
 ### Performance Best Practices
+
 - **React.memo**: Memoize expensive components
 - **useCallback/useMemo**: Optimize re-renders
 - **Code Splitting**: Lazy load routes and heavy components
 - **Bundle Analysis**: Monitor bundle size and dependencies
 
 ### Error Handling
+
 - **Error Boundaries**: Catch and display component errors gracefully
 - **API Errors**: Consistent error handling with user-friendly messages
 - **Loading States**: Clear feedback during async operations
@@ -212,12 +208,15 @@ npm run test:coverage # Generate coverage report
 ## 🚀 Deployment
 
 ### Production Build
+
 ```bash
 npm run build
 ```
+
 Generates optimized static files in the `dist/` directory.
 
 ### Environment Configuration
+
 - **Development**: Uses Vite proxy for API calls
 - **Production**: Configure API base URL for your deployment
 - **Environment Variables**: Use `.env` files for configuration

@@ -4,28 +4,28 @@ BFF Test Configuration
 Provides test fixtures and configuration for BFF service testing.
 """
 
+from unittest.mock import AsyncMock, MagicMock
+
+import httpx
 import pytest
 import pytest_asyncio
 from fastapi.testclient import TestClient
-from unittest.mock import AsyncMock, MagicMock
-import httpx
 
-from bff.app.main import create_app
 from bff.app.dependencies import get_backend_client, get_redis_client
-from bff.services.backend_client import create_backend_client
+from bff.app.main import create_app
 
 
 @pytest.fixture
 def mock_backend_client():
     """Mock backend HTTP client for testing."""
     mock_client = AsyncMock(spec=httpx.AsyncClient)
-    
+
     # Default successful health check response
     mock_response = MagicMock()
     mock_response.status_code = 200
     mock_response.json.return_value = {"status": "ok"}
     mock_client.get.return_value = mock_response
-    
+
     return mock_client
 
 
@@ -52,12 +52,14 @@ def test_app(mock_backend_client, mock_redis_client):
 @pytest.fixture
 def mock_backend_response():
     """Create a mock backend response that works with the proxy client."""
+
     def _create_response(status_code=200, data=None):
         mock_response = MagicMock()
         mock_response.status_code = status_code
 
         if data:
             import json
+
             response_content = json.dumps(data).encode()
             mock_response.content = response_content
             mock_response.body = response_content  # For backward compatibility
@@ -86,8 +88,10 @@ async def async_test_client(test_app):
 @pytest.fixture
 def mock_backend_proxy_client(mock_backend_client):
     """Mock backend proxy client for testing."""
+
     async def _create_mock_backend_client():
         from bff.services.backend_client import BackendClient
+
         return BackendClient(mock_backend_client)
 
     return _create_mock_backend_client

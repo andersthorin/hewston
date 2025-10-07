@@ -10,3 +10,8 @@ __pycache__/
 .env
 data/catalog.sqlite
 data/catalog.sqlite*
+data/catalog.db
+data/catalog.db*
+
+# Coverage database
+.coverage

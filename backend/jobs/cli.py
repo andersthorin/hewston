@@ -1,12 +1,8 @@
 from __future__ import annotations
 
-import os
 import sys
-from typing import Optional
 
 from backend.jobs.ingest import ingest_databento
-
-
 
 # Optional Typer interface; fall back to argparse if Typer isn't installed
 try:
@@ -79,8 +75,6 @@ if typer is not None:
         print(f"[backtest] run_id={out['run_id']} duration_ms={out['duration_ms']}")
         raise typer.Exit(0)
 
-
-
     @app.command(name="retention")
     def retention_cmd(
         keep_latest: int = typer.Option(100, "--keep-latest"),
@@ -88,18 +82,18 @@ if typer is not None:
         apply: bool = typer.Option(False, "--apply"),
     ) -> None:
         from backend.jobs.retention import retention_main
+
         code = retention_main(keep_latest=keep_latest, max_age_days=max_age_days, apply=apply)
         raise typer.Exit(code)
 
 
-
-def main_argv(argv: Optional[list[str]] = None) -> int:
+def main_argv(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if typer is not None:
         # Delegate to Typer if present
         try:
             # Build a Typer app on the fly to parse argv
-            from typer import Exit  # type: ignore
+
             # Emulate: app(prog_name=..., args=argv)
             # But simpler: detect subcommand and options
             # If this execution path is reached, just print help
@@ -117,7 +111,6 @@ def main_argv(argv: Optional[list[str]] = None) -> int:
     p_data.add_argument("--year", type=int, required=True)
     p_data.add_argument("--force", action="store_true")
 
-
     ns = parser.parse_args(argv)
     if ns.cmd == "data":
         return _run_data(ns.symbol, ns.year, ns.force)
@@ -127,4 +120,3 @@ def main_argv(argv: Optional[list[str]] = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main_argv())
-

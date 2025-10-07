@@ -1,5 +1,11 @@
 import { useEffect, useRef } from 'react'
-import { createChart as createChartLWC, ColorType, CandlestickSeries, LineSeries, PriceScaleMode } from 'lightweight-charts'
+import {
+  createChart as createChartLWC,
+  ColorType,
+  CandlestickSeries,
+  LineSeries,
+  PriceScaleMode,
+} from 'lightweight-charts'
 import type { DeepPartial, ChartOptions } from 'lightweight-charts'
 import type { ChartInstance, CandlestickSeriesApi, LineSeriesApi } from '../types/charts'
 
@@ -24,7 +30,7 @@ export interface UseChartInitializationResult {
  */
 export function useChartInitialization(
   config: ChartConfig = {},
-  seriesType: 'candlestick' | 'line' = 'candlestick'
+  seriesType: 'candlestick' | 'line' = 'candlestick',
 ): UseChartInitializationResult {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const chartRef = useRef<ChartInstance | null>(null)
@@ -36,7 +42,7 @@ export function useChartInitialization(
     backgroundColor = '#fff',
     textColor = '#334155',
     timeVisible = false,
-    secondsVisible = false
+    secondsVisible = false,
   } = config
 
   useEffect(() => {
@@ -47,7 +53,7 @@ export function useChartInitialization(
         height,
         layout: {
           textColor,
-          background: { type: ColorType.Solid, color: backgroundColor }
+          background: { type: ColorType.Solid, color: backgroundColor },
         },
         handleScroll: false,
         handleScale: false,
@@ -56,7 +62,7 @@ export function useChartInitialization(
           secondsVisible,
           barSpacing: fixedBarSpacing,
           minBarSpacing: fixedBarSpacing,
-          lockVisibleTimeRangeOnResize: true
+          lockVisibleTimeRangeOnResize: true,
         },
       }
 
@@ -69,7 +75,9 @@ export function useChartInitialization(
         if ('addSeries' in chart && chart.addSeries) {
           series = chart.addSeries(CandlestickSeries) as CandlestickSeriesApi
         } else if ('addCandlestickSeries' in chart) {
-          series = (chart as unknown as { addCandlestickSeries: () => CandlestickSeriesApi }).addCandlestickSeries()
+          series = (
+            chart as unknown as { addCandlestickSeries: () => CandlestickSeriesApi }
+          ).addCandlestickSeries()
         } else {
           throw new Error('lightweight-charts: no candlestick series add method found')
         }
@@ -78,7 +86,11 @@ export function useChartInitialization(
         if ('addSeries' in chart && chart.addSeries) {
           series = chart.addSeries(LineSeries, { color: '#2563EB', lineWidth: 2 }) as LineSeriesApi
         } else if ('addLineSeries' in chart) {
-          series = (chart as unknown as { addLineSeries: (options: { color: string; lineWidth: number }) => LineSeriesApi }).addLineSeries({ color: '#2563EB', lineWidth: 2 })
+          series = (
+            chart as unknown as {
+              addLineSeries: (options: { color: string; lineWidth: number }) => LineSeriesApi
+            }
+          ).addLineSeries({ color: '#2563EB', lineWidth: 2 })
         } else {
           throw new Error('lightweight-charts: no line series add method found')
         }
@@ -93,7 +105,11 @@ export function useChartInitialization(
           handleScroll: false,
           handleScale: false,
           rightPriceScale: { mode: PriceScaleMode.Normal },
-          timeScale: { barSpacing: fixedBarSpacing, minBarSpacing: fixedBarSpacing, lockVisibleTimeRangeOnResize: true }
+          timeScale: {
+            barSpacing: fixedBarSpacing,
+            minBarSpacing: fixedBarSpacing,
+            lockVisibleTimeRangeOnResize: true,
+          },
         })
       } catch (error) {
         console.warn('Failed to apply chart options:', error)
@@ -120,10 +136,9 @@ export function useChartInitialization(
       })
 
       resizeObserver.observe(containerRef.current)
-      
+
       // Store resize observer for cleanup
       ;(chart as unknown as { __ro: ResizeObserver }).__ro = resizeObserver
-
     } catch (error) {
       console.warn(`Chart initialization failed (${seriesType}):`, error)
     }
@@ -149,7 +164,7 @@ export function useChartInitialization(
   return {
     chartRef,
     seriesRef,
-    containerRef
+    containerRef,
   }
 }
 

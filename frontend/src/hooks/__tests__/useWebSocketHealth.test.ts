@@ -19,7 +19,7 @@ const mockPlayback = {
 }
 
 vi.mock('../../services/ws', () => ({
-  useBacktestPlayback: () => mockPlayback
+  useBacktestPlayback: () => mockPlayback,
 }))
 
 // Mock feature flag service
@@ -27,7 +27,7 @@ vi.mock('../../services/featureFlags', () => ({
   featureFlagService: {
     isFeatureFlagEnabled: vi.fn(),
     getConfiguration: vi.fn(),
-  }
+  },
 }))
 
 describe('useWebSocketHealth', () => {
@@ -38,7 +38,7 @@ describe('useWebSocketHealth', () => {
       bffEnabled: false,
       websocketEnabled: false,
     })
-    
+
     mockPlayback.getConnectionHealth.mockReturnValue({
       state: 'connected',
       reconnectAttempts: 0,
@@ -74,21 +74,21 @@ describe('useWebSocketHealth', () => {
     })
 
     const { result } = renderHook(() => useWebSocketHealth('test-run-123'))
-    
+
     // Simulate receiving frames
     act(() => {
       subscriptionCallback({ dropped: 1 })
       subscriptionCallback({ dropped: 1 })
       subscriptionCallback({ dropped: 2 })
     })
-    
+
     expect(result.current.performanceMetrics.totalFrames).toBe(3)
     expect(result.current.performanceMetrics.droppedFrames).toBe(2)
   })
 
   it('should update connection status from health data', () => {
     const { result } = renderHook(() => useWebSocketHealth('test-run-123'))
-    
+
     expect(result.current.connectionStatus.state).toBe('connected')
     expect(result.current.connectionStatus.isReady).toBe(true)
     expect(result.current.connectionStatus.reconnectAttempts).toBe(0)
@@ -96,23 +96,23 @@ describe('useWebSocketHealth', () => {
 
   it('should provide reconnect functionality', async () => {
     mockPlayback.reconnect.mockResolvedValue(undefined)
-    
+
     const { result } = renderHook(() => useWebSocketHealth('test-run-123'))
-    
+
     await act(async () => {
       await result.current.reconnect()
     })
-    
+
     expect(mockPlayback.reconnect).toHaveBeenCalled()
   })
 
   it('should provide ping functionality', () => {
     const { result } = renderHook(() => useWebSocketHealth('test-run-123'))
-    
+
     act(() => {
       result.current.ping()
     })
-    
+
     expect(mockPlayback.ping).toHaveBeenCalled()
   })
 
@@ -122,9 +122,9 @@ describe('useWebSocketHealth', () => {
       ...mockPlayback.getConnectionHealth(),
       connectionSource: 'bff',
     })
-    
+
     const { result } = renderHook(() => useWebSocketHealth('test-run-123'))
-    
+
     expect(result.current.isUsingBFF).toBe(true)
     expect(result.current.performanceMetrics.connectionSource).toBe('bff')
   })
@@ -132,7 +132,7 @@ describe('useWebSocketHealth', () => {
   it('should calculate performance flags correctly', () => {
     // Mock good performance
     const { result: goodResult } = renderHook(() => useWebSocketHealth('test-run-123'))
-    
+
     // Simulate good FPS
     act(() => {
       const subscriptionCallback = mockPlayback.subscribe.mock.calls[0][0]
@@ -148,7 +148,7 @@ describe('useWebSocketHealth', () => {
       ...mockPlayback.getConnectionHealth(),
       latency: 150,
     })
-    
+
     const { result: highLatencyResult } = renderHook(() => useWebSocketHealth('test-run-123'))
     expect(highLatencyResult.current.hasHighLatency).toBe(true)
   })
@@ -158,7 +158,7 @@ describe('useWebSocketPerformanceMonitor', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(featureFlagService.isFeatureFlagEnabled).mockReturnValue(false)
-    
+
     mockPlayback.getConnectionHealth.mockReturnValue({
       state: 'connected',
       reconnectAttempts: 0,
@@ -173,14 +173,14 @@ describe('useWebSocketPerformanceMonitor', () => {
 
   it('should generate FPS alerts when below threshold', () => {
     const onAlert = vi.fn()
-    
-    const { result } = renderHook(() => 
+
+    const { result } = renderHook(() =>
       useWebSocketPerformanceMonitor('test-run-123', {
         fpsThreshold: 25,
         onPerformanceAlert: onAlert,
-      })
+      }),
     )
-    
+
     // Simulate low FPS by not sending enough frames
     act(() => {
       const subscriptionCallback = mockPlayback.subscribe.mock.calls[0][0]
@@ -189,7 +189,7 @@ describe('useWebSocketPerformanceMonitor', () => {
         subscriptionCallback({ dropped: 0 })
       }
     })
-    
+
     expect(result.current.hasAlerts).toBe(true)
     expect(result.current.warningAlerts).toHaveLength(1)
     expect(result.current.warningAlerts[0].type).toBe('fps')
@@ -205,7 +205,7 @@ describe('useWebSocketPerformanceMonitor', () => {
       useWebSocketPerformanceMonitor('test-run-123', {
         latencyThreshold: 100,
         fpsThreshold: 0,
-      })
+      }),
     )
 
     expect(result.current.hasAlerts).toBe(true)
@@ -223,7 +223,7 @@ describe('useWebSocketPerformanceMonitor', () => {
       useWebSocketPerformanceMonitor('test-run-123', {
         droppedFrameThreshold: 10,
         fpsThreshold: 0,
-      })
+      }),
     )
 
     expect(result.current.hasAlerts).toBe(true)
@@ -236,27 +236,27 @@ describe('useWebSocketPerformanceMonitor', () => {
       ...mockPlayback.getConnectionHealth(),
       latency: 250, // Very high latency (2x threshold)
     })
-    
-    const { result } = renderHook(() => 
+
+    const { result } = renderHook(() =>
       useWebSocketPerformanceMonitor('test-run-123', {
         latencyThreshold: 100,
-      })
+      }),
     )
-    
+
     expect(result.current.criticalAlerts).toHaveLength(1)
     expect(result.current.criticalAlerts[0].severity).toBe('error')
   })
 
   it('should call alert callback for new alerts', () => {
     const onAlert = vi.fn()
-    
-    renderHook(() => 
+
+    renderHook(() =>
       useWebSocketPerformanceMonitor('test-run-123', {
         latencyThreshold: 50,
         onPerformanceAlert: onAlert,
-      })
+      }),
     )
-    
+
     expect(onAlert).toHaveBeenCalled()
   })
 })

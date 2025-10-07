@@ -1,1 +1,0 @@
-2025-09-30 21:29:57 [INFO] backtest.job: Starting backtest: dataset=googl_oct_2024, strategy=sma_crossover, params={'instrument_id': 'GOOGL.XNAS', 'fast': 20, 'slow': 50}, from=2024-10-01, to=2024-10-10

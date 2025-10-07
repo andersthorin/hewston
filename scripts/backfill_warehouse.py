@@ -31,19 +31,19 @@ from typing import Iterable, List, Tuple
 import subprocess
 
 REPO = Path(__file__).resolve().parents[1]
-PY = str(REPO / '.venv' / 'bin' / 'python')
+PY = str(REPO / ".venv" / "bin" / "python")
 
 INSTRUMENT_IDS = {
-    'AAPL': 38,
-    'MSFT': 10888,
-    'GOOGL': 7152,
-    'TSLA': 16244,
-    'NVDA': 11667,
+    "AAPL": 38,
+    "MSFT": 10888,
+    "GOOGL": 7152,
+    "TSLA": 16244,
+    "NVDA": 11667,
 }
 
-RAW_TBBO = REPO / 'data' / 'raw' / 'databento' / 'tbbo'
-RAW_TRADES = REPO / 'data' / 'raw' / 'databento' / 'trades'
-WAREHOUSE = REPO / 'data' / 'warehouse'
+RAW_TBBO = REPO / "data" / "raw" / "databento" / "tbbo"
+RAW_TRADES = REPO / "data" / "raw" / "databento" / "trades"
+WAREHOUSE = REPO / "data" / "warehouse"
 
 
 def date_range(start: dt.date, end: dt.date) -> Iterable[dt.date]:
@@ -54,13 +54,21 @@ def date_range(start: dt.date, end: dt.date) -> Iterable[dt.date]:
 
 
 def out_bar_path(symbol: str, venue: str, d: dt.date) -> Path:
-    return WAREHOUSE / 'bars' / 'mid_1min' / f'venue={venue}' / f'symbol={symbol}' / f'date={d:%Y-%m-%d}' / 'bars.parquet'
+    return (
+        WAREHOUSE
+        / "bars"
+        / "mid_1min"
+        / f"venue={venue}"
+        / f"symbol={symbol}"
+        / f"date={d:%Y-%m-%d}"
+        / "bars.parquet"
+    )
 
 
 def raw_paths_for_date(d: dt.date) -> Tuple[Path, Path]:
-    ymd = d.strftime('%Y%m%d')
-    tbbo = RAW_TBBO / f'xnas-itch-{ymd}.tbbo.dbn.zst'
-    trades = RAW_TRADES / f'xnas-itch-{ymd}.trades.dbn.zst'
+    ymd = d.strftime("%Y%m%d")
+    tbbo = RAW_TBBO / f"xnas-itch-{ymd}.tbbo.dbn.zst"
+    trades = RAW_TRADES / f"xnas-itch-{ymd}.trades.dbn.zst"
     return tbbo, trades
 
 
@@ -73,52 +81,87 @@ def run_cmd(cmd: list[str]) -> int:
         return 130
 
 
-def process_task(symbol: str, venue: str, d: dt.date, iid: int, quiet: bool = False) -> Tuple[str, str, str]:
+def process_task(
+    symbol: str, venue: str, d: dt.date, iid: int, quiet: bool = False
+) -> Tuple[str, str, str]:
     """Process a single (symbol, date). Returns (status, symbol, date_str).
     status in {'ok','skip','missing','error'}
     """
-    date_str = d.strftime('%Y-%m-%d')
+    date_str = d.strftime("%Y-%m-%d")
     outp = out_bar_path(symbol, venue, d)
     if outp.exists():
         if not quiet:
             print(f"[SKIP] {symbol} {date_str} bars already exist: {outp}")
-        return ('skip', symbol, date_str)
+        return ("skip", symbol, date_str)
 
     tbbo, trades = raw_paths_for_date(d)
     if not tbbo.exists() or not trades.exists():
-        print(f"[MISS] {symbol} {date_str} raw missing: tbbo={tbbo.exists()} trades={trades.exists()}")
-        return ('missing', symbol, date_str)
+        print(
+            f"[MISS] {symbol} {date_str} raw missing: tbbo={tbbo.exists()} trades={trades.exists()}"
+        )
+        return ("missing", symbol, date_str)
 
     # 1) Quotes ingest
-    cmd1 = [PY, 'backend/jobs/quotes_ingest.py', str(tbbo), '--instrument-id', str(iid), '--symbol', symbol, '--venue', venue]
+    cmd1 = [
+        PY,
+        "backend/jobs/quotes_ingest.py",
+        str(tbbo),
+        "--instrument-id",
+        str(iid),
+        "--symbol",
+        symbol,
+        "--venue",
+        venue,
+    ]
     # 2) Trades aggregate
-    cmd2 = [PY, 'backend/jobs/trades_aggregate.py', str(trades), '--instrument-id', str(iid), '--symbol', symbol, '--venue', venue]
+    cmd2 = [
+        PY,
+        "backend/jobs/trades_aggregate.py",
+        str(trades),
+        "--instrument-id",
+        str(iid),
+        "--symbol",
+        symbol,
+        "--venue",
+        venue,
+    ]
     # 3) Materialize bars
-    cmd3 = [PY, 'backend/jobs/materialize_bars.py', '--symbol', symbol, '--date', date_str, '--venue', venue]
+    cmd3 = [
+        PY,
+        "backend/jobs/materialize_bars.py",
+        "--symbol",
+        symbol,
+        "--date",
+        date_str,
+        "--venue",
+        venue,
+    ]
 
     print(f"[RUN ] {symbol} {date_str} → quotes_ingest")
     rc = run_cmd(cmd1)
     if rc != 0:
         print(f"[ERR ] {symbol} {date_str} quotes_ingest rc={rc}")
-        return ('error', symbol, date_str)
+        return ("error", symbol, date_str)
 
     print(f"[RUN ] {symbol} {date_str} → trades_aggregate")
     rc = run_cmd(cmd2)
     if rc != 0:
         print(f"[ERR ] {symbol} {date_str} trades_aggregate rc={rc}")
-        return ('error', symbol, date_str)
+        return ("error", symbol, date_str)
 
     print(f"[RUN ] {symbol} {date_str} → materialize_bars")
     rc = run_cmd(cmd3)
     if rc != 0:
         print(f"[ERR ] {symbol} {date_str} materialize_bars rc={rc}")
-        return ('error', symbol, date_str)
+        return ("error", symbol, date_str)
 
     print(f"[DONE] {symbol} {date_str}")
-    return ('ok', symbol, date_str)
+    return ("ok", symbol, date_str)
 
 
-def build_tasks(symbols: List[str], start: dt.date, end: dt.date, venue: str) -> list[tuple[str, dt.date, int, str]]:
+def build_tasks(
+    symbols: List[str], start: dt.date, end: dt.date, venue: str
+) -> list[tuple[str, dt.date, int, str]]:
     tasks: list[tuple[str, dt.date, int, str]] = []
     for sym in symbols:
         iid = INSTRUMENT_IDS.get(sym)
@@ -132,11 +175,11 @@ def build_tasks(symbols: List[str], start: dt.date, end: dt.date, venue: str) ->
 
 def main(argv: list[str]) -> int:
     p = argparse.ArgumentParser()
-    p.add_argument('--start', required=True, help='YYYY-MM-DD')
-    p.add_argument('--end', required=True, help='YYYY-MM-DD')
-    p.add_argument('--symbols', nargs='+', default=['AAPL','MSFT','GOOGL','TSLA','NVDA'])
-    p.add_argument('--venue', default='XNAS')
-    p.add_argument('--max-workers', type=int, default=4)
+    p.add_argument("--start", required=True, help="YYYY-MM-DD")
+    p.add_argument("--end", required=True, help="YYYY-MM-DD")
+    p.add_argument("--symbols", nargs="+", default=["AAPL", "MSFT", "GOOGL", "TSLA", "NVDA"])
+    p.add_argument("--venue", default="XNAS")
+    p.add_argument("--max-workers", type=int, default=4)
     args = p.parse_args(argv)
 
     start = dt.date.fromisoformat(args.start)
@@ -144,10 +187,12 @@ def main(argv: list[str]) -> int:
     tasks = build_tasks(args.symbols, start, end, args.venue)
     total = len(tasks)
     if total == 0:
-        print('No tasks to process.')
+        print("No tasks to process.")
         return 0
 
-    print(f"Backfill start: symbols={args.symbols} dates={args.start}..{args.end} venue={args.venue} tasks={total}")
+    print(
+        f"Backfill start: symbols={args.symbols} dates={args.start}..{args.end} venue={args.venue} tasks={total}"
+    )
     ok = err = skip = miss = done = 0
     t0 = time.time()
 
@@ -159,23 +204,26 @@ def main(argv: list[str]) -> int:
         for fut in cf.as_completed(futs):
             status, sym, date_str = fut.result()
             done += 1
-            if status == 'ok':
+            if status == "ok":
                 ok += 1
-            elif status == 'skip':
+            elif status == "skip":
                 skip += 1
-            elif status == 'missing':
+            elif status == "missing":
                 miss += 1
             else:
                 err += 1
-            pct = int((done/total)*100)
+            pct = int((done / total) * 100)
             elapsed = time.time() - t0
-            sys.stdout.write(f"\r[PROG] {pct:3d}% {done}/{total} ok={ok} skip={skip} miss={miss} err={err} elapsed={elapsed:0.0f}s")
+            sys.stdout.write(
+                f"\r[PROG] {pct:3d}% {done}/{total} ok={ok} skip={skip} miss={miss} err={err} elapsed={elapsed:0.0f}s"
+            )
             sys.stdout.flush()
     print()  # newline after progress
-    print(f"Backfill finished: ok={ok} skip={skip} miss={miss} err={err} total={total} elapsed={time.time()-t0:0.1f}s")
+    print(
+        f"Backfill finished: ok={ok} skip={skip} miss={miss} err={err} total={total} elapsed={time.time()-t0:0.1f}s"
+    )
     return 0 if err == 0 else 2
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     raise SystemExit(main(sys.argv[1:]))
-

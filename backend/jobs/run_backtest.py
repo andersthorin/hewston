@@ -5,23 +5,22 @@ import logging
 import time
 import uuid
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import polars as pl
 
 from backend.adapters.nautilus import NautilusBacktestRunner
-from backend.utils.metrics import compute_cumulative_metrics
-from backend.adapters.sqlite_catalog import SqliteCatalog
 from backend.services.backtests import get_catalog
 from backend.utils.datetime import utc_now
 from backend.utils.git import get_git_commit_hash
-from backend.utils.paths import get_base_data_dir, get_backtests_dir, ensure_dir
+from backend.utils.metrics import compute_cumulative_metrics
+from backend.utils.paths import ensure_dir, get_backtests_dir
 
 # Configure logging for backtest execution
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 
 
@@ -35,10 +34,10 @@ def run_backtest_and_persist(
     *,
     dataset_id: str | None = None,  # Optional - not needed for warehouse-based backtests
     strategy_id: str = "sma_crossover",
-    params: Dict[str, Any] | None = None,
+    params: dict[str, Any] | None = None,
     seed: int = 42,
     speed: int = 60,
-    slippage_fees: Dict[str, Any] | None = None,
+    slippage_fees: dict[str, Any] | None = None,
     run_id: str | None = None,
     from_date: str | None = None,
     to_date: str | None = None,
@@ -81,11 +80,11 @@ def run_backtest_and_persist(
     out_dir = get_backtests_dir(run_id)
     out_dir_abs = out_dir.resolve()
     ensure_dir(out_dir_abs)
-    equity_path = (out_dir_abs / "equity.parquet")
-    orders_path = (out_dir_abs / "orders.parquet")
-    fills_path = (out_dir_abs / "fills.parquet")
-    metrics_path = (out_dir_abs / "metrics.json")
-    manifest_path = (out_dir_abs / "run-manifest.json")
+    equity_path = out_dir_abs / "equity.parquet"
+    orders_path = out_dir_abs / "orders.parquet"
+    fills_path = out_dir_abs / "fills.parquet"
+    metrics_path = out_dir_abs / "metrics.json"
+    manifest_path = out_dir_abs / "run-manifest.json"
 
     # Move to RUNNING
     cat.set_backtest_status(run_id, status="RUNNING")
@@ -100,8 +99,12 @@ def run_backtest_and_persist(
 
         logger.info("Running backtest...")
         result = runner.run(
-            dataset_id=dataset_id, strategy_id=strategy_id, params=params, seed=seed,
-            from_date=from_date, to_date=to_date,
+            dataset_id=dataset_id,
+            strategy_id=strategy_id,
+            params=params,
+            seed=seed,
+            from_date=from_date,
+            to_date=to_date,
         )
         duration_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -120,7 +123,9 @@ def run_backtest_and_persist(
         # Use canonical equity captured directly from Nautilus account.equity_total via strategy (no reconstruction)
         equity_records = list(result.get("equity") or [])
         if not equity_records:
-            raise RuntimeError("Canonical equity series missing from strategy; cannot persist equity (fail-fast)")
+            raise RuntimeError(
+                "Canonical equity series missing from strategy; cannot persist equity (fail-fast)"
+            )
 
         # Validate final value against Nautilus total_return
         start_balance = 10000.0
@@ -151,9 +156,11 @@ def run_backtest_and_persist(
         # Build metrics artifact: precompute cumulative series aligned to equity timestamps
         realized: list[tuple[str, float]] = []
         try:
-            rp = (nautilus.get("series") or {}).get("realized_pnl") or []
+            rp = ((result.get("nautilus") or {}).get("series") or {}).get("realized_pnl") or []
             # Expect [[iso,value], ...]
-            realized = [(str(a[0]), float(a[1])) for a in rp if isinstance(a, (list, tuple)) and len(a) >= 2]
+            realized = [
+                (str(a[0]), float(a[1])) for a in rp if isinstance(a, list | tuple) and len(a) >= 2
+            ]
         except Exception:
             realized = []
 
@@ -163,14 +170,17 @@ def run_backtest_and_persist(
         if not realized:
             try:
                 fills_rows = list(result.get("fills") or [])
+
                 # Sort fills by timestamp
                 def _key_ts(f):
                     try:
                         from backend.utils.datetime import normalize_timestamp
+
                         ep, iso = normalize_timestamp(f.get("ts_utc"))
                         return int(ep), iso
                     except Exception:
                         return (0, str(f.get("ts_utc") or ""))
+
                 fills_rows.sort(key=lambda f: _key_ts(f)[0])
 
                 cum = 0.0
@@ -185,6 +195,7 @@ def run_backtest_and_persist(
                     # timestamp iso
                     try:
                         from backend.utils.datetime import normalize_timestamp
+
                         _, iso = normalize_timestamp(f.get("ts_utc"))
                     except Exception:
                         iso = str(f.get("ts_utc") or "")
@@ -193,7 +204,9 @@ def run_backtest_and_persist(
                         # Update weighted average entry price
                         new_qty = pos_qty + qty
                         if new_qty > 0:
-                            avg_entry = (avg_entry * pos_qty + px * qty) / new_qty if pos_qty > 0 else px
+                            avg_entry = (
+                                (avg_entry * pos_qty + px * qty) / new_qty if pos_qty > 0 else px
+                            )
                         pos_qty = new_qty
                         cum -= fee
                     elif side == "SELL" and qty > 0:
@@ -213,7 +226,9 @@ def run_backtest_and_persist(
 
         # Derive bar interval (minutes). Prefer runner result → params → default 1m.
         try:
-            bar_interval_minutes = int(result.get("bar_interval_minutes") or params.get("bar_interval_minutes") or 1)
+            bar_interval_minutes = int(
+                result.get("bar_interval_minutes") or params.get("bar_interval_minutes") or 1
+            )
         except Exception:
             bar_interval_minutes = 1
 
@@ -240,13 +255,21 @@ def run_backtest_and_persist(
             last_ts = metrics_series[-1][0]
             if not compact_series or compact_series[-1][0] != last_ts:
                 last_m = metrics_series[-1][1]
-                compact_series.append([last_ts, {"realized_pnl": last_m.get("realized_pnl"), "win_rate": last_m.get("win_rate")}])
+                compact_series.append(
+                    [
+                        last_ts,
+                        {
+                            "realized_pnl": last_m.get("realized_pnl"),
+                            "win_rate": last_m.get("win_rate"),
+                        },
+                    ]
+                )
 
         # Compute end position qty from fills (diagnostic; net long only for our SMA strategy)
         end_pos_qty_fills = 0.0
         try:
             end_pos_qty_fills = 0.0
-            for f in (result.get("fills", []) or []):
+            for f in result.get("fills", []) or []:
                 side = (f.get("side") or "").upper()
                 qty = float(f.get("qty") or 0.0)
                 if side == "BUY":
@@ -260,7 +283,9 @@ def run_backtest_and_persist(
         try:
             minutes_per_session = 390
             sessions_per_year = 252
-            periods_per_session = max(1, int(minutes_per_session / max(1, int(bar_interval_minutes))))
+            periods_per_session = max(
+                1, int(minutes_per_session / max(1, int(bar_interval_minutes)))
+            )
             annualization_P = float(periods_per_session * sessions_per_year)
         except Exception:
             annualization_P = float(252 * 390)
@@ -294,7 +319,9 @@ def run_backtest_and_persist(
                 last_ts = compact_series[-1][0]
                 # find last realized pnl in metrics_series by timestamp match
                 try:
-                    last_m = next((m for ts_iso, m in metrics_series[::-1] if ts_iso == last_ts), None)
+                    last_m = next(
+                        (m for ts_iso, m in metrics_series[::-1] if ts_iso == last_ts), None
+                    )
                 except Exception:
                     last_m = metrics_series[-1][1] if metrics_series else None
                 if last_m and last_m.get("realized_pnl") is not None:
@@ -302,7 +329,7 @@ def run_backtest_and_persist(
         except Exception:
             pass
         try:
-            res_metrics = (result.get("metrics") or {})
+            res_metrics = result.get("metrics") or {}
             # Promote canonical Nautilus metrics to top-level for final UI override
             for k in ("total_return", "max_drawdown", "win_rate"):
                 if res_metrics.get(k) is not None:
@@ -315,7 +342,9 @@ def run_backtest_and_persist(
             if res_metrics.get("ending_equity") is not None:
                 metrics_artifact["ending_equity"] = float(res_metrics.get("ending_equity"))
             if res_metrics.get("end_position_qty") is not None:
-                metrics_artifact["end_pos_qty_nautilus"] = float(res_metrics.get("end_position_qty"))
+                metrics_artifact["end_pos_qty_nautilus"] = float(
+                    res_metrics.get("end_position_qty")
+                )
         except Exception:
             pass
 
@@ -416,4 +445,3 @@ def run_backtest_and_persist(
                 "manifest": str(manifest_path),
             },
         }
-

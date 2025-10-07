@@ -1,6 +1,6 @@
 import math
-import pytest
 
+import pytest
 
 from backend.utils.metrics import compute_cumulative_metrics
 
@@ -44,4 +44,3 @@ def test_compute_cumulative_metrics_basic():
     _, m3 = series[3]
     if m3["sharpe"] is not None:
         assert math.isfinite(m3["sharpe"])
-

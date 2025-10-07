@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Trades DBN -> per-minute and per-hour aggregates
 
@@ -14,8 +12,11 @@ Schema (Parquet):
   vw: float64               # VWAP within bucket (sum px*size / sum size)
 """
 
+from __future__ import annotations
+
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, Optional
+
 import pandas as pd
 
 try:
@@ -29,7 +30,14 @@ def _base() -> Path:
 
 
 def _out_path(symbol: str, date_str: str, timeframe: str, venue: str = "XNAS") -> Path:
-    return _base() / timeframe / f"venue={venue}" / f"symbol={symbol}" / f"date={date_str}" / "agg.parquet"
+    return (
+        _base()
+        / timeframe
+        / f"venue={venue}"
+        / f"symbol={symbol}"
+        / f"date={date_str}"
+        / "agg.parquet"
+    )
 
 
 def _bucket(df: pd.DataFrame, freq: str) -> pd.DataFrame:
@@ -38,21 +46,28 @@ def _bucket(df: pd.DataFrame, freq: str) -> pd.DataFrame:
     price = pd.to_numeric(df["price"], errors="coerce")
     size = pd.to_numeric(df["size"], errors="coerce")
     # Build without implicit reindex to handle duplicate timestamps gracefully
-    s = pd.DataFrame({
-        "price": price.to_numpy(),
-        "size": size.to_numpy(),
-    }, index=pd.Index(ts.to_numpy(), name="ts")).dropna()
+    s = pd.DataFrame(
+        {
+            "price": price.to_numpy(),
+            "size": size.to_numpy(),
+        },
+        index=pd.Index(ts.to_numpy(), name="ts"),
+    ).dropna()
     # Resample to freq
     vol = s["size"].resample(freq).sum().fillna(0)
     cnt = s["size"].resample(freq).count().fillna(0)
     # VWAP: sum(price*size)/sum(size) where vol > 0
     notional = (s["price"] * s["size"]).resample(freq).sum().fillna(0)
     vwap = (notional / vol.where(vol > 0)).fillna(0.0).astype("float64")
-    out = pd.DataFrame({"t": vol.index, "v": vol.astype("int64"), "n": cnt.astype("int64"), "vw": vwap})
+    out = pd.DataFrame(
+        {"t": vol.index, "v": vol.astype("int64"), "n": cnt.astype("int64"), "vw": vwap}
+    )
     return out
 
 
-def aggregate_trades_dbn_to_parquet(dbn_file: Path, instrument_id: int, symbol: str, venue: str = "XNAS") -> tuple[Path, Path]:
+def aggregate_trades_dbn_to_parquet(
+    dbn_file: Path, instrument_id: int, symbol: str, venue: str = "XNAS"
+) -> tuple[Path, Path]:
     if DBNStore is None:
         raise ImportError("databento is required to aggregate trades DBN files")
     store = DBNStore.from_file(str(dbn_file))
@@ -66,7 +81,7 @@ def aggregate_trades_dbn_to_parquet(dbn_file: Path, instrument_id: int, symbol: 
         raise ValueError(f"No trades for instrument_id={instrument_id} in {dbn_file}")
 
     # Date partition key
-    date_str: Optional[str] = None
+    date_str: str | None = None
     for tok in str(dbn_file).split("/")[-1].split(".")[0].split("-"):
         if tok.isdigit() and len(tok) == 8:
             date_str = f"{tok[0:4]}-{tok[4:6]}-{tok[6:8]}"
@@ -86,7 +101,9 @@ def aggregate_trades_dbn_to_parquet(dbn_file: Path, instrument_id: int, symbol: 
     return p1, p2
 
 
-def aggregate_many(dbn_files: Iterable[Path], instrument_id: int, symbol: str, venue: str = "XNAS") -> list[tuple[Path, Path]]:
+def aggregate_many(
+    dbn_files: Iterable[Path], instrument_id: int, symbol: str, venue: str = "XNAS"
+) -> list[tuple[Path, Path]]:
     written: list[tuple[Path, Path]] = []
     for f in dbn_files:
         try:
@@ -108,4 +125,3 @@ if __name__ == "__main__":
 
     out = aggregate_many([Path(p) for p in args.dbn], args.instrument_id, args.symbol, args.venue)
     print("written:", len(out))
-

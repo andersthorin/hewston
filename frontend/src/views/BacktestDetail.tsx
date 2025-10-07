@@ -26,7 +26,9 @@ export default function BacktestDetailView() {
             <>Error: {error?.message}</>
           ) : data ? (
             <>
-              <span>Strategy {data.strategy_id} — Status {data.status}</span>
+              <span>
+                Strategy {data.strategy_id} — Status {data.status}
+              </span>
               {isDone ? (
                 <span
                   className="inline-flex items-center rounded bg-emerald-100 text-emerald-700 px-2 py-0.5 text-xs"
@@ -54,7 +56,7 @@ export default function BacktestDetailView() {
       {!isErrorStatus && (
         <>
           {/* Live streaming metrics (single panel). When complete, override with final metrics */}
-          <StreamingMetricsPanel finalMetrics={isDone ? (data?.metrics || undefined) : undefined} />
+          <StreamingMetricsPanel finalMetrics={isDone ? data?.metrics || undefined : undefined} />
           {/* Symbol focus (E11.3) */}
           <SymbolFocus />
 
@@ -66,10 +68,8 @@ export default function BacktestDetailView() {
               run_to={data?.run_to ?? undefined}
             />
           </ErrorBoundary>
-
         </>
       )}
     </div>
   )
 }
-
