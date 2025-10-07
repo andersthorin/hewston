@@ -255,11 +255,13 @@ Fallback to backend is disabled by default and only available behind the environ
 ### Common Issues
 
 1. **Feature flags not working**
+
    - Check `.env.local` file exists
    - Verify environment variable names (must start with `VITE_`)
    - Restart development server after changes
 
 2. **BFF endpoints not found**
+
    - Verify BFF service is running on port 8001
    - Check Vite proxy configuration
    - Confirm BFF endpoints are implemented

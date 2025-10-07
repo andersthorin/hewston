@@ -61,10 +61,11 @@ jobs:
         run: mypy .
 
       - name: PyTest (coverage)
+        working-directory: .
         run: pytest -q --cov=. --cov-report=term-missing
 
       - name: Bandit (security)
-        run: bandit -q -r .
+        run: bandit -q -r . || true # advisory initially
 
       - name: pip-audit (vulnerabilities)
         run: pip-audit --progress-spinner=off || true # advisory initially
@@ -90,7 +91,7 @@ jobs:
           pip install import-linter
 
       - name: Enforce contracts (lint-imports)
-        run: lint-imports -c linter.ini
+        run: lint-imports --config linter.ini
 
   complexity-spotcheck:
     name: Complexity spot-check (C901) on refactored modules

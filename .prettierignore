@@ -6,3 +6,5 @@ coverage
 .bmad-core
 **/*.svg
 
+frontend/coverage
+

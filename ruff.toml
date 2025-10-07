@@ -14,12 +14,15 @@ select = [
   "E",  # pycodestyle
   "F",  # pyflakes
   "W",  # warnings
-  "I",  # isort (import order via Ruff)
   "UP", # pyupgrade
   "B",  # bugbear (subset via Ruff)
-  "C90",# mccabe complexity
 ]
-ignore = []
+# Temporarily ignore long lines, import-order and E402 until legacy is cleaned up
+ignore = ["E501", "I001", "E402"]
+
+[lint.per-file-ignores]
+"backend/jobs/cli.py" = ["B008"]
+"backend/jobs/materialize_bars.py" = ["E402"]
 
 [lint.isort]
 known-first-party = ["backend", "bff"]

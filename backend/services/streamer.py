@@ -417,8 +417,6 @@ def _compute_daily_sharpe_series_aligned(
     return sharpe_ann_by_idx
 
 
-
-
 def _normalize_orders_payload(orders_by_ts: dict[int, list[dict]], key: int) -> list[dict]:
     orders_payload: list[dict] = []
     for o in orders_by_ts.get(key, []) or []:
@@ -465,6 +463,7 @@ def _complete_metrics(
             try:
                 if shp_rt is not None and annualization_P and annualization_P > 0:
                     import math as _math
+
                     mi["sharpe"] = shp_rt * (_math.sqrt(float(annualization_P)))
                 else:
                     mi["sharpe"] = shp_rt
@@ -473,7 +472,9 @@ def _complete_metrics(
     return mi
 
 
-def _load_metrics_artifact(artifacts: dict[str, str]) -> tuple[list[tuple[int, dict]], float | None]:
+def _load_metrics_artifact(
+    artifacts: dict[str, str]
+) -> tuple[list[tuple[int, dict]], float | None]:
     metrics_lookup: list[tuple[int, dict]] = []
     annualization_P: float | None = None
     try:
@@ -505,8 +506,9 @@ def _load_metrics_artifact(artifacts: dict[str, str]) -> tuple[list[tuple[int, d
     return metrics_lookup, annualization_P
 
 
-
-def _advance_metrics_cursor(metrics_lookup: list[tuple[int, dict]], m_idx: int, key: int, last_metrics: dict | None) -> tuple[int, dict | None]:
+def _advance_metrics_cursor(
+    metrics_lookup: list[tuple[int, dict]], m_idx: int, key: int, last_metrics: dict | None
+) -> tuple[int, dict | None]:
     """Advance metrics cursor so that last_metrics is the latest metrics with ts <= key."""
     if not metrics_lookup:
         return m_idx, last_metrics
@@ -523,7 +525,6 @@ def _compute_r_cur(prev_equity_val: float | None, v_cur: float) -> tuple[float |
     if prev_equity_val != 0.0:
         return (v_cur / prev_equity_val) - 1.0, v_cur
     return None, v_cur
-
 
 
 def _log_backend_emit(logger, run_id: str, iso: str, last_emit: float) -> float:
@@ -570,7 +571,9 @@ def _compute_frame_metrics(
     """Return (metrics, m_idx, last_metrics, prev_equity_val) for current equity row."""
     if metrics_lookup:
         m_idx = -1 if m_idx is None else m_idx
-        m_idx, last_metrics = _advance_metrics_cursor(metrics_lookup, m_idx, normalize_timestamp(er["ts_utc"])[0], last_metrics)
+        m_idx, last_metrics = _advance_metrics_cursor(
+            metrics_lookup, m_idx, normalize_timestamp(er["ts_utc"])[0], last_metrics
+        )
         mi = dict(last_metrics or {})
     else:
         mi = {}

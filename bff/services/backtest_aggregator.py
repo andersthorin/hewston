@@ -31,7 +31,6 @@ class BacktestDataAggregator:
     def __init__(self):
         self.logger = logging.getLogger("bff.backtest_aggregator")
 
-
     async def _build_fetch_tasks(
         self,
         backend_client: BackendClient,
@@ -81,7 +80,11 @@ class BacktestDataAggregator:
         if request_params.include_metrics and isinstance(metrics_data, Exception):
             self.logger.warning(
                 "aggregate.metrics_failure",
-                extra={"correlation_id": correlation_id, "run_id": None, "error": str(metrics_data)},
+                extra={
+                    "correlation_id": correlation_id,
+                    "run_id": None,
+                    "error": str(metrics_data),
+                },
             )
             failed_sources.append("/backtests/{id}/metrics")
             metrics_data = None
@@ -134,15 +137,17 @@ class BacktestDataAggregator:
         )
 
         # Prepare concurrent backend calls
-        tasks, data_sources = await self._build_fetch_tasks(backend_client, run_id, request_params, correlation_id)
+        tasks, data_sources = await self._build_fetch_tasks(
+            backend_client, run_id, request_params, correlation_id
+        )
 
         # Execute all requests concurrently
         try:
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
             # Process results and normalize
-            run_details, metrics_data, equity_data, orders_data, failed_sources, backend_calls = self._normalize_results(
-                results, request_params, correlation_id
+            run_details, metrics_data, equity_data, orders_data, failed_sources, backend_calls = (
+                self._normalize_results(results, request_params, correlation_id)
             )
 
             # Check for details failure (critical)

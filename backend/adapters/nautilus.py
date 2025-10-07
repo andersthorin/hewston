@@ -5,7 +5,6 @@ from typing import Any
 import math
 
 
-
 def _compute_date_list(from_date: str | None, to_date: str | None) -> list[str]:
     """Return list of YYYY-MM-DD strings inclusive; default to one RTH day when unspecified."""
     import pandas as pd  # type: ignore
@@ -42,7 +41,9 @@ def _load_quotes_dataframe(venue: str, symbol: str, dates: list[str]):
             # Expect columns: ts, bid_px, ask_px, bid_sz, ask_sz
             q = q.dropna(subset=["ts", "bid_px", "ask_px"])  # minimal
             q = q.sort_values("ts")
-            q = q.set_index(pd.to_datetime(q["ts"], utc=True))[["bid_px", "ask_px", "bid_sz", "ask_sz"]]
+            q = q.set_index(pd.to_datetime(q["ts"], utc=True))[
+                ["bid_px", "ask_px", "bid_sz", "ask_sz"]
+            ]
             q = q.rename(
                 columns={
                     "bid_px": "bid",
@@ -55,8 +56,6 @@ def _load_quotes_dataframe(venue: str, symbol: str, dates: list[str]):
     if not pdf_list:
         raise FileNotFoundError("No QuoteTicks parquet found in warehouse for requested range")
     return pd.concat(pdf_list).sort_index()
-
-
 
 
 def _setup_engine_and_instrument(venue: str, instrument_id: str):
@@ -109,13 +108,14 @@ def _setup_engine_and_instrument(venue: str, instrument_id: str):
     return engine, instr, client_id
 
 
-
-
 def _to_utc_iso(ts):
     try:
         import pandas as pd  # type: ignore
+
         t = pd.Timestamp(ts)
-        return (t.tz_localize("UTC") if t.tzinfo is None or t.tz is None else t.tz_convert("UTC")).isoformat()
+        return (
+            t.tz_localize("UTC") if t.tzinfo is None or t.tz is None else t.tz_convert("UTC")
+        ).isoformat()
     except Exception:
         return str(ts)
 
@@ -141,6 +141,7 @@ def _get_returns_series(analyzer) -> list:
         if callable(s):
             s = s()
         import pandas as pd  # type: ignore
+
         if s is not None and isinstance(s, pd.Series):
             return [[_to_utc_iso(k), float(v)] for k, v in s.items()]  # type: ignore
     except Exception:
@@ -151,8 +152,10 @@ def _get_returns_series(analyzer) -> list:
 def _get_realized_pnl_series(analyzer) -> list:
     try:
         from nautilus_trader.model.currencies import USD  # type: ignore
+
         rp = analyzer.realized_pnls(USD) if hasattr(analyzer, "realized_pnls") else None
         import pandas as pd  # type: ignore
+
         if rp is not None and isinstance(rp, pd.Series):
             return [[_to_utc_iso(k), float(v)] for k, v in rp.items()]  # type: ignore
     except Exception:
@@ -174,13 +177,13 @@ def _collect_analyzer_data(engine: Any) -> tuple[dict[str, Any], dict[str, list]
     return nautilus_stats, nautilus_series
 
 
-
 def _wrangle_quote_ticks(instr, pdf):
     """Convert normalized quotes DataFrame into Nautilus QuoteTick objects for a given instrument."""
     from nautilus_trader.persistence.wranglers import QuoteTickDataWrangler  # type: ignore
 
     wrangler = QuoteTickDataWrangler(instr)
     return wrangler.process(pdf)
+
 
 def _add_quotes_to_engine(engine, quote_ticks, client_id):
     """Add QuoteTicks to engine using client routing when available."""
@@ -192,11 +195,13 @@ def _add_quotes_to_engine(engine, quote_ticks, client_id):
 
 def _assert_nautilus_available() -> None:
     import importlib
+
     importlib.import_module("nautilus_trader.backtest.engine")
 
 
 def _prepare_strategy(strategy_id: str, params: dict[str, Any], instrument_id: str):
     from backend.strategies.strategy_factory import StrategyFactory, StrategyRegistry
+
     p = dict(params)
     p.setdefault("instrument_id", instrument_id)
     p.setdefault("qty", 1)
@@ -204,7 +209,9 @@ def _prepare_strategy(strategy_id: str, params: dict[str, Any], instrument_id: s
     return StrategyFactory(StrategyRegistry()).build(strategy_id, p)
 
 
-def _collect_strategy_artifacts(strategy) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+def _collect_strategy_artifacts(
+    strategy,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
     orders: list[dict[str, Any]] = getattr(strategy, "orders", [])
     fills: list[dict[str, Any]] = getattr(strategy, "fills", [])
     equity: list[dict[str, Any]] = getattr(strategy, "equity", [])
@@ -252,7 +259,6 @@ class NautilusBacktestRunner:
         # Ensure Nautilus dependency is available (fail fast)
         _assert_nautilus_available()
 
-
         # Load QuoteTicks from warehouse and feed to Nautilus (Approach A: INTERNAL MID)
         # - Instrument: default to AAPL.XNAS unless provided via params
 
@@ -263,7 +269,6 @@ class NautilusBacktestRunner:
         venue = instrument_id.split(".")[1] if "." in instrument_id else "XNAS"
         dates = _compute_date_list(from_date, to_date)
         pdf = _load_quotes_dataframe(venue, symbol, dates)
-
 
         # Build strategy
         strategy = _prepare_strategy(strategy_id, params, instrument_id)
@@ -304,8 +309,6 @@ class NautilusBacktestRunner:
         #     ...
         # except Exception:
         #     pass
-
-
 
         return {
             "orders": orders,
@@ -360,7 +363,9 @@ class NautilusBacktestRunner:
             "total_return": (ending_equity - starting_balance) / starting_balance,
         }
 
-    def _metrics_from_equity_snapshot(self, equity: list[dict[str, Any]], starting_balance: float) -> dict[str, float]:
+    def _metrics_from_equity_snapshot(
+        self, equity: list[dict[str, Any]], starting_balance: float
+    ) -> dict[str, float]:
         try:
             last = float((equity or [{}])[-1].get("value", float("nan")))
         except Exception:
@@ -429,6 +434,7 @@ class NautilusBacktestRunner:
                 f"❌ CRITICAL: Unexpected error extracting Nautilus metrics: {type(e).__name__}: {e}"
             )
             import traceback
+
             logger.error(traceback.format_exc())
             metrics.update(self._metrics_from_equity_snapshot(equity, starting_balance))
 

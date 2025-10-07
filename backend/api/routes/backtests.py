@@ -338,8 +338,6 @@ async def get_backtest_orders(run_id: str):
 HEARTBEAT_SECONDS = 5.0
 
 
-
-
 class _BacktestWSHandler:
     def __init__(self, websocket: WebSocket, run_id: str):
         self.ws = websocket
@@ -370,7 +368,9 @@ class _BacktestWSHandler:
 
     async def _start_player(self) -> None:
         if not self.ready:
-            logger.debug("ws.play_ignored", extra={"run_id": self.run_id, "reason": "frontend_not_ready"})
+            logger.debug(
+                "ws.play_ignored", extra={"run_id": self.run_id, "reason": "frontend_not_ready"}
+            )
             return
         if self.player_task and not self.player_task.done():
             return
@@ -386,7 +386,10 @@ class _BacktestWSHandler:
                     await self.ws.send_text(_json_dumps(self._frame_payload(fr)))
                     self.frames_sent += 1
                     self.last_dropped = fr.dropped or 0
-                logger.info("ws.stream_complete", extra={"run_id": self.run_id, "frames_sent": self.frames_sent})
+                logger.info(
+                    "ws.stream_complete",
+                    extra={"run_id": self.run_id, "frames_sent": self.frames_sent},
+                )
             except Exception as e:
                 await self._send_err("STREAM_ERROR", str(e)[:200])
                 return
@@ -434,7 +437,11 @@ class _BacktestWSHandler:
         except WebSocketDisconnect:
             logger.info(
                 "ws.disconnect",
-                extra={"run_id": self.run_id, "frames_sent": self.frames_sent, "frames_dropped": self.last_dropped},
+                extra={
+                    "run_id": self.run_id,
+                    "frames_sent": self.frames_sent,
+                    "frames_dropped": self.last_dropped,
+                },
             )
         finally:
             if self.hb:
@@ -445,6 +452,7 @@ class _BacktestWSHandler:
                 self.player_task.cancel()
                 with contextlib.suppress(BaseException):
                     await self.player_task
+
 
 async def _heartbeat_task(ws: WebSocket) -> None:
     try:

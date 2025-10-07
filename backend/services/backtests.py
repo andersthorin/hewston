@@ -119,7 +119,6 @@ from datetime import UTC
 _IDEMP_CACHE: dict[str, str] = {}
 
 
-
 def _parse_iso8601(s: str) -> bool:
     """Accept YYYY-MM-DD or full ISO formats (with Z or offset)."""
     if not isinstance(s, str) or not s:
@@ -127,6 +126,7 @@ def _parse_iso8601(s: str) -> bool:
     ss = s.replace("Z", "+00:00")
     try:
         from datetime import datetime
+
         # Accept full ISO or date-only
         datetime.fromisoformat(ss)
         return True
@@ -153,6 +153,7 @@ def _write_minimal_manifest(
         from pathlib import Path as _Path
         from backend.utils.paths import ensure_dir as _ensure
         from backend.utils.paths import get_backtests_dir
+
         _ensure(get_backtests_dir(run_id))
         minimal_manifest = {
             "run_id": run_id,
@@ -208,32 +209,59 @@ def _enqueue_run_background(
     p.start()
 
 
-
-
-def _validate_strategy_and_dates(strategy_id: str | None, run_from: str | None, run_to: str | None) -> tuple[dict | None, int | None]:
+def _validate_strategy_and_dates(
+    strategy_id: str | None, run_from: str | None, run_to: str | None
+) -> tuple[dict | None, int | None]:
     if not strategy_id:
-        return {"error": {"code": "BAD_REQUEST", "message": "Missing required parameter: strategy_id"}}, 400
+        return {
+            "error": {"code": "BAD_REQUEST", "message": "Missing required parameter: strategy_id"}
+        }, 400
     if run_from and not _parse_iso8601(run_from):
-        return {"error": {"code": "BAD_REQUEST", "message": "Invalid date format in 'run_from' (expected ISO 8601 YYYY-MM-DD)"}}, 400
+        return {
+            "error": {
+                "code": "BAD_REQUEST",
+                "message": "Invalid date format in 'run_from' (expected ISO 8601 YYYY-MM-DD)",
+            }
+        }, 400
     if run_to and not _parse_iso8601(run_to):
-        return {"error": {"code": "BAD_REQUEST", "message": "Invalid date format in 'run_to' (expected ISO 8601 YYYY-MM-DD)"}}, 400
+        return {
+            "error": {
+                "code": "BAD_REQUEST",
+                "message": "Invalid date format in 'run_to' (expected ISO 8601 YYYY-MM-DD)",
+            }
+        }, 400
     return None, None
 
 
-def _resolve_dataset_id_and_symbol(body: dict) -> tuple[str | None, str | None, dict | None, int | None]:
+def _resolve_dataset_id_and_symbol(
+    body: dict,
+) -> tuple[str | None, str | None, dict | None, int | None]:
     dataset_id = body.get("dataset_id")
     symbol = body.get("symbol")
     if not dataset_id:
         if not symbol:
-            return None, None, {"error": {"code": "BAD_REQUEST", "message": "Missing required parameter: dataset_id or (symbol + year)"}}, 400
+            return (
+                None,
+                None,
+                {
+                    "error": {
+                        "code": "BAD_REQUEST",
+                        "message": "Missing required parameter: dataset_id or (symbol + year)",
+                    }
+                },
+                400,
+            )
         dataset_id = f"{symbol}-warehouse-1m"
     return dataset_id, symbol, None, None
 
 
-def _ensure_placeholder_dataset_row(catalog, dataset_id: str | None, symbol: str | None, run_from: str | None, run_to: str | None) -> None:
+def _ensure_placeholder_dataset_row(
+    catalog, dataset_id: str | None, symbol: str | None, run_from: str | None, run_to: str | None
+) -> None:
     if dataset_id and symbol:
         try:
             from datetime import datetime
+
             catalog.upsert_dataset(
                 {
                     "dataset_id": dataset_id,
@@ -253,7 +281,9 @@ def _ensure_placeholder_dataset_row(catalog, dataset_id: str | None, symbol: str
             pass
 
 
-def _check_idempotency_catalog(catalog, input_hash: str, idempotency_key: str | None) -> dict | None:
+def _check_idempotency_catalog(
+    catalog, input_hash: str, idempotency_key: str | None
+) -> dict | None:
     if idempotency_key:
         existing = catalog.find_backtest_by_idempotency_key(idempotency_key)
         if existing:
@@ -319,6 +349,7 @@ def _update_idemp_cache(mem_key: str, mem_idemp_key: str | None, run_id: str) ->
     if mem_idemp_key:
         _IDEMP_CACHE[mem_idemp_key] = run_id
 
+
 def _canonical_inputs_hash(payload: dict) -> str:
     s = json.dumps(payload, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(s.encode("utf-8")).hexdigest()
@@ -378,9 +409,11 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> tuple[di
     # Create QUEUED row + manifest
     from uuid import uuid4
     from datetime import datetime
+
     run_id = uuid4().hex
     created_at = datetime.now(UTC).isoformat()
     from backend.utils.paths import get_backtests_dir
+
     manifest_path = str((get_backtests_dir(run_id) / "run-manifest.json").resolve())
 
     new_run_id, existed = _persist_queued_run_and_manifest(
