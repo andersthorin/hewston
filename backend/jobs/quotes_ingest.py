@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 TBBO DBN -> canonical QuoteTicks parquet (partitioned)
 
@@ -14,6 +12,8 @@ Schema (Parquet):
   bid_sz: float32 (optional)
   ask_sz: float32 (optional)
 """
+
+from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path

@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Trades DBN -> per-minute and per-hour aggregates
 
@@ -13,6 +11,8 @@ Schema (Parquet):
   n: int64                  # trade count
   vw: float64               # VWAP within bucket (sum px*size / sum size)
 """
+
+from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path

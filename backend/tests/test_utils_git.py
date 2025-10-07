@@ -3,10 +3,8 @@ Tests for backend/utils/git.py utility functions.
 """
 
 import subprocess
-from pathlib import Path
 from unittest.mock import patch, MagicMock
 
-import pytest
 
 from backend.utils.git import (
     get_git_commit_hash,

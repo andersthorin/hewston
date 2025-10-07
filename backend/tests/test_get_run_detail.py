@@ -9,7 +9,7 @@ import backend.services.backtests as svc
 
 
 def seed_one_run(db_path: str):
-    cat = SqliteCatalog(db_path)
+    SqliteCatalog(db_path)
     with sqlite3.connect(db_path) as conn:
         conn.execute("PRAGMA foreign_keys=ON;")
         conn.execute(

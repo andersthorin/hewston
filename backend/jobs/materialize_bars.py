@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Materialize UI bars from Quotes + Trades aggregates
 
@@ -17,8 +15,9 @@ Schema:
   rth: bool (for 1min; optional for 1h)
 """
 
-from pathlib import Path
+from __future__ import annotations
 
+from pathlib import Path
 import pandas as pd
 
 

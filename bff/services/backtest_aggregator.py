@@ -1,11 +1,11 @@
-from __future__ import annotations
-
 """
 Backtest Data Aggregation Service (canonical)
 
 Handles concurrent backend calls and data aggregation for complete backtest data.
 Provides intelligent error handling and partial data recovery.
 """
+
+from __future__ import annotations
 
 import asyncio
 import json

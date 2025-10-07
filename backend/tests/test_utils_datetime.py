@@ -3,7 +3,6 @@ Tests for backend/utils/datetime.py utility functions.
 """
 
 from datetime import datetime, timezone
-from unittest.mock import patch
 
 import pandas as pd
 import pytest

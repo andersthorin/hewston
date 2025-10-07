@@ -1,5 +1,3 @@
-import json
-import os
 import sqlite3
 from pathlib import Path
 
@@ -26,7 +24,7 @@ def test_retention_dry_run_and_apply(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("HEWSTON_CATALOG_PATH", str(dbp))
 
     # Bootstrap catalog
-    cat = SqliteCatalog(str(dbp))
+    SqliteCatalog(str(dbp))
 
     # Create runs with different created_at
     _insert_run(dbp, "r1", "2023-01-01T00:00:00Z")

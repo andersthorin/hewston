@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 """
 Canonical backtest data models for the BFF layer.
 
@@ -7,8 +5,9 @@ This module defines backtest-centric Pydantic models. Field names intentionally
 retain run_id, run_from, run_to for cross-layer compatibility, per project directive.
 """
 
-from typing import Any
+from __future__ import annotations
 
+from typing import Any
 from pydantic import BaseModel, Field
 
 

@@ -1,5 +1,3 @@
-import os
-import tempfile
 from pathlib import Path
 
 import backend.jobs.ingest as ingest

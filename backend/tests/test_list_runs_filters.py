@@ -1,7 +1,6 @@
 import os
 import tempfile
 import sqlite3
-from datetime import datetime
 
 from fastapi.testclient import TestClient
 
@@ -11,7 +10,7 @@ import backend.services.backtests as svc
 
 
 def seed_sample_db(db_path: str):
-    cat = SqliteCatalog(db_path)
+    SqliteCatalog(db_path)
     with sqlite3.connect(db_path) as conn:
         # Ensure foreign keys
         conn.execute("PRAGMA foreign_keys=ON;")

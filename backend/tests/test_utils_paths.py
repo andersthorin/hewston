@@ -3,11 +3,9 @@ Tests for backend/utils/paths.py utility functions.
 """
 
 import os
-import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 
 from backend.utils.paths import (
     get_base_data_dir,
