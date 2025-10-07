@@ -2,24 +2,7 @@ name: Python CI
 
 on:
   push:
-    paths:
-      - 'backend/**'
-      - 'bff/**'
-      - '.github/workflows/python-ci.yml'
-      - 'ruff.toml'
-      - 'pyproject.toml'
-      - 'mypy.ini'
-      - 'pytest.ini'
-      - '.coveragerc'
-      - 'linter.ini'
-
   pull_request:
-    paths:
-      - 'backend/**'
-      - 'bff/**'
-      - 'linter.ini'
-
-      - '.github/workflows/python-ci.yml'
 
 jobs:
   quality:
