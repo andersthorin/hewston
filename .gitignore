@@ -13,3 +13,7 @@ data/catalog.sqlite*
 
 # Local-only debug sandbox (do not commit)
 tmp_data_bff_debug/
+
+
+# Coverage database
+.coverage
