@@ -53,9 +53,9 @@ jobs:
           bandit --version
           pip-audit --version
 
-      - name: Install test dependencies
+      - name: Install project dependencies
         run: |
-          pip install pandas polars httpx pydantic pytest-asyncio fastapi structlog websockets
+          pip install -r backend/requirements.txt -r bff/requirements.txt -r requirements-test.txt
 
       - name: Ruff (lint)
         run: ruff check backend bff

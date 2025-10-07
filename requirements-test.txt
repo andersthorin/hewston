@@ -1,0 +1,10 @@
+# Runtime test dependencies used by CI and local tests
+pandas
+polars
+httpx
+pydantic
+pytest-asyncio
+fastapi
+structlog
+websockets
+

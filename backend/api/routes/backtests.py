@@ -20,13 +20,9 @@ from fastapi import (
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from backend.constants import DEFAULT_FPS
-from backend.modules.backtests.adapters.http.controllers import (
+from backend.api.controllers.backtests import (
     create_backtest as create_backtest_ctrl,
-)
-from backend.modules.backtests.adapters.http.controllers import (
     get_backtest as get_backtest_ctrl,
-)
-from backend.modules.backtests.adapters.http.controllers import (
     list_backtests as list_backtests_ctrl,
 )
 

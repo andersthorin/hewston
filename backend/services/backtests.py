@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import os
 from typing import Any
+import hashlib
+import json
+import multiprocessing
+from datetime import UTC
+
 
 from backend.ports.catalog import CatalogPort
 
@@ -114,10 +119,6 @@ def get_backtest_service(run_id: str) -> dict | None:
     return run
 
 
-import hashlib
-import json
-import multiprocessing
-from datetime import UTC
 
 # Fallback in-memory idempotency for minimal body (no dataset info)
 _IDEMP_CACHE: dict[str, str] = {}
