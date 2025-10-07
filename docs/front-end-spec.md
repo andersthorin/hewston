@@ -57,6 +57,25 @@ This document defines user experience goals, information architecture, flows, wi
   - Indicators: dropped counter; connection status (WS / SSE fallback)
   - States: loading, RUN_NOT_FOUND, waiting, playing, paused, end
 
+## Playback Metrics Panel (Epic 13)
+- Purpose: Display cumulative metrics per frame with no client-side recomputation
+- Source: WS frame.metrics (additive; optional)
+- Fields (display-only):
+  - return (per bar, %)
+  - realized_pnl (USD)
+  - total_return (% to date)
+  - drawdown (% to date)
+  - sharpe (annualized)
+  - win_rate (0..1)
+- Behavior:
+  - Updates each frame while playing; updates instantly on seek
+  - Handles nulls by showing -- or muted placeholder
+  - No sorting/filtering; no charts in this epic
+- A11y:
+  - Readable with reduced motion
+  - Keyboard focus unaffected (panel is read-only)
+
+
 ## Component Library / Design System
 - Approach: Tailwind CSS 4 utilities + small custom components
 - Core Components

@@ -97,6 +97,8 @@ class NautilusBacktestRunner:
         params_with_instrument = dict(params)
         params_with_instrument.setdefault("instrument_id", instrument_id)
         params_with_instrument.setdefault("qty", 1)
+        # Default to flatten at end-of-day unless explicitly disabled
+        params_with_instrument.setdefault("eod_flat", True)
         strategy = StrategyFactory(StrategyRegistry()).build(strategy_id, params_with_instrument)
 
         # Engine wiring (Nautilus 1.219.0 API)
@@ -111,7 +113,7 @@ class NautilusBacktestRunner:
             # Older Nautilus versions may not expose set_default_trading_client
             pass
 
-        engine.add_venue(Venue(venue), OmsType.HEDGING, AccountType.CASH, [Money.from_str("10000 USD")])
+        engine.add_venue(Venue(venue), OmsType.NETTING, AccountType.CASH, [Money.from_str("10000 USD")])
         # Ensure instrument is registered before adding bars
         instr = Equity.from_dict({
             "id": instrument_id,
@@ -168,7 +170,68 @@ class NautilusBacktestRunner:
         # Extract metrics from Nautilus engine state
         metrics = self._extract_metrics_from_engine(engine, equity, fills)
 
-        return {"orders": orders, "fills": fills, "equity": equity, "metrics": metrics}
+        # Also capture raw Nautilus analyzer stats and time series (for post-run precompute)
+        nautilus_stats: Dict[str, Any] = {"pnls": {}, "returns": {}, "general": {}}
+        nautilus_series: Dict[str, list] = {"returns": [], "realized_pnl": []}
+        try:
+            analyzer = getattr(engine, "portfolio").analyzer  # type: ignore[attr-defined]
+            # Raw stats (opaque pass-through)
+            try:
+                nautilus_stats["pnls"] = analyzer.get_performance_stats_pnls()
+            except Exception:
+                pass
+            try:
+                nautilus_stats["returns"] = analyzer.get_performance_stats_returns()
+            except Exception:
+                pass
+            try:
+                nautilus_stats["general"] = analyzer.get_performance_stats_general()
+            except Exception:
+                pass
+            # Time series
+            try:
+                # Returns series (pd.Series)
+                s = getattr(analyzer, "returns", None)
+                if callable(s):
+                    s = s()
+                import pandas as pd  # type: ignore
+                if s is not None and isinstance(s, pd.Series):
+                    def _to_utc_iso(ts):
+                        t = pd.Timestamp(ts)
+                        # If tz-naive, localize to UTC; if tz-aware, convert to UTC
+                        return (t.tz_localize("UTC") if t.tzinfo is None or t.tz is None else t.tz_convert("UTC")).isoformat()
+                    nautilus_series["returns"] = [
+                        [_to_utc_iso(k), float(v)] for k, v in s.items()  # type: ignore
+                    ]
+            except Exception:
+                pass
+            try:
+                # Realized PnL series in USD
+                from nautilus_trader.model.currencies import USD  # type: ignore
+                rp = None
+                if hasattr(analyzer, "realized_pnls"):
+                    rp = analyzer.realized_pnls(USD)
+                import pandas as pd  # type: ignore
+                if rp is not None and isinstance(rp, pd.Series):
+                    def _to_utc_iso(ts):
+                        t = pd.Timestamp(ts)
+                        return (t.tz_localize("UTC") if t.tzinfo is None or t.tz is None else t.tz_convert("UTC")).isoformat()
+                    nautilus_series["realized_pnl"] = [
+                        [_to_utc_iso(k), float(v)] for k, v in rp.items()  # type: ignore
+                    ]
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+        return {
+            "orders": orders,
+            "fills": fills,
+            "equity": equity,
+            "metrics": metrics,
+            "nautilus": {"stats": nautilus_stats, "series": nautilus_series},
+            "bar_interval_minutes": 1,
+        }
 
     def _extract_metrics_from_engine(
         self,
@@ -176,9 +239,10 @@ class NautilusBacktestRunner:
         equity: List[Dict[str, Any]],
         fills: List[Dict[str, Any]],
     ) -> Dict[str, float]:
-        """Extract performance metrics from Nautilus engine - NO FALLBACKS.
+        """Extract performance metrics from Nautilus engine.
 
-        If Nautilus data is unavailable, this will raise an error so we can fix the integration.
+        Source strictly from Nautilus outputs. If portfolio API is unavailable,
+        fall back to the last equity snapshot captured by the strategy (still Nautilus data).
         """
         import logging
         logger = logging.getLogger("nautilus.metrics")
@@ -186,12 +250,12 @@ class NautilusBacktestRunner:
         metrics: Dict[str, float] = {}
         starting_balance = 10000.0  # Default from strategy
 
-        # Get metrics from Nautilus's portfolio/account state (REQUIRED)
+        # Try portfolio/account path first; if unavailable, use equity snapshots
         try:
             portfolio = engine.portfolio  # Direct access, not engine.trader.portfolio
 
             # Get the venue from the first instrument (we only have one in backtests)
-            from nautilus_trader.model.identifiers import Venue
+            from nautilus_trader.model.identifiers import Venue  # noqa: F401
             instruments = engine.cache.instruments()
             if not instruments:
                 logger.error("❌ CRITICAL: No instruments in cache")
@@ -204,34 +268,36 @@ class NautilusBacktestRunner:
                 logger.error(f"❌ CRITICAL: No account found for venue {venue}")
                 raise RuntimeError(f"No account for venue {venue}")
 
-            # Get total account value including unrealized PnL; prefer account.equity_total
             from nautilus_trader.model.currencies import USD
-            ending_balance: float
-            try:
-                equity_money = getattr(account, "equity_total")(USD)  # type: ignore[attr-defined]
-                ending_balance = float(equity_money.as_double())
-            except Exception:
-                # Fallback: use last equity point captured by the strategy if available
-                if isinstance(equity, list) and equity:
-                    try:
-                        ending_balance = float(equity[-1].get("value"))
-                    except Exception:
-                        ending_balance = starting_balance
-                else:
-                    # Last resort: cash balance (may ignore unrealized PnL)
-                    bal = account.balance_total(USD)
-                    ending_balance = float(bal.as_double())
-            metrics["total_return"] = (ending_balance - starting_balance) / starting_balance
+
+            # Cash balance (matches Nautilus "Balances ending")
+            bal_money = account.balance_total(USD)
+            bal_val = float(bal_money.as_double()) if hasattr(bal_money, "as_double") else float(bal_money)
+
+            # Unrealized PnL in USD
+            upnls = portfolio.unrealized_pnls(venue)
+            upnl_money = upnls.get(USD)
+            upnl_val = float(upnl_money.as_double()) if (upnl_money is not None and hasattr(upnl_money, "as_double")) else float(upnl_money or 0.0)
+
+            # Equity/NLV = cash + UPNL
+            ending_equity = bal_val + upnl_val
+
+            # Expose all components explicitly for the frontend
+            metrics["ending_balance"] = bal_val
+            metrics["unrealized_pnl"] = upnl_val
+            metrics["ending_equity"] = ending_equity
+
+            # Keep total_return as equity-based (matches common definitions)
+            metrics["total_return"] = (ending_equity - starting_balance) / starting_balance
 
             logger.info(
-                f"Extracted metrics: start=${starting_balance:.2f}, end=${ending_balance:.2f}, return={metrics['total_return']:.4f}"
+                f"Extracted metrics: start=${starting_balance:.2f}, cash_end=${bal_val:.2f}, upnl=${upnl_val:.2f}, equity_end=${ending_equity:.2f}, return={metrics['total_return']:.4f}"
             )
 
-        except AttributeError as e:
-            logger.error(f"❌ CRITICAL: Cannot access Nautilus portfolio attributes: {e}")
-            logger.error(f"   Engine type: {type(engine)}")
-            logger.error(f"   Has portfolio: {hasattr(engine, 'portfolio')}")
-            raise RuntimeError(f"Failed to extract metrics from Nautilus - portfolio API broken: {e}") from e
+        except AttributeError:
+            # Portfolio path unavailable; fail-fast per no-fallbacks policy
+            logger.error("❌ CRITICAL: Portfolio API unavailable for metrics extraction")
+            raise RuntimeError("Failed to extract metrics from Nautilus: portfolio API unavailable")
 
         except Exception as e:
             logger.error(f"❌ CRITICAL: Unexpected error extracting Nautilus metrics: {type(e).__name__}: {e}")
@@ -244,6 +310,36 @@ class NautilusBacktestRunner:
 
         # Calculate win rate from fills
         metrics["win_rate"] = self._calculate_win_rate(fills)
+
+        # Capture end-of-run position quantity for the instrument (diagnostics)
+        try:
+            end_pos_qty = 0.0
+            try:
+                instruments = engine.cache.instruments()
+                instr = next(iter(instruments)) if instruments else None
+            except Exception:
+                instr = None
+            if instr is not None:
+                try:
+                    pos = engine.portfolio.position(instr.id)  # type: ignore[attr-defined]
+                    if hasattr(pos, "net_qty") and hasattr(pos.net_qty, "as_double"):
+                        end_pos_qty = float(pos.net_qty.as_double())
+                    else:
+                        end_pos_qty = float(getattr(pos, "quantity", 0.0))
+                except Exception:
+                    try:
+                        account = engine.portfolio.account(instr.id.venue)
+                        pos = account.position(instr.id)  # type: ignore[attr-defined]
+                        if hasattr(pos, "net_qty") and hasattr(pos.net_qty, "as_double"):
+                            end_pos_qty = float(pos.net_qty.as_double())
+                        else:
+                            end_pos_qty = float(getattr(pos, "quantity", 0.0))
+                    except Exception:
+                        end_pos_qty = 0.0
+            metrics["end_position_qty"] = float(end_pos_qty)
+        except Exception:
+            # If anything fails, omit the field
+            pass
 
         logger.info(
             f"Final metrics: total_return={metrics['total_return']:.4f}, "

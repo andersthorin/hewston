@@ -12,7 +12,7 @@ function seedFrameWithMetrics() {
   playbackStore._setFrame({
     t: 'frame', ts, dropped: 0, ohlc: null,
     orders: [], equity: { ts, value: 110 },
-    metrics: { total_return_so_far: 0.1, max_drawdown_so_far: 0.02, sharpe_so_far: 1.25 },
+    metrics: { total_return: 0.1, drawdown: 0.02, sharpe: 1.25 },
   })
 }
 

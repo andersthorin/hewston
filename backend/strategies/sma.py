@@ -94,60 +94,30 @@ try:  # pragma: no cover - exercised in integration
                 except Exception:
                     in_rth = True
 
-            # Track equity from Nautilus portfolio, including unrealized PnL (no fallbacks)
+            # Track canonical equity using Nautilus Portfolio APIs (no made-up math):
+            # equity = balance_total(USD) + unrealized_pnls(venue)[USD]
             import logging
             logger = logging.getLogger("strategy.equity")
 
             try:
                 portfolio = self.portfolio
-                venue = self.instrument_id.venue  # Get venue from instrument (e.g., XNAS)
-                account = portfolio.account(venue)  # Pass venue to get the account
+                venue = self.instrument_id.venue
+                account = portfolio.account(venue)
 
                 from nautilus_trader.model.currencies import USD
 
-                equity_val: float
-                # Preferred: account.equity_total(USD) if available (includes unrealized PnL)
-                try:
-                    equity_money = getattr(account, "equity_total")(USD)  # type: ignore[attr-defined]
-                    equity_val = float(equity_money.as_double())
-                except Exception:
-                    # Fallback: compute net liq value = cash + position market value at current close
-                    try:
-                        cash_money = account.balance_total(USD)
-                        cash_val = float(cash_money.as_double())
-                    except Exception:
-                        cash_val = 0.0
-                    # Position quantity for this instrument
-                    pos_qty = 0.0
-                    try:
-                        pos = portfolio.position(self.instrument_id)  # type: ignore[attr-defined]
-                        if hasattr(pos, "net_qty") and hasattr(pos.net_qty, "as_double"):
-                            pos_qty = float(pos.net_qty.as_double())
-                        else:
-                            pos_qty = float(getattr(pos, "quantity", 0.0))
-                    except Exception:
-                        try:
-                            pos = account.position(self.instrument_id)  # type: ignore[attr-defined]
-                            if hasattr(pos, "net_qty") and hasattr(pos.net_qty, "as_double"):
-                                pos_qty = float(pos.net_qty.as_double())
-                            else:
-                                pos_qty = float(getattr(pos, "quantity", 0.0))
-                        except Exception:
-                            pos_qty = 0.0
-                    # Final fallback: use strategy-tracked position size if available
-                    if pos_qty == 0.0 and getattr(self, "_pos_qty", 0) != 0:
-                        pos_qty = float(self._pos_qty)
-                    px = float(bar.close.as_double()) if hasattr(bar.close, "as_double") else float(bar.close)
-                    equity_val = cash_val + (pos_qty * px)
+                bal_money = account.balance_total(USD)
+                bal_val = float(bal_money.as_double()) if hasattr(bal_money, "as_double") else float(bal_money)
 
-                logger.debug(f"Equity snapshot: ${equity_val:.2f}")
+                upnls = portfolio.unrealized_pnls(venue)
+                upnl_money = upnls.get(USD)
+                upnl_val = float(upnl_money.as_double()) if (upnl_money is not None and hasattr(upnl_money, "as_double")) else float(upnl_money or 0.0)
 
+                equity_val = bal_val + upnl_val
+                logger.debug(f"Equity snapshot: cash={bal_val:.2f}, upnl={upnl_val:.2f}, eq={equity_val:.2f}")
             except Exception as e:
-                logger.error(f"❌ CRITICAL: Failed to compute equity: {type(e).__name__}: {e}")
-                logger.error(f"   Portfolio type: {type(self.portfolio) if hasattr(self, 'portfolio') else 'N/A'}")
-                logger.error(f"   Venue: {venue if 'venue' in locals() else 'N/A'}")
-                logger.error(f"   Account type: {type(account) if 'account' in locals() else 'N/A'}")
-                raise RuntimeError(f"Cannot track equity without Nautilus portfolio access: {e}") from e
+                logger.error(f"❌ CRITICAL: Failed to obtain canonical equity (balance_total + unrealized_pnls): {type(e).__name__}: {e}")
+                raise RuntimeError(f"Canonical equity unavailable from Nautilus: {e}") from e
 
             self.equity.append({"ts_utc": ts, "value": equity_val})
 

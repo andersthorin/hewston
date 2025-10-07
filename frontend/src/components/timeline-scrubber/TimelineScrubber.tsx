@@ -3,9 +3,10 @@ import { usePlaybackSelector, usePlaybackStore, selectors } from '../../store/pl
 
 export type TimelineScrubberProps = {
   stepSeconds?: number // keyboard step size
+  timeZone?: string // display timezone (e.g., America/New_York)
 }
 
-export default function TimelineScrubber({ stepSeconds = 60 }: TimelineScrubberProps) {
+export default function TimelineScrubber({ stepSeconds = 60, timeZone = 'America/New_York' }: TimelineScrubberProps) {
   const store = usePlaybackStore()
   const range = usePlaybackSelector(selectors.range)
   const current = usePlaybackSelector(selectors.currentTs)
@@ -13,6 +14,15 @@ export default function TimelineScrubber({ stepSeconds = 60 }: TimelineScrubberP
   const totalFrames = usePlaybackSelector(selectors.totalFrames)
   const currentFrameIndex = usePlaybackSelector(selectors.currentFrameIndex)
   const barRef = useRef<HTMLDivElement | null>(null)
+
+  const formatIso = useCallback((iso: string | null) => {
+    if (!iso) return '…'
+    try {
+      return new Intl.DateTimeFormat(undefined, { timeZone, month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date(iso))
+    } catch {
+      return iso
+    }
+  }, [timeZone])
 
   const pct = useMemo(() => {
     if (typeof totalFrames === 'number' && totalFrames > 0) {
@@ -80,7 +90,7 @@ export default function TimelineScrubber({ stepSeconds = 60 }: TimelineScrubberP
         ))}
       </div>
       <div className="mt-1 text-xs text-slate-500">
-        {range.start ?? '…'} → {current ?? '…'} → {range.end ?? '…'}
+        {formatIso(range.start)} → {formatIso(current)} → {formatIso(range.end)}
       </div>
     </div>
   )

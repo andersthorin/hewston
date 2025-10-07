@@ -120,7 +120,8 @@ async def create_backtest_via_bff(
         if not isinstance(data, dict):
             data = {}
         transformed = {
-            "backtest_id": data.get("run_id") or data.get("backtest_id"),
+            # Tests and consumers expect run_id, not backtest_id
+            "run_id": data.get("run_id") or data.get("backtest_id"),
             "status": data.get("status"),
         }
         return JSONResponse(status_code=response.status_code, content=transformed)
@@ -426,62 +427,15 @@ async def get_complete_backtest_data(
             }
         )
 
-        # Transform to frontend contract expected by frontend (flat, strict keys)
-        metrics_dict = None
-        if cached_response.metrics is not None:
-            md = cached_response.metrics.model_dump()
-            metrics_dict = {k: v for k, v in md.items() if v is not None}
-            if not metrics_dict:
-                metrics_dict = None
-        equity_list = None
-        if cached_response.equity is not None:
-            equity_list = [{"ts": p.ts, "value": p.value} for p in cached_response.equity]
-        orders_list = None
-        if cached_response.orders is not None:
-            orders_list = [
-                {
-                    "ts": o.ts,
-                    "side": (getattr(o, "side", "") or "").lower(),
-                    "quantity": int(getattr(o, "quantity", 0) or 0),
-                    "price": float(getattr(o, "price", 0.0) or 0.0),
-                    "order_type": getattr(o, "order_type", None),
-                    "status": getattr(o, "status", None),
-                }
-                for o in cached_response.orders
-            ]
-        # Determine run window and dataset
-        run_from_val = getattr(cached_response.run, "run_from", None)
-        run_to_val = getattr(cached_response.run, "run_to", None)
-        if (not run_from_val or not run_to_val) and equity_list and len(equity_list) > 0:
-            try:
-                run_from_val = run_from_val or equity_list[0]["ts"]
-                run_to_val = run_to_val or equity_list[-1]["ts"]
-            except Exception:
-                pass
-        dataset_id_val = getattr(cached_response.run, "dataset_id", None)
-
-        frontend_payload = {
-            "backtest_id": cached_response.run.run_id,
-            "dataset_id": dataset_id_val,
-            "strategy_id": cached_response.run.strategy_id,
-            "status": cached_response.run.status,
-            "error_message": getattr(cached_response.run, "error_message", None),
-            "duration_ms": getattr(cached_response.run, "duration_ms", None),
-            "params": cached_response.run.params or {},
-            "run_from": run_from_val,
-            "run_to": run_to_val,
-            "metrics": metrics_dict,
-            "equity": equity_list,
-            "orders": orders_list,
-            "meta": {
-                "aggregated": True,
-                "load_time_ms": cached_response.metadata.load_time_ms,
-                "cache_hit": cached_response.metadata.cache_hit,
-                "source": "bff",
-                "components_loaded": cached_response.metadata.data_sources,
-            },
+        # Return canonical aggregator response shape: {run, metrics, equity, orders, metadata}
+        payload = {
+            "run": cached_response.run.model_dump(exclude_none=True),
+            "metrics": (cached_response.metrics.model_dump(exclude_none=True) if cached_response.metrics is not None else None),
+            "equity": ([p.model_dump(exclude_none=True) for p in cached_response.equity] if cached_response.equity is not None else None),
+            "orders": ([o.model_dump(exclude_none=True) for o in cached_response.orders] if cached_response.orders is not None else None),
+            "metadata": cached_response.metadata.model_dump(exclude_none=True),
         }
-        return JSONResponse(status_code=200, content=frontend_payload)
+        return JSONResponse(status_code=200, content=payload)
 
     # Aggregate data from backend
     try:
@@ -536,62 +490,15 @@ async def get_complete_backtest_data(
             }
         )
 
-        # Transform to frontend contract expected by frontend (flat, strict keys)
-        metrics_dict = None
-        if response.metrics is not None:
-            md = response.metrics.model_dump()
-            metrics_dict = {k: v for k, v in md.items() if v is not None}
-            if not metrics_dict:
-                metrics_dict = None
-        equity_list = None
-        if response.equity is not None:
-            equity_list = [{"ts": p.ts, "value": p.value} for p in response.equity]
-        orders_list = None
-        if response.orders is not None:
-            orders_list = [
-                {
-                    "ts": o.ts,
-                    "side": (getattr(o, "side", "") or "").lower(),
-                    "quantity": int(getattr(o, "quantity", 0) or 0),
-                    "price": float(getattr(o, "price", 0.0) or 0.0),
-                    "order_type": getattr(o, "order_type", None),
-                    "status": getattr(o, "status", None),
-                }
-                for o in response.orders
-            ]
-        # Determine run window and dataset
-        run_from_val = getattr(response.run, "run_from", None)
-        run_to_val = getattr(response.run, "run_to", None)
-        if (not run_from_val or not run_to_val) and equity_list and len(equity_list) > 0:
-            try:
-                run_from_val = run_from_val or equity_list[0]["ts"]
-                run_to_val = run_to_val or equity_list[-1]["ts"]
-            except Exception:
-                pass
-        dataset_id_val = getattr(response.run, "dataset_id", None)
-
-        frontend_payload = {
-            "backtest_id": response.run.run_id,
-            "dataset_id": dataset_id_val,
-            "strategy_id": response.run.strategy_id,
-            "status": response.run.status,
-            "error_message": getattr(response.run, "error_message", None),
-            "duration_ms": getattr(response.run, "duration_ms", None),
-            "params": response.run.params or {},
-            "run_from": run_from_val,
-            "run_to": run_to_val,
-            "metrics": metrics_dict,
-            "equity": equity_list,
-            "orders": orders_list,
-            "meta": {
-                "aggregated": True,
-                "load_time_ms": response.metadata.load_time_ms,
-                "cache_hit": response.metadata.cache_hit,
-                "source": "bff",
-                "components_loaded": response.metadata.data_sources,
-            },
+        # Return canonical aggregator response shape: {run, metrics, equity, orders, metadata}
+        payload = {
+            "run": response.run.model_dump(exclude_none=True),
+            "metrics": (response.metrics.model_dump(exclude_none=True) if response.metrics is not None else None),
+            "equity": ([p.model_dump(exclude_none=True) for p in response.equity] if response.equity is not None else None),
+            "orders": ([o.model_dump(exclude_none=True) for o in response.orders] if response.orders is not None else None),
+            "metadata": response.metadata.model_dump(exclude_none=True),
         }
-        return JSONResponse(status_code=200, content=frontend_payload)
+        return JSONResponse(status_code=200, content=payload)
 
     except ValueError as e:
         # Run not found

@@ -10,6 +10,7 @@ from typing import Any, Dict
 import polars as pl
 
 from backend.adapters.nautilus import NautilusBacktestRunner
+from backend.utils.metrics import compute_cumulative_metrics
 from backend.adapters.sqlite_catalog import SqliteCatalog
 from backend.services.backtests import get_catalog
 from backend.utils.datetime import utc_now
@@ -115,12 +116,212 @@ def run_backtest_and_persist(
 
         # Write artifacts
         logger.info("Writing artifacts to disk...")
-        _write_parquet(result.get("equity", []), equity_path)
+
+        # Use canonical equity captured directly from Nautilus account.equity_total via strategy (no reconstruction)
+        equity_records = list(result.get("equity") or [])
+        if not equity_records:
+            raise RuntimeError("Canonical equity series missing from strategy; cannot persist equity (fail-fast)")
+
+        # Validate final value against Nautilus total_return
+        start_balance = 10000.0
+        backend_total_return = None
+        try:
+            backend_total_return = float((result.get("metrics") or {}).get("total_return"))
+        except Exception:
+            backend_total_return = None
+        if backend_total_return is None:
+            raise RuntimeError("Nautilus total_return missing; cannot validate equity (fail-fast)")
+        expected_final = start_balance * (1.0 + backend_total_return)
+        try:
+            last_val = float(equity_records[-1]["value"])  # type: ignore
+        except Exception:
+            last_val = None
+        if last_val is None:
+            raise RuntimeError("Canonical equity series has invalid last value")
+        tol = max(1e-6, 0.001 * abs(expected_final))  # 0.1% relative tolerance
+        if abs(last_val - expected_final) > tol:
+            raise RuntimeError(
+                f"Canonical equity failed validation: expected_final={expected_final:.6f}, last={last_val}"
+            )
+
+        _write_parquet(equity_records, equity_path)
         _write_parquet(result.get("orders", []), orders_path)
         _write_parquet(result.get("fills", []), fills_path)
-        metrics = result.get("metrics", {})
+
+        # Build metrics artifact: precompute cumulative series aligned to equity timestamps
+        realized: list[tuple[str, float]] = []
+        try:
+            rp = (nautilus.get("series") or {}).get("realized_pnl") or []
+            # Expect [[iso,value], ...]
+            realized = [(str(a[0]), float(a[1])) for a in rp if isinstance(a, (list, tuple)) and len(a) >= 2]
+        except Exception:
+            realized = []
+
+        # If Nautilus analyzer did not provide a realized PnL series, derive a cumulative
+        # realized PnL series from canonical fills (BUY/SELL pairs). This uses only Nautilus
+        # fills data and keeps commissions/slippage if present in fills.
+        if not realized:
+            try:
+                fills_rows = list(result.get("fills") or [])
+                # Sort fills by timestamp
+                def _key_ts(f):
+                    try:
+                        from backend.utils.datetime import normalize_timestamp
+                        ep, iso = normalize_timestamp(f.get("ts_utc"))
+                        return int(ep), iso
+                    except Exception:
+                        return (0, str(f.get("ts_utc") or ""))
+                fills_rows.sort(key=lambda f: _key_ts(f)[0])
+
+                cum = 0.0
+                pos_qty = 0.0
+                avg_entry = 0.0
+                realized = []
+                for f in fills_rows:
+                    side = (f.get("side") or "").upper()
+                    qty = float(f.get("qty") or 0.0)
+                    px = float(f.get("price") or 0.0)
+                    fee = float(f.get("fee") or 0.0)
+                    # timestamp iso
+                    try:
+                        from backend.utils.datetime import normalize_timestamp
+                        _, iso = normalize_timestamp(f.get("ts_utc"))
+                    except Exception:
+                        iso = str(f.get("ts_utc") or "")
+
+                    if side == "BUY" and qty > 0:
+                        # Update weighted average entry price
+                        new_qty = pos_qty + qty
+                        if new_qty > 0:
+                            avg_entry = (avg_entry * pos_qty + px * qty) / new_qty if pos_qty > 0 else px
+                        pos_qty = new_qty
+                        cum -= fee
+                    elif side == "SELL" and qty > 0:
+                        # Realize PnL on sold quantity against average entry
+                        realized_qty = min(qty, pos_qty) if pos_qty > 0 else 0.0
+                        pnl = (px - avg_entry) * realized_qty
+                        cum += pnl
+                        cum -= fee
+                        pos_qty = max(0.0, pos_qty - realized_qty)
+                        # If flat, reset avg_entry
+                        if pos_qty == 0.0:
+                            avg_entry = 0.0
+                        realized.append((iso, float(cum)))
+                # If we produced no points, leave realized empty
+            except Exception:
+                realized = []
+
+        # Derive bar interval (minutes). Prefer runner result → params → default 1m.
+        try:
+            bar_interval_minutes = int(result.get("bar_interval_minutes") or params.get("bar_interval_minutes") or 1)
+        except Exception:
+            bar_interval_minutes = 1
+
+        metrics_series = compute_cumulative_metrics(
+            equity_records,
+            realized,
+            bar_minutes=bar_interval_minutes,
+        )
+
+        # Compact metrics series drastically: store only when realized_pnl or win_rate changes.
+        # Also store only those keys; fill others at stream time from equity (cheap) to keep artifact small.
+        compact_series: list = []
+        prev_rp = object()
+        prev_wr = object()
+        for ts_iso, m in metrics_series:
+            rp = m.get("realized_pnl")
+            wr = m.get("win_rate")
+            changed = (rp != prev_rp) or (wr != prev_wr)
+            if not compact_series or changed:
+                compact_series.append([ts_iso, {"realized_pnl": rp, "win_rate": wr}])
+                prev_rp, prev_wr = rp, wr
+        # Ensure the last timestamp is present (idempotent if unchanged)
+        if metrics_series:
+            last_ts = metrics_series[-1][0]
+            if not compact_series or compact_series[-1][0] != last_ts:
+                last_m = metrics_series[-1][1]
+                compact_series.append([last_ts, {"realized_pnl": last_m.get("realized_pnl"), "win_rate": last_m.get("win_rate")}])
+
+        # Compute end position qty from fills (diagnostic; net long only for our SMA strategy)
+        end_pos_qty_fills = 0.0
+        try:
+            end_pos_qty_fills = 0.0
+            for f in (result.get("fills", []) or []):
+                side = (f.get("side") or "").upper()
+                qty = float(f.get("qty") or 0.0)
+                if side == "BUY":
+                    end_pos_qty_fills += qty
+                elif side == "SELL":
+                    end_pos_qty_fills -= qty
+        except Exception:
+            end_pos_qty_fills = 0.0
+
+        # Annualization factor (P) disclosure for transparency
+        try:
+            minutes_per_session = 390
+            sessions_per_year = 252
+            periods_per_session = max(1, int(minutes_per_session / max(1, int(bar_interval_minutes))))
+            annualization_P = float(periods_per_session * sessions_per_year)
+        except Exception:
+            annualization_P = float(252 * 390)
+
+        # Extract canonical Sharpe from Nautilus raw stats (if available)
+        try:
+            nautilus_stats = (result.get("nautilus", {}) or {}).get("stats", {}) or {}
+            sr_val = None
+            try:
+                sr_val = (nautilus_stats.get("returns") or {}).get("Sharpe Ratio (252 days)")
+                if sr_val is not None:
+                    sr_val = float(sr_val)
+            except Exception:
+                sr_val = None
+        except Exception:
+            nautilus_stats = {}
+            sr_val = None
+
+        metrics_artifact = {
+            "stats": {"raw": nautilus_stats},
+            "series": compact_series,
+            "bar_interval_minutes": bar_interval_minutes,
+            "annualization_P": annualization_P,
+            "end_pos_qty_fills": float(end_pos_qty_fills),
+        }
+        if sr_val is not None:
+            metrics_artifact["sharpe_ratio"] = sr_val
+        # If we have a realized series, expose its last point for summary display
+        try:
+            if compact_series:
+                last_ts = compact_series[-1][0]
+                # find last realized pnl in metrics_series by timestamp match
+                try:
+                    last_m = next((m for ts_iso, m in metrics_series[::-1] if ts_iso == last_ts), None)
+                except Exception:
+                    last_m = metrics_series[-1][1] if metrics_series else None
+                if last_m and last_m.get("realized_pnl") is not None:
+                    metrics_artifact["realized_pnl"] = float(last_m.get("realized_pnl"))
+        except Exception:
+            pass
+        try:
+            res_metrics = (result.get("metrics") or {})
+            # Promote canonical Nautilus metrics to top-level for final UI override
+            for k in ("total_return", "max_drawdown", "win_rate"):
+                if res_metrics.get(k) is not None:
+                    metrics_artifact[k] = float(res_metrics.get(k))
+            # Also surface ending balance, unrealized PnL, and ending equity if present
+            if res_metrics.get("ending_balance") is not None:
+                metrics_artifact["ending_balance"] = float(res_metrics.get("ending_balance"))
+            if res_metrics.get("unrealized_pnl") is not None:
+                metrics_artifact["unrealized_pnl"] = float(res_metrics.get("unrealized_pnl"))
+            if res_metrics.get("ending_equity") is not None:
+                metrics_artifact["ending_equity"] = float(res_metrics.get("ending_equity"))
+            if res_metrics.get("end_position_qty") is not None:
+                metrics_artifact["end_pos_qty_nautilus"] = float(res_metrics.get("end_position_qty"))
+        except Exception:
+            pass
+
         ensure_dir(out_dir)
-        metrics_path.write_text(json.dumps(metrics, indent=2))
+        # Write minified JSON to reduce file size further
+        metrics_path.write_text(json.dumps(metrics_artifact, separators=(",", ":")))
         logger.info(f"Artifacts written to {out_dir}")
 
         # Write manifest
@@ -138,6 +339,7 @@ def run_backtest_and_persist(
             "env_lock": None,
             "calendar_version": "NAZDAQ-v1",
             "tz": "America/New_York",
+            "bar_interval_minutes": bar_interval_minutes,
             "created_at": created_at_iso,
             "status": "DONE",
         }
@@ -153,7 +355,7 @@ def run_backtest_and_persist(
             orders_path=str(orders_path),
             fills_path=str(fills_path),
         )
-        cat.upsert_backtest_metrics(run_id, metrics)
+        # NOTE: DB metrics upsert deprecated for this epic; metrics are served via metrics_path artifact.
 
         return {
             "run_id": run_id,

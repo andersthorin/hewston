@@ -1,12 +1,14 @@
 
 export type MetricsSummaryProps = {
   metrics?: Partial<{
+    // Cumulative metrics
     total_return: number
     sharpe_ratio: number
     max_drawdown: number
     win_rate: number
-    profit_factor: number
-    total_trades: number
+    realized_pnl: number
+    // Per-bar metric
+    return: number
   }>
   equity?: Array<{ ts: string; value: number }> | null
   loading?: boolean
@@ -30,14 +32,6 @@ function formatRatio(v: number | null | undefined, digits = 2): string {
   }
 }
 
-function formatInt(v: number | null | undefined): string {
-  if (v === null || v === undefined || Number.isNaN(v)) return '—'
-  try {
-    return `${Math.round(Number(v))}`
-  } catch {
-    return '—'
-  }
-}
 
 function formatCurrency(v: number | null | undefined): string {
   if (v === null || v === undefined || Number.isNaN(v)) return '—'
@@ -55,11 +49,11 @@ const metricDefs: Array<{
   title?: string
 }> = [
   { key: 'total_return', label: 'Total return', formatter: formatPercent, title: 'End-to-start equity change' },
+  { key: 'return', label: 'Daily return', formatter: formatPercent, title: 'Close-to-close return (last completed day)' },
   { key: 'win_rate', label: 'Win rate', formatter: formatPercent, title: 'Winning trades / total trades' },
   { key: 'max_drawdown', label: 'Max drawdown', formatter: formatPercent, title: 'Peak-to-trough equity drawdown' },
-  { key: 'sharpe_ratio', label: 'Sharpe', formatter: (v) => formatRatio(v, 2), title: 'Return / volatility (unitless)' },
-  { key: 'profit_factor', label: 'Profit factor', formatter: (v) => formatRatio(v, 2), title: 'Gross profit / gross loss' },
-  { key: 'total_trades', label: 'Trades', formatter: formatInt, title: 'Total executed trades' },
+  { key: 'sharpe_ratio', label: 'Sharpe', formatter: (v) => formatRatio(v, 2), title: 'Return / volatility (unitless), daily (√252)' },
+  { key: 'realized_pnl', label: 'Realized PnL', formatter: formatCurrency, title: 'Cumulative realized PnL (USD)' },
 ]
 
 function getCurrentEquity(equity: Array<{ ts: string; value: number }> | null | undefined): number | undefined {

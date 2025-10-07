@@ -53,8 +53,8 @@ export default function BacktestDetailView() {
 
       {!isErrorStatus && (
         <>
-          {/* Live streaming metrics (single panel) */}
-          <StreamingMetricsPanel />
+          {/* Live streaming metrics (single panel). When complete, override with final metrics */}
+          <StreamingMetricsPanel finalMetrics={isDone ? (data?.metrics || undefined) : undefined} />
           {/* Symbol focus (E11.3) */}
           <SymbolFocus />
 

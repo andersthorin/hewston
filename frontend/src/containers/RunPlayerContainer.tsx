@@ -1,12 +1,13 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useHourChartData } from '../hooks/useChartData'
 
 import { useBacktestPlayback } from '../services/ws'
 import { PlaybackControls } from '../components/playback-controls'
 import ChartOHLC, { type CandlestickChartAPI } from '../components/ChartOHLC'
 import { TimelineScrubber } from '../components/timeline-scrubber'
+
 import OverlaysOrders from '../components/OverlaysOrders'
-import playbackStore from '../store/playbackClock'
+import playbackStore, { usePlaybackSelector, selectors } from '../store/playbackClock'
 import type { CandlestickData, Time } from 'lightweight-charts'
 import type { StreamFrameT } from '../schemas/stream'
 
@@ -38,10 +39,18 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   const playback = useBacktestPlayback(backtest_id)
   const { state, onPlay, onPause, onSeek, subscribe } = playback
 
-  // Wire WS controls into playback store controls
+  // Wire WS controls into playback store controls; wrap seek for immediate visual feedback
   useEffect(() => {
-    playbackStore.setControls({ play: onPlay, pause: onPause, seek: onSeek })
+    playbackStore.setControls({
+      play: onPlay,
+      pause: onPause,
+      seek: (ts: string) => {
+        onSeek(ts)
+      }
+    })
   }, [onPlay, onPause, onSeek])
+  // Wrap seek to provide immediate visual feedback by updating visible range optimistically
+
 
   // Reflect playing state into store
   useEffect(() => { playbackStore._setPlaying(state.playing) }, [state.playing])
@@ -55,18 +64,62 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   const [fps, setFps] = useState(0)
 
   // Track the actual run window; prefer props (from manifest) and fall back to streaming inference
-  const [runFrom, setRunFrom] = useState<string | null>(run_from ?? null)
-  const [runTo, setRunTo] = useState<string | null>(run_to ?? null)
-  useEffect(() => { setRunFrom(run_from ?? null); }, [run_from])
-  useEffect(() => { setRunTo(run_to ?? null); }, [run_to])
+  const normalizeBound = (v: string | null | undefined, isEnd: boolean): string | null => {
+    if (!v) return null
+    if (v.includes('T')) return v
+    // Treat date-only inputs as UTC day bounds to avoid zero-length windows
+    return isEnd ? `${v}T23:59:59Z` : `${v}T00:00:00Z`
+  }
+  const [runFrom, setRunFrom] = useState<string | null>(normalizeBound(run_from, false))
+  const [runTo, setRunTo] = useState<string | null>(normalizeBound(run_to, true))
+  // Subscribe to current simulated time for visible-range sync
+  const currentTs = usePlaybackSelector(selectors.currentTs)
 
-  // View mode must be declared before effects that reference it
+  // Helper to convert Date -> BusinessDay (UTC)
   const [viewMode, setViewMode] = useState<'daily'|'hourly'>('daily')
+
+  const toBusinessDay = useCallback((d: Date) => ({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() }), [])
+
+  // Compute and apply a visible range from run start -> current time (right edge at current)
+  const updateVisibleRange = useCallback((isoTs: string | null) => {
+    if (!isoTs || !runFrom) return
+    const endDate = new Date(isoTs)
+    const startDate = new Date(runFrom)
+    if (!isFinite(endDate.getTime()) || !isFinite(startDate.getTime())) return
+
+    try {
+      if (viewMode === 'daily') {
+        // Convert both bounds to BusinessDay (UTC) and clamp end >= start
+        const endMs = endDate.getTime()
+        const startMs = startDate.getTime()
+        const clampedEnd = endMs < startMs ? startDate : endDate
+        const fromBD = toBusinessDay(startDate)
+        const toBD = toBusinessDay(clampedEnd)
+        ohlcRef.current?.setVisibleRange(fromBD as unknown as Time, toBD as unknown as Time)
+        ohlcRef.current?.setBarSpacing(14)
+      } else {
+        // Hourly/minute: use unix seconds
+        const startSec = Math.floor(startDate.getTime() / 1000)
+        let endSec = Math.floor(endDate.getTime() / 1000)
+        if (endSec < startSec) endSec = startSec
+        ohlcRef.current?.setVisibleRange(startSec as unknown as Time, endSec as unknown as Time)
+        ohlcRef.current?.setBarSpacing(14)
+      }
+    } catch (error) {
+      console.warn('Failed to update visible range:', error)
+    }
+  }, [runFrom, viewMode, toBusinessDay])
+
+  useEffect(() => { setRunFrom(normalizeBound(run_from, false)); }, [run_from])
+  useEffect(() => { setRunTo(normalizeBound(run_to, true)); }, [run_to])
+
+
 
   // Subscribe to frames to infer run window only if props not provided
   useEffect(() => {
     const unsub = subscribe((frame: StreamFrameT) => {
       try {
+
         recvCountRef.current += 1
         if (recvCountRef.current <= 50) {
           const t = frame?.equity?.ts || frame?.ts
@@ -77,7 +130,6 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
           const now = Date.now()
           const dt = lastRenderAtRef.current ? now - lastRenderAtRef.current : 0
           lastRenderAtRef.current = now
-          // eslint-disable-next-line no-console
           console.debug('[diag][render]', { dt })
         }
         // Always forward frame to playback store
@@ -91,11 +143,11 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
         const hasSnapshots = !!(dailySnapshotsRef.current && dayKeysRef.current && dayKeysRef.current.length > 0)
 
         // Infer run window from frames only if not provided via props
-        // This ensures the timeline shows the correct range immediately
+        // Use exact ISO timestamps (UTC) for precise timeline math and avoid timezone drift
         if (tsStr && !runFrom && !runTo) {
-          const day = tsStr.slice(0, 10)
-          setRunFrom(prev => (prev && prev <= day ? prev : day))
-          setRunTo(prev => (prev && prev >= day ? prev : day))
+          const tsMs = new Date(tsStr).getTime()
+          setRunFrom(prev => (prev && new Date(prev).getTime() <= tsMs ? prev : tsStr))
+          setRunTo(prev => (prev && new Date(prev).getTime() >= tsMs ? prev : tsStr))
         }
 
         // Drive the chart from streaming frames first; fall back to hourly snapshots if needed
@@ -110,10 +162,9 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
             const t0 = performance.now()
             if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
             const t1 = performance.now()
-            // eslint-disable-next-line no-console
             console.debug('[diag][chart.update_ms]', { ms: +(t1 - t0).toFixed(2) })
             const dayCur = tsStr.slice(0,10)
-            if (dayCur !== lastDayRef.current || !seededRef.current) { ohlcRef.current?.scrollToLatest() }
+            // visible range is managed explicitly; avoid implicit scrolling
             seededRef.current = true
             lastDayRef.current = dayCur
           } else if (hasSnapshots) {
@@ -139,9 +190,8 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
                 const t0 = performance.now()
                 if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
                 const t1 = performance.now()
-                // eslint-disable-next-line no-console
                 console.debug('[diag][chart.update_ms]', { ms: +(t1 - t0).toFixed(2) })
-                if (day !== lastDayRef.current || !seededRef.current) { ohlcRef.current?.scrollToLatest() }
+                // visible range is managed explicitly; avoid implicit scrolling
                 seededRef.current = true
                 lastDayRef.current = day
               }
@@ -160,6 +210,19 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   }, [subscribe, run_from, run_to, runFrom, runTo, viewMode])
 
   // Imperative chart refs
+
+  // Re-register seek wrapper when view mode changes to ensure correct time type handling
+  useEffect(() => {
+    playbackStore.setControls({
+      play: onPlay,
+      pause: onPause,
+      seek: (ts: string) => {
+        updateVisibleRange(ts)
+        onSeek(ts)
+      }
+    })
+  }, [viewMode, onPlay, onPause, onSeek, updateVisibleRange])
+
   const ohlcRef = useRef<CandlestickChartAPI>(null)
   const seededRef = useRef<boolean>(false)
 
@@ -220,6 +283,7 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
     // bars are sorted by time; build cumulative OHLC per calendar day
     let curDay: string | null = null
     let o: number | null = null, h = -Infinity, l = Infinity, c: number | null = null
+
     const bars = hourResp.bars
     for (const b of bars) {
       const tsDate = new Date(b.t)
@@ -260,6 +324,8 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
     console.debug('[RunPlayer] snapshots ready, sending ready signal to backend')
     readySentRef.current = true
 
+
+
     // Send ready signal to backend via playback service
     if (playback) {
       try {
@@ -279,6 +345,7 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
 
 
   const formatTime = (t: Time, locale?: string) => {
+    const tz = 'America/New_York' // NASDAQ time zone for display
     try {
       let d: Date
       if (typeof t === 'number') d = new Date(t * 1000)
@@ -286,15 +353,28 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
       else if (t && typeof t === 'object' && 'year' in t && 'month' in t && 'day' in t) {
         const timeObj = t as { year: number; month: number; day: number }
         d = new Date(Date.UTC(timeObj.year, timeObj.month - 1, timeObj.day))
+
+
       } else return String(t)
-      return new Intl.DateTimeFormat(locale || undefined, { month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(d)
+      return new Intl.DateTimeFormat(locale || undefined, { timeZone: tz, month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(d)
     } catch (error) {
       console.warn('Failed to format time:', error)
       return String(t)
     }
-
   }
 
+
+
+  // Maintain fixed bar spacing and sync visible range when mode changes
+  useEffect(() => {
+    ohlcRef.current?.setBarSpacing(14)
+    updateVisibleRange(currentTs ?? null)
+  }, [viewMode, updateVisibleRange, currentTs])
+
+  // Keep visible window pinned to the right during playback and when bounds change
+  useEffect(() => {
+    updateVisibleRange(currentTs ?? null)
+  }, [currentTs, runFrom, updateVisibleRange])
 
   return (
     <div className="space-y-4">
@@ -304,6 +384,8 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
           <div className="text-slate-500 text-sm">
             Transport: {state.status}
             <span className="mx-2">•</span>
+
+
             Frames: {renderedCount}
             <span className="mx-2">•</span>
             FPS: {fps}

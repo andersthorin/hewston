@@ -45,6 +45,13 @@ export const StreamFrameSchema = z.object({
   equity: EquitySchema.nullable().optional(),
   metrics: z
     .object({
+      return: z.number().nullable().optional(),
+      realized_pnl: z.number().nullable().optional(),
+      total_return: z.number().nullable().optional(),
+      drawdown: z.number().nullable().optional(),
+      sharpe: z.number().nullable().optional(),
+      win_rate: z.number().nullable().optional(),
+      // Backward compatibility: accept old fields if present; ignored by UI mapping
       total_return_so_far: z.number().nullable().optional(),
       max_drawdown_so_far: z.number().nullable().optional(),
       sharpe_so_far: z.number().nullable().optional(),
