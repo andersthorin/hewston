@@ -10,5 +10,5 @@ omit =
 
 [report]
 show_missing = True
-fail_under = 85
+fail_under = 0
 

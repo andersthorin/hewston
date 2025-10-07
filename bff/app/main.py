@@ -13,7 +13,7 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.app.logging_setup import configure_logging
+from bff.app.logging_setup import configure_logging
 from bff.api.backtests import router as backtests_router
 from bff.api.chart_data import router as chart_data_router
 from bff.api.health import router as health_router
