@@ -84,7 +84,7 @@ export const ChartOHLC = forwardRef<CandlestickChartAPI, ChartOHLCProps>(functio
         console.warn('Failed to set bar spacing:', error)
       }
     },
-  }), [])
+  }), [chartRef, seriesRef])
 
   // Cleanup is now handled by the useChartInitialization hook
 

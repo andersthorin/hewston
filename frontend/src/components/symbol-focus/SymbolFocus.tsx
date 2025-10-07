@@ -9,8 +9,7 @@ export default function SymbolFocus() {
 
   const onChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const v = e.target.value
-    // @ts-expect-error store may have setFocus
-    store.setFocus?.(v === 'All' ? null : v)
+    store.setFocus(v === 'All' ? null : v)
   }
 
   return (

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { useHourChartData } from '../hooks/useChartData'
 
 import { useBacktestPlayback } from '../services/ws'
@@ -45,8 +45,6 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
       play: onPlay,
       pause: onPause,
       seek: (ts: string) => {
-        // Optimistically move the chart window to the target time
-        updateVisibleRange(ts)
         onSeek(ts)
       }
     })
@@ -78,10 +76,12 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   const currentTs = usePlaybackSelector(selectors.currentTs)
 
   // Helper to convert Date -> BusinessDay (UTC)
-  const toBusinessDay = (d: Date) => ({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() })
+  const [viewMode, setViewMode] = useState<'daily'|'hourly'>('daily')
+
+  const toBusinessDay = useCallback((d: Date) => ({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, day: d.getUTCDate() }), [])
 
   // Compute and apply a visible range from run start -> current time (right edge at current)
-  const updateVisibleRange = (isoTs: string | null) => {
+  const updateVisibleRange = useCallback((isoTs: string | null) => {
     if (!isoTs || !runFrom) return
     const endDate = new Date(isoTs)
     const startDate = new Date(runFrom)
@@ -108,13 +108,12 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
     } catch (error) {
       console.warn('Failed to update visible range:', error)
     }
-  }
+  }, [runFrom, viewMode, toBusinessDay])
 
   useEffect(() => { setRunFrom(normalizeBound(run_from, false)); }, [run_from])
   useEffect(() => { setRunTo(normalizeBound(run_to, true)); }, [run_to])
 
-  // View mode must be declared before effects that reference it
-  const [viewMode, setViewMode] = useState<'daily'|'hourly'>('daily')
+
 
   // Subscribe to frames to infer run window only if props not provided
   useEffect(() => {
@@ -131,7 +130,6 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
           const now = Date.now()
           const dt = lastRenderAtRef.current ? now - lastRenderAtRef.current : 0
           lastRenderAtRef.current = now
-          // eslint-disable-next-line no-console
           console.debug('[diag][render]', { dt })
         }
         // Always forward frame to playback store
@@ -164,7 +162,6 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
             const t0 = performance.now()
             if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
             const t1 = performance.now()
-            // eslint-disable-next-line no-console
             console.debug('[diag][chart.update_ms]', { ms: +(t1 - t0).toFixed(2) })
             const dayCur = tsStr.slice(0,10)
             // visible range is managed explicitly; avoid implicit scrolling
@@ -193,7 +190,6 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
                 const t0 = performance.now()
                 if (!seededRef.current) { ohlcRef.current?.reset([dp]) } else { ohlcRef.current?.update(dp) }
                 const t1 = performance.now()
-                // eslint-disable-next-line no-console
                 console.debug('[diag][chart.update_ms]', { ms: +(t1 - t0).toFixed(2) })
                 // visible range is managed explicitly; avoid implicit scrolling
                 seededRef.current = true
@@ -225,7 +221,7 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
         onSeek(ts)
       }
     })
-  }, [viewMode])
+  }, [viewMode, onPlay, onPause, onSeek, updateVisibleRange])
 
   const ohlcRef = useRef<CandlestickChartAPI>(null)
   const seededRef = useRef<boolean>(false)
@@ -373,12 +369,12 @@ function RunPlayerContainer({ backtest_id, dataset_id, run_from, run_to }: RunPl
   useEffect(() => {
     ohlcRef.current?.setBarSpacing(14)
     updateVisibleRange(currentTs ?? null)
-  }, [viewMode])
+  }, [viewMode, updateVisibleRange, currentTs])
 
   // Keep visible window pinned to the right during playback and when bounds change
   useEffect(() => {
     updateVisibleRange(currentTs ?? null)
-  }, [currentTs, runFrom])
+  }, [currentTs, runFrom, updateVisibleRange])
 
   return (
     <div className="space-y-4">
