@@ -2,8 +2,21 @@ name: Python CI
 
 on:
   push:
+    branches:
+      - main
+      - release/**
+      - hotfix/**
+    tags:
+      - '*'
   pull_request:
+    branches:
+      - '**'
   workflow_dispatch:
+
+concurrency:
+  group: python-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 
 jobs:
   quality:
