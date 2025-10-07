@@ -1,4 +1,4 @@
-name: Python CI ${{ matrix.service }}
+name: Python CI
 
 on:
   push:
