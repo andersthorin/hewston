@@ -6,7 +6,6 @@ exclude = '''
   \.venv\
 | node_modules\
 | frontend\
-| tmp_data_bff_debug\
 )/
 '''
 
@@ -19,7 +18,6 @@ exclude = [
   ".venv",
   "node_modules",
   "frontend",
-  "tmp_data_bff_debug",
 ]
 
 
