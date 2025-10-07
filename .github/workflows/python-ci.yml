@@ -42,7 +42,7 @@ jobs:
 
       - name: Install test dependencies
         run: |
-          pip install pandas polars httpx pydantic pytest-asyncio
+          pip install pandas polars httpx pydantic pytest-asyncio fastapi
 
       - name: Ruff (lint)
         run: ruff check backend bff
