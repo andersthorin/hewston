@@ -3,7 +3,7 @@ import tempfile
 from pathlib import Path
 
 import backend.jobs.ingest as ingest
-from tests.utils import setup_test_environment, get_test_symbol_year
+from backend.tests_support.utils import setup_test_environment, get_test_symbol_year
 
 
 def test_ingest_idempotent_and_force(tmp_path, monkeypatch):
