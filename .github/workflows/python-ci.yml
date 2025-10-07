@@ -3,6 +3,7 @@ name: Python CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 jobs:
   quality:
@@ -14,9 +15,6 @@ jobs:
         service: [backend, bff]
         python-version: ["3.11"]
 
-    defaults:
-      run:
-        working-directory: ${{ matrix.service }}
 
     steps:
       - name: Checkout
