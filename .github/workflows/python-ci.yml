@@ -40,6 +40,10 @@ jobs:
           bandit --version
           pip-audit --version
 
+      - name: Install test dependencies
+        run: |
+          pip install pandas polars httpx
+
       - name: Ruff (lint)
         run: ruff check backend bff
 
