@@ -5,7 +5,6 @@ import userEvent from '@testing-library/user-event'
 import { BacktestsTable, type BacktestSummaryRow } from '../BacktestsTable'
 import React from 'react'
 
-
 function row(overrides: Partial<BacktestSummaryRow> = {}): BacktestSummaryRow {
   return {
     backtest_id: 'bt_1',
@@ -31,7 +30,10 @@ describe('BacktestsTable', () => {
   })
 
   it('shows queued/running badges and hides View until terminal', () => {
-    const items: BacktestSummaryRow[] = [row({ status: 'QUEUED' }), row({ status: 'RUNNING', backtest_id: 'bt_2' })]
+    const items: BacktestSummaryRow[] = [
+      row({ status: 'QUEUED' }),
+      row({ status: 'RUNNING', backtest_id: 'bt_2' }),
+    ]
     render(<BacktestsTable items={items} />)
     expect(screen.getAllByText('Queued').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Running').length).toBeGreaterThan(0)
@@ -68,4 +70,3 @@ describe('BacktestsTable', () => {
     expect(badge.getAttribute('aria-live')).toBe('polite')
   })
 })
-

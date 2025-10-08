@@ -31,7 +31,6 @@ export default function StreamingMetricsPanel({ finalMetrics }: { finalMetrics?:
   // While playing, prefer streaming values; when at end, prefer final Nautilus metrics for exactness
   let mapped = mappedStream
 
-
   const eq = frame?.equity
   const currentIndex = usePlaybackSelector(selectors.currentFrameIndex)
   const totalFrames = usePlaybackSelector(selectors.totalFrames)
@@ -60,11 +59,15 @@ export default function StreamingMetricsPanel({ finalMetrics }: { finalMetrics?:
   // On the final frame, override all key metrics with canonical Nautilus values when available
   if (atEnd && finalMetrics) {
     const overrides: Record<string, number | null | undefined> = {}
-    if (typeof finalMetrics.total_return === 'number') overrides.total_return = finalMetrics.total_return
-    if (typeof finalMetrics.max_drawdown === 'number') overrides.max_drawdown = finalMetrics.max_drawdown
-    if (typeof finalMetrics.sharpe_ratio === 'number') overrides.sharpe_ratio = finalMetrics.sharpe_ratio
+    if (typeof finalMetrics.total_return === 'number')
+      overrides.total_return = finalMetrics.total_return
+    if (typeof finalMetrics.max_drawdown === 'number')
+      overrides.max_drawdown = finalMetrics.max_drawdown
+    if (typeof finalMetrics.sharpe_ratio === 'number')
+      overrides.sharpe_ratio = finalMetrics.sharpe_ratio
     if (typeof finalMetrics.win_rate === 'number') overrides.win_rate = finalMetrics.win_rate
-    if (typeof finalMetrics.realized_pnl === 'number') overrides.realized_pnl = finalMetrics.realized_pnl
+    if (typeof finalMetrics.realized_pnl === 'number')
+      overrides.realized_pnl = finalMetrics.realized_pnl
     mapped = { ...mapped, ...overrides }
   }
 

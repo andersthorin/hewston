@@ -59,7 +59,15 @@ function Row({ r, onView }: { r: BacktestSummaryRow; onView?: (id: string) => vo
   const isDone = s === 'DONE' || s === 'COMPLETED'
   const isError = s === 'ERROR' || s === 'FAILED'
   const isTerminal = isDone || isError
-  const label = isQueued ? 'Queued' : isRunning ? 'Running' : isDone ? 'Done' : isError ? 'Error' : s
+  const label = isQueued
+    ? 'Queued'
+    : isRunning
+      ? 'Running'
+      : isDone
+        ? 'Done'
+        : isError
+          ? 'Error'
+          : s
   const badgeClass = isQueued
     ? 'bg-slate-200 text-slate-700'
     : isRunning
@@ -99,20 +107,36 @@ function Row({ r, onView }: { r: BacktestSummaryRow; onView?: (id: string) => vo
       <td className="px-2 py-1">{r.duration_ms ?? ''}</td>
       {/* Metrics columns */}
       <td className="px-2 py-1">
-        {isTerminal && typeof r.total_return === 'number'
-          ? <span className={r.total_return >= 0 ? 'text-emerald-700' : 'text-rose-700'}>{(r.total_return * 100).toFixed(2)}%</span>
-          : <span>—</span>}
+        {isTerminal && typeof r.total_return === 'number' ? (
+          <span className={r.total_return >= 0 ? 'text-emerald-700' : 'text-rose-700'}>
+            {(r.total_return * 100).toFixed(2)}%
+          </span>
+        ) : (
+          <span>—</span>
+        )}
       </td>
       <td className="px-2 py-1">
-        {isTerminal && typeof r.max_drawdown === 'number'
-          ? <span className={r.max_drawdown <= 0 ? 'text-rose-700' : 'text-slate-700'}>{(r.max_drawdown * 100).toFixed(2)}%</span>
-          : <span>—</span>}
+        {isTerminal && typeof r.max_drawdown === 'number' ? (
+          <span className={r.max_drawdown <= 0 ? 'text-rose-700' : 'text-slate-700'}>
+            {(r.max_drawdown * 100).toFixed(2)}%
+          </span>
+        ) : (
+          <span>—</span>
+        )}
       </td>
       <td className="px-2 py-1">
-        {isTerminal && typeof r.sharpe_ratio === 'number' ? r.sharpe_ratio.toFixed(2) : <span>—</span>}
+        {isTerminal && typeof r.sharpe_ratio === 'number' ? (
+          r.sharpe_ratio.toFixed(2)
+        ) : (
+          <span>—</span>
+        )}
       </td>
       <td className="px-2 py-1">
-        {isTerminal && typeof r.win_rate === 'number' ? `${(r.win_rate * 100).toFixed(1)}%` : <span>—</span>}
+        {isTerminal && typeof r.win_rate === 'number' ? (
+          `${(r.win_rate * 100).toFixed(1)}%`
+        ) : (
+          <span>—</span>
+        )}
       </td>
       <td className="px-2 py-1">
         {isTerminal ? (

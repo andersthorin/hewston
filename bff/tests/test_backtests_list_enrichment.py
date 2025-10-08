@@ -60,7 +60,7 @@ class TestBacktestsListEnrichment:
             strategy_id=None,
             run_from=None,
             run_to=None,
-            order='-created_at',
+            order="-created_at",
             backend_client=mock_backend_client,
             redis_client=None,
         )

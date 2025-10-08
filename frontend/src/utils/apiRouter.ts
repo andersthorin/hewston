@@ -60,7 +60,12 @@ class APIClientRouter {
     timeout: number,
   ): Promise<T> => {
     const baseUrl = this.extractBaseUrl(evaluation.endpointUrl)
-    const method = ((requestOptions.method || 'GET') as string).toUpperCase() as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
+    const method = ((requestOptions.method || 'GET') as string).toUpperCase() as
+      | 'GET'
+      | 'POST'
+      | 'PUT'
+      | 'DELETE'
+      | 'PATCH'
     const fullUrl = this.buildFullUrl(baseUrl, endpoint, evaluation.source, method)
 
     const controller = new AbortController()
@@ -89,7 +94,12 @@ class APIClientRouter {
   /**
    * Build full URL based on endpoint and source.
    */
-  buildFullUrl = (baseUrl: string, endpoint: string, source: 'bff' | 'backend', method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'): string => {
+  buildFullUrl = (
+    baseUrl: string,
+    endpoint: string,
+    source: 'bff' | 'backend',
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+  ): string => {
     // Remove leading slash from endpoint if present
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
 
@@ -105,7 +115,11 @@ class APIClientRouter {
   /**
    * Transform endpoint for BFF routing.
    */
-  transformBffEndpoint = (baseUrl: string, endpoint: string, method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'): string => {
+  transformBffEndpoint = (
+    baseUrl: string,
+    endpoint: string,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+  ): string => {
     // Map frontend endpoints to canonical BFF endpoints
     if (endpoint.startsWith('chart-data')) {
       // Preserve any tail (e.g. ?query)

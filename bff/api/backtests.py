@@ -18,9 +18,7 @@ from fastapi.responses import JSONResponse
 
 from bff.app.dependencies import get_backend_client, get_redis_client
 from bff.app.config import MAX_CONCURRENT_BACKEND_REQUESTS
-from bff.models.backtest_data import (
-    BacktestDataRequest,
-)
+from bff.models.backtest_data import BacktestDataRequest
 from bff.services.backend_client import create_backend_client
 from bff.services.backtest_aggregator import BacktestDataAggregator
 from bff.services.cache import CacheService
