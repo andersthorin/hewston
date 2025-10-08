@@ -89,7 +89,7 @@ export function BacktestsListContainer() {
   async function handleCreateSample() {
     try {
       setCreating(true)
-      const resp = await createBacktest.mutateAsync({
+      await createBacktest.mutateAsync({
         request: {
           strategy_id: 'sma_crossover',
           params: { fast: 20, slow: 50 },

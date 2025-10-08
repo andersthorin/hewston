@@ -17,7 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 
 from bff.app.dependencies import get_backend_client, get_redis_client
-from bff.app.config import FEATURE_FLAGS, MAX_CONCURRENT_BACKEND_REQUESTS
+from bff.app.config import MAX_CONCURRENT_BACKEND_REQUESTS
 from bff.models.backtest_data import (
     BacktestDataRequest,
 )
