@@ -2,25 +2,9 @@
 
 import { createRef } from 'react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, cleanup } from '@testing-library/react'
+import { render, cleanup, waitFor } from '@testing-library/react'
 
-vi.mock('lightweight-charts', () => {
-  const timeScale = { applyOptions: vi.fn(), fitContent: vi.fn() }
-  const chart = {
-    applyOptions: vi.fn(),
-    timeScale: vi.fn(() => timeScale),
-    addCandlestickSeries: vi.fn(() => ({ setData: vi.fn(), update: vi.fn() })),
-    addLineSeries: vi.fn(() => ({ setData: vi.fn(), update: vi.fn() })),
-    remove: vi.fn(),
-  }
-  return {
-    createChart: vi.fn(() => chart),
-    ColorType: { Solid: 'solid' },
-    CandlestickSeries: {},
-    LineSeries: {},
-  }
-})
-
+// Use the global lightweight-charts mock from test-setup.ts
 import { createChart as createChartLWC } from 'lightweight-charts'
 import ChartOHLC, { type CandlestickChartAPI } from './ChartOHLC'
 import type { MockChart } from '../types/charts'
@@ -31,11 +15,18 @@ const getChartMock = (): MockChart => (createChartLWC as any).mock.results[0].va
 describe('imperative charts API', () => {
   beforeEach(() => cleanup())
 
-  it('ChartOHLC exposes reset/update and calls setData/update', () => {
+  it('ChartOHLC exposes reset/update and calls setData/update', async () => {
     const ref = createRef<CandlestickChartAPI>()
     render(<ChartOHLC ref={ref} />)
     const chart = getChartMock()
-    const series = chart.addCandlestickSeries.mock.results[0].value
+    await waitFor(() => {
+      const addSeriesCalls = (chart.addSeries as any)?.mock?.calls?.length || 0
+      const addCandleCalls = (chart.addCandlestickSeries as any)?.mock?.calls?.length || 0
+      expect(addSeriesCalls + addCandleCalls).toBeGreaterThan(0)
+    })
+    const series =
+      (chart.addSeries as any)?.mock?.results?.[0]?.value ??
+      (chart.addCandlestickSeries as any)?.mock?.results?.[0]?.value
 
     const initial: CandlestickData[] = [
       { time: 1 as CandlestickData['time'], open: 1, high: 2, low: 0.5, close: 1.5 },
