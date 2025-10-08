@@ -56,6 +56,8 @@ FEATURE_FLAGS = {
     "run_data_aggregation": os.getenv("BFF_FEATURE_RUN_AGGREGATION", "true").lower() == "true",
     "websocket_proxy": os.getenv("BFF_FEATURE_WEBSOCKET_PROXY", "true").lower() == "true",
     "caching_enabled": REDIS_ENABLED,
+    # Enrich /backtests list rows with metrics for terminal runs (bounded fan-out)
+    "list_metrics_enrichment": os.getenv("BFF_FEATURE_LIST_METRICS", "true").lower() == "true",
 }
 
 # Environment Detection

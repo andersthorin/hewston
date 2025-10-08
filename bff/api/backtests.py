@@ -7,6 +7,7 @@ Provides unified backtest data aggregation endpoints that combine multiple
 backend calls into optimized responses for frontend consumption.
 """
 
+import asyncio
 import logging
 import time
 from typing import Any
@@ -16,6 +17,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 
 from bff.app.dependencies import get_backend_client, get_redis_client
+from bff.app.config import FEATURE_FLAGS, MAX_CONCURRENT_BACKEND_REQUESTS
 from bff.models.backtest_data import (
     BacktestDataRequest,
 )
@@ -24,6 +26,10 @@ from bff.services.backtest_aggregator import BacktestDataAggregator
 from bff.services.cache import CacheService
 
 router = APIRouter()
+# simple in-memory cache for metrics enrichment (backtest_id -> (expires_epoch_ms, data))
+_METRICS_CACHE: dict[str, tuple[int, dict[str, Any]]] = {}
+_METRICS_TTL_SECONDS = 120
+
 logger = logging.getLogger("bff.backtests_api")
 
 
@@ -138,6 +144,32 @@ async def create_backtest_via_bff(
     except Exception as e:
         logger.exception("create_backtest.error", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail="Internal error creating backtest") from e
+
+@router.get("/backtests.enriched")
+async def list_backtests_enriched(
+    limit: int = Query(default=20, description="Maximum number of backtests to return"),
+    offset: int = Query(default=0, description="Number of backtests to skip"),
+    symbol: str | None = Query(default=None, description="Filter by trading symbol"),
+    strategy_id: str | None = Query(default=None, description="Filter by strategy ID"),
+    run_from: str | None = Query(default=None, alias="run_from", description="Filter backtests from this date"),
+    run_to: str | None = Query(default=None, alias="run_to", description="Filter backtests to this date"),
+    order: str | None = Query(default=None, description="Sort order (created_at, -created_at)"),
+    backend_client: httpx.AsyncClient = Depends(get_backend_client),
+    redis_client=Depends(get_redis_client),
+) -> dict[str, Any]:
+    # Delegate to the enriched list implementation
+    return await list_backtests(
+        limit=limit,
+        offset=offset,
+        symbol=symbol,
+        strategy_id=strategy_id,
+        run_from=run_from,
+        run_to=run_to,
+        order=order,
+        backend_client=backend_client,
+        redis_client=redis_client,
+    )
+
 
 
 @router.get("/backtests")
@@ -287,8 +319,66 @@ async def list_backtests(
                     "total_return": item.get("total_return") if isinstance(item, dict) else None,
                     "sharpe_ratio": item.get("sharpe_ratio") if isinstance(item, dict) else None,
                     "max_drawdown": item.get("max_drawdown") if isinstance(item, dict) else None,
+                    "win_rate": item.get("win_rate") if isinstance(item, dict) else None,
                 }
             )
+
+        # Optional metrics enrichment for terminal runs on the current page
+        backend_calls = 1
+        if FEATURE_FLAGS.get("list_metrics_enrichment", True) and new_items:
+            term_ids: list[str] = []
+            for it in new_items:
+                s = str(it.get("status") or "").upper()
+                if s in {"DONE", "COMPLETED"} and it.get("backtest_id"):
+                    term_ids.append(str(it["backtest_id"]))
+
+            async def _fetch_one(backend_proxy, run_id: str, sem: asyncio.Semaphore):
+                # Check in-memory cache first
+                now_ms = int(time.time() * 1000)
+                cached = _METRICS_CACHE.get(run_id)
+                if cached and cached[0] > now_ms:
+                    return run_id, cached[1], 0
+                async with sem:
+                    resp = await backend_proxy.proxy_request(
+                        method="GET",
+                        path=f"/backtests/{run_id}/metrics",
+                        correlation_id=correlation_id,
+                    )
+                # FastAPI Response wrapper; extract JSON
+                data = None
+                try:
+                    if hasattr(resp, "json") and callable(resp.json):
+                        data = resp.json()
+                    else:
+                        import json as _json
+                        body = resp.body if hasattr(resp, "body") else resp.content
+                        data = _json.loads(body.decode()) if isinstance(body, (bytes, bytearray)) else None
+                except Exception:
+                    data = None
+                if isinstance(data, dict):
+                    # Cache with TTL
+                    _METRICS_CACHE[run_id] = (now_ms + _METRICS_TTL_SECONDS * 1000, data)
+                    return run_id, data, 1
+                return run_id, None, 1
+
+            if term_ids:
+                sem = asyncio.Semaphore(max(4, min(6, MAX_CONCURRENT_BACKEND_REQUESTS)))
+                backend_proxy = await create_backend_client(backend_client)
+                results = await asyncio.gather(*[_fetch_one(backend_proxy, rid, sem) for rid in term_ids])
+                # Merge results
+                fetched_map: dict[str, dict] = {}
+                for rid, payload, calls in results:
+                    backend_calls += calls
+                    if isinstance(payload, dict):
+                        fetched_map[rid] = payload
+                # Attach metrics fields when present
+                for it in new_items:
+                    rid = str(it.get("backtest_id") or "")
+                    if rid and rid in fetched_map:
+                        m = fetched_map[rid]
+                        for k in ("total_return", "max_drawdown", "win_rate", "sharpe_ratio"):
+                            if m.get(k) is not None:
+                                it[k] = m.get(k)
 
         load_time_ms = int((time.perf_counter() - start_time) * 1000)
         enhanced_response = {
@@ -300,7 +390,7 @@ async def list_backtests(
                 "cache_hit": False,
                 "load_time_ms": load_time_ms,
                 "source": "bff",
-                "backend_calls": 1,
+                "backend_calls": backend_calls,
             },
         }
 

@@ -99,9 +99,8 @@ export function BacktestsListContainer() {
         },
         idempotencyKey: `sample-${Date.now()}`,
       })
-      const r = resp as { backtest_id?: string; run_id?: string }
-      const id = r.backtest_id ?? r.run_id
-      navigate(`/backtests/${id}`)
+      // Stay on the list; the query invalidation will refresh items and show status badges.
+      // (No auto-navigation to detail page.)
     } catch (e) {
       alert((e as Error).message)
     } finally {
@@ -120,7 +119,9 @@ export function BacktestsListContainer() {
         }}
       />
       <CreateBacktestForm
-        onCreated={(id) => navigate(`/backtests/${id}`)}
+        onCreated={() => {
+          /* stay on list; react-query invalidation will refresh */
+        }}
         creating={creating}
         setCreating={setCreating}
       />

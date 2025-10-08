@@ -119,7 +119,8 @@ class APIClientRouter {
       // Handle list routes preserving query string
       if (endpoint === 'backtests' || endpoint.startsWith('backtests?')) {
         const tail = endpoint.slice('backtests'.length) // includes leading '?' if present
-        return `${baseUrl}/api/v1/backtests${tail}`
+        // Route list calls to enriched endpoint; proxy remains available at /backtests
+        return `${baseUrl}/api/v1/backtests.enriched${tail}`
       }
       // Transform backtests/{id}[/*] to canonical BFF endpoints
       const match = endpoint.match(/^backtests\/([^/?]+)(?:\/(.+))?$/)
@@ -139,7 +140,7 @@ class APIClientRouter {
         }
       }
       // Fallback: list
-      return `${baseUrl}/api/v1/backtests`
+      return `${baseUrl}/api/v1/backtests.enriched`
     }
 
     // Default: pass through
