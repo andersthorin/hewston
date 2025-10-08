@@ -62,6 +62,7 @@ help:
 	@echo "  test            Run tests (pytest/vitest)"
 	@echo "  env             Print tool versions"
 	@echo "  clean           Remove caches and temp files"
+		@echo "  ci             Run full repo checks (backend+bff+frontend)"
 
 # -------- Setup --------
 .PHONY: setup
@@ -247,29 +248,35 @@ dev-install:
 
 .PHONY: ci-versions
 ci-versions:
-	@$(PYTHON) python -V && \
-	$(PYTHON) ruff --version && \
-	$(PYTHON) black --version && \
-	$(PYTHON) mypy --version && \
-	$(PYTHON) pytest --version && \
-	$(PYTHON) bandit --version && \
-	$(PYTHON) pip-audit --version && \
-	$(PYTHON) python -c "import importlinter, grimp; print('import-linter', getattr(importlinter, '__version__', 'unknown')); print('grimp', getattr(grimp, '__version__', 'unknown'))"
+	@(.venv/bin/python -V || python3 -V || python -V) && \
+	(.venv/bin/ruff --version || ruff --version) && \
+	(.venv/bin/black --version || black --version) && \
+	(.venv/bin/mypy --version || mypy --version) && \
+	(.venv/bin/pytest --version || pytest --version) && \
+	(.venv/bin/bandit --version || bandit --version) && \
+	(.venv/bin/pip-audit --version || pip-audit --version) && \
+	(.venv/bin/python -c "import importlinter, grimp; print('import-linter', getattr(importlinter, '__version__', 'unknown')); print('grimp', getattr(grimp, '__version__', 'unknown'))" || \
+	 python3 -c "import importlinter, grimp; print('import-linter', getattr(importlinter, '__version__', 'unknown')); print('grimp', getattr(grimp, '__version__', 'unknown'))")
 
 .PHONY: ci-architecture
 ci-architecture:
 	@echo "[ci-architecture] import-linter" && \
 	$(PYTHON) lint-imports --config linter.ini
 
-.PHONY: ci-local
-ci-local:
+.PHONY: ci
+ci:
 	@echo "[ci] Using pinned toolchain — run: make setup && make dev-install (once)" && \
 	$(MAKE) ci-versions && \
-	echo "[ci] Ruff (lint)" && $(PYTHON) ruff check backend bff && \
-	echo "[ci] Black (format check)" && $(PYTHON) black --check backend bff && \
-	echo "[ci] MyPy (type check)" && $(PYTHON) mypy backend bff && \
-	echo "[ci] Import Linter (architecture)" && $(PYTHON) lint-imports --config linter.ini && \
-	echo "[ci] PyTest (backend)" && PYTHONPATH=. $(PYTHON) pytest -q backend/tests --cov=backend --cov-report=term-missing && \
-	echo "[ci] PyTest (bff)" && PYTHONPATH=. $(PYTHON) pytest -q bff/tests --cov=bff --cov-report=term-missing && \
-	echo "[ci] Bandit (security)" && $(PYTHON) bandit -q -r backend bff || true && \
-	echo "[ci] pip-audit (dependencies)" && $(PYTHON) pip-audit --progress-spinner=off || true
+	echo "[ci] Ruff (lint)" && ( if [ -x .venv/bin/ruff ]; then .venv/bin/ruff check backend bff; else ruff check backend bff; fi ) && \
+	echo "[ci] Black (format check)" && ( if [ -x .venv/bin/black ]; then .venv/bin/black --check backend bff; else black --check backend bff; fi ) && \
+	echo "[ci] MyPy (type check)" && ( if [ -x .venv/bin/mypy ]; then .venv/bin/mypy backend bff; else mypy backend bff; fi ) && \
+	echo "[ci] Import Linter (architecture)" && ( if [ -x .venv/bin/lint-imports ]; then .venv/bin/lint-imports --config linter.ini; else lint-imports --config linter.ini; fi ) && \
+	echo "[ci] PyTest (backend)" && ( if [ -x .venv/bin/pytest ]; then PYTHONPATH=. .venv/bin/pytest -q backend/tests --cov=backend --cov-report=term-missing; else PYTHONPATH=. pytest -q backend/tests --cov=backend --cov-report=term-missing; fi ) && \
+	echo "[ci] PyTest (bff)" && ( if [ -x .venv/bin/pytest ]; then PYTHONPATH=. .venv/bin/pytest -q bff/tests --cov=bff --cov-report=term-missing; else PYTHONPATH=. pytest -q bff/tests --cov=bff --cov-report=term-missing; fi ) && \
+	echo "[ci] Bandit (security)" && ( if [ -x .venv/bin/bandit ]; then .venv/bin/bandit -q -r backend bff; else bandit -q -r backend bff; fi ) || true && \
+	echo "[ci] pip-audit (dependencies)" && ( if [ -x .venv/bin/pip-audit ]; then .venv/bin/pip-audit --progress-spinner=off; else pip-audit --progress-spinner=off; fi ) || true && \
+	echo "[ci] Frontend: Prettier check" && cd $(FRONTEND_DIR) && { export NVM_DIR="$$HOME/.nvm"; [ -s "$$NVM_DIR/nvm.sh" ] && . "$$NVM_DIR/nvm.sh" && nvm use 22 >/dev/null 2>&1 || true; } && $(NPM) run prettier:check && \
+	echo "[ci] Frontend: ESLint (components/containers/views)" && $(NPM) run lint && \
+	echo "[ci] Frontend: ESLint (services/hooks/utils/store)" && $(NPM) run lint:services && \
+	echo "[ci] Frontend: Type check" && $(NPM) run type-check && \
+	echo "[ci] Frontend: Vitest (run once)" && $(NPM) test -s -- --run

@@ -1,5 +1,3 @@
-
-
 """
 List Enrichment Tests (Epic 15.2)
 
@@ -84,4 +82,3 @@ class TestBacktestsListEnrichment:
         assert row["win_rate"] == metrics["win_rate"]
         # Meta includes fan-out call
         assert result["meta"]["backend_calls"] >= 2
-
