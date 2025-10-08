@@ -210,10 +210,9 @@ class APIClientRouter {
     endpointGroup: EndpointGroup,
     isFallback = false,
   ): void => {
-    if (
-      featureFlagService.getConfiguration().bffEnabled ||
-      import.meta.env.VITE_FEATURE_FLAG_DEBUG
-    ) {
+    const cfg = featureFlagService.getConfiguration?.()
+    const bffEnabled = !!(cfg && (cfg as any).bffEnabled)
+    if (bffEnabled || import.meta.env.VITE_FEATURE_FLAG_DEBUG) {
       const prefix = isFallback ? '🔄 FALLBACK' : '🎯 ROUTING'
       console.log(`${prefix} [${endpointGroup}] ${endpoint} → ${target.toUpperCase()}`)
     }

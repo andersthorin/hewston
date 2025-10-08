@@ -302,7 +302,29 @@ describe('Epic 9: Complete BFF Integration Validation', () => {
     })
 
     it('should maintain backward compatibility', async () => {
-      // Test that all services work in backend mode (default)
+      // Provide default mock responses so services operate without network
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            symbol: 'AAPL',
+            timeframe: 'daily',
+            bars: [],
+            meta: { points: 0, source: 'backend' },
+          }),
+      })
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            items: [],
+            total: 0,
+            limit: 20,
+            offset: 0,
+            meta: { source: 'bff' },
+          }),
+      })
+
       const chartData = await chartDataService.fetchDailyData('AAPL')
       const runList = await backtestDataService.listBacktests()
       const wsManager = createWebSocketManager('test-run-123')
