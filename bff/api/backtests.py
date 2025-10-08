@@ -148,6 +148,7 @@ async def create_backtest_via_bff(
 
 @router.get("/backtests")
 async def list_backtests(
+    request: Request,
     limit: int = Query(default=20, description="Maximum number of backtests to return"),
     offset: int = Query(default=0, description="Number of backtests to skip"),
     symbol: str | None = Query(default=None, description="Filter by trading symbol"),
@@ -230,8 +231,17 @@ async def list_backtests(
     try:
         backend_proxy = await create_backend_client(backend_client)
         response = await backend_proxy.proxy_request(
-            method="GET", path="/backtests", params=params, correlation_id=correlation_id
+            method="GET",
+            path="/backtests",
+            headers=dict(request.headers),
+            params=params,
+            correlation_id=correlation_id,
         )
+
+        # Fail-fast: propagate non-200 backend responses as-is (no fallbacks)
+        if getattr(response, "status_code", 200) != 200:
+            return response
+
 
         # Parse JSON response
         if hasattr(response, "json") and callable(response.json):
@@ -721,6 +731,26 @@ async def get_backtest_status(
             status_code=500, detail=f"Internal error getting backtest status: {str(e)}"
         ) from e
 
+
+
+@router.get("/backtests/{backtest_id}")
+async def get_backtest_by_id(
+    backtest_id: str = Path(..., description="Backtest identifier"),
+    request: Request = None,
+    backend_client: httpx.AsyncClient = Depends(get_backend_client),
+):
+    """
+    Lightweight proxy for GET /backtests/{backtest_id}.
+    Passes through to backend and preserves error codes (fail-fast, no fallbacks).
+    """
+    correlation_id = f"get_backtest_{backtest_id}_{int(time.time() * 1000)}"
+    backend_proxy = await create_backend_client(backend_client)
+    return await backend_proxy.proxy_request(
+        method="GET",
+        path=f"/backtests/{backtest_id}",
+        headers=dict(request.headers) if request else {},
+        correlation_id=correlation_id,
+    )
 
 # --- Backward-compatible aliases using backtests terminology ---
 

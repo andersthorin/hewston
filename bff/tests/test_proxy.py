@@ -61,7 +61,7 @@ class TestBacktestsProxy:
         # Assert
         assert response.status_code == 200
         data = response.json()
-        assert "runs" in data
+        assert "items" in data
         assert "total" in data
 
         # Verify backend was called with correct parameters
