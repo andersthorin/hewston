@@ -145,32 +145,6 @@ async def create_backtest_via_bff(
         logger.exception("create_backtest.error", extra={"error": str(e)})
         raise HTTPException(status_code=500, detail="Internal error creating backtest") from e
 
-@router.get("/backtests.enriched")
-async def list_backtests_enriched(
-    limit: int = Query(default=20, description="Maximum number of backtests to return"),
-    offset: int = Query(default=0, description="Number of backtests to skip"),
-    symbol: str | None = Query(default=None, description="Filter by trading symbol"),
-    strategy_id: str | None = Query(default=None, description="Filter by strategy ID"),
-    run_from: str | None = Query(default=None, alias="run_from", description="Filter backtests from this date"),
-    run_to: str | None = Query(default=None, alias="run_to", description="Filter backtests to this date"),
-    order: str | None = Query(default=None, description="Sort order (created_at, -created_at)"),
-    backend_client: httpx.AsyncClient = Depends(get_backend_client),
-    redis_client=Depends(get_redis_client),
-) -> dict[str, Any]:
-    # Delegate to the enriched list implementation
-    return await list_backtests(
-        limit=limit,
-        offset=offset,
-        symbol=symbol,
-        strategy_id=strategy_id,
-        run_from=run_from,
-        run_to=run_to,
-        order=order,
-        backend_client=backend_client,
-        redis_client=redis_client,
-    )
-
-
 
 @router.get("/backtests")
 async def list_backtests(
@@ -325,7 +299,8 @@ async def list_backtests(
 
         # Optional metrics enrichment for terminal runs on the current page
         backend_calls = 1
-        if FEATURE_FLAGS.get("list_metrics_enrichment", True) and new_items:
+        # Always enrich metrics for terminal runs (remove feature flag gating to avoid silent omissions)
+        if new_items:
             term_ids: list[str] = []
             for it in new_items:
                 s = str(it.get("status") or "").upper()
@@ -376,9 +351,19 @@ async def list_backtests(
                     rid = str(it.get("backtest_id") or "")
                     if rid and rid in fetched_map:
                         m = fetched_map[rid]
-                        for k in ("total_return", "max_drawdown", "win_rate", "sharpe_ratio"):
-                            if m.get(k) is not None:
-                                it[k] = m.get(k)
+                        # Map a few known alt keys from Nautilus metrics for robustness
+                        tr = m.get("total_return")
+                        dd = m.get("max_drawdown") if m.get("max_drawdown") is not None else m.get("drawdown")
+                        sh = m.get("sharpe_ratio") if m.get("sharpe_ratio") is not None else m.get("sharpe")
+                        wr = m.get("win_rate")
+                        if tr is not None:
+                            it["total_return"] = tr
+                        if dd is not None:
+                            it["max_drawdown"] = dd
+                        if sh is not None:
+                            it["sharpe_ratio"] = sh
+                        if wr is not None:
+                            it["win_rate"] = wr
 
         load_time_ms = int((time.perf_counter() - start_time) * 1000)
         enhanced_response = {

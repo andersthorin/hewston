@@ -93,6 +93,7 @@ export const BFFBacktestListResponseSchema = z.object({
       total_return: z.number().optional().nullable(),
       sharpe_ratio: z.number().optional().nullable(),
       max_drawdown: z.number().optional().nullable(),
+      win_rate: z.number().optional().nullable(),
     }),
   ),
   total: z.number(),

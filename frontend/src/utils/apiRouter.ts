@@ -121,8 +121,8 @@ class APIClientRouter {
       if (endpoint === 'backtests' || endpoint.startsWith('backtests?')) {
         const tail = endpoint.slice('backtests'.length) // includes leading '?' if present
         if (method === 'GET') {
-          // Route GET list calls to enriched endpoint; proxy remains available at /backtests
-          return `${baseUrl}/api/v1/backtests.enriched${tail}`
+          // Route GET list calls to canonical endpoint
+          return `${baseUrl}/api/v1/backtests${tail}`
         } else if (method === 'POST') {
           // Create backtest
           return `${baseUrl}/api/v1/backtests${tail}`

@@ -114,9 +114,10 @@ def create_app() -> FastAPI:
 
     # Include API routes
     app.include_router(health_router, prefix="/api/v1")
-    app.include_router(proxy_router, prefix="/api/v1")
-    app.include_router(chart_data_router, prefix="/api/v1")
+    # Order matters: register enriched domain-specific routes before generic proxy
     app.include_router(backtests_router, prefix="/api/v1")
+    app.include_router(chart_data_router, prefix="/api/v1")
+    app.include_router(proxy_router, prefix="/api/v1")
 
     # Reset per-app backend client to avoid cross-test contamination from config reloads
     try:

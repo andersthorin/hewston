@@ -30,6 +30,6 @@ describe('StreamingMetricsPanel', () => {
     )
     expect(getByText('Performance')).toBeInTheDocument()
     // Total return formatted as percentage
-    expect(getByText(/10.0%/)).toBeInTheDocument()
+    expect(getByText(/10.00%/)).toBeInTheDocument()
   })
 })
