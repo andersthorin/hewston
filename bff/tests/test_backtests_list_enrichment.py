@@ -1,4 +1,4 @@
-# fmt: off
+
 
 """
 List Enrichment Tests (Epic 15.2)
@@ -27,7 +27,11 @@ def create_mock_response(data: dict, status_code: int = 200):
 
 class TestBacktestsListEnrichment:
     @pytest.mark.asyncio
-    async def test_enriches_terminal_runs_with_metrics(self, mock_backend_client, mock_backend_response):
+    async def test_enriches_terminal_runs_with_metrics(
+        self,
+        mock_backend_client,
+        mock_backend_response,
+    ):
         # Arrange: backend returns a COMPLETED run in the list, then metrics for that run
         backend_list = {
             "items": [
@@ -80,7 +84,4 @@ class TestBacktestsListEnrichment:
         assert row["win_rate"] == metrics["win_rate"]
         # Meta includes fan-out call
         assert result["meta"]["backend_calls"] >= 2
-
-# fmt: on
-
 
