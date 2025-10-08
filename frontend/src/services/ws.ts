@@ -57,7 +57,6 @@ export function useBacktestPlayback(backtestId: string) {
   const notify = useCallback((f: StreamFrameT) => {
     if (framesSeenRef.current <= 20) {
       try {
-        // eslint-disable-next-line no-console
         console.debug('[notify->subs]', {
           n: framesSeenRef.current,
           ts: (f as any)?.equity?.ts || (f as any)?.ts,
@@ -89,7 +88,6 @@ export function useBacktestPlayback(backtestId: string) {
         framesSeenRef.current += 1
         if (framesSeenRef.current <= 20) {
           try {
-            // eslint-disable-next-line no-console
             console.debug('[fe-worker->main]', {
               n: framesSeenRef.current,
               ts: (msg.data as any)?.equity?.ts || (msg.data as any)?.ts,
@@ -106,7 +104,7 @@ export function useBacktestPlayback(backtestId: string) {
           const now = Date.now()
           const dt = lastWorkerOutTimeRef.current ? now - lastWorkerOutTimeRef.current : 0
           lastWorkerOutTimeRef.current = now
-          // eslint-disable-next-line no-console
+
           console.debug('[diag][worker.out]', { dt, buf: frameBufferRef.current.length })
         } catch {}
       } else if (msg.type === 'error') {
@@ -165,7 +163,7 @@ export function useBacktestPlayback(backtestId: string) {
             const dt = lastWsRawTimeRef.current ? now - lastWsRawTimeRef.current : 0
             lastWsRawTimeRef.current = now
             const ts = msg.ts || msg?.equity?.ts
-            // eslint-disable-next-line no-console
+
             console.debug('[diag][ws.raw]', { dt, ts })
           } catch {}
 
@@ -174,13 +172,12 @@ export function useBacktestPlayback(backtestId: string) {
             try {
               const ts = msg.ts || msg?.equity?.ts
               const eq = msg?.equity?.value
-              // eslint-disable-next-line no-console
+
               console.debug('[fe-ws-raw]', { n: feRawDebugRef.current + 1, ts, eq })
             } catch {}
             feRawDebugRef.current += 1
           }
           try {
-            // eslint-disable-next-line no-console
             if (feRawDebugRef.current <= 20)
               console.debug('[main->worker] post frame', { n: feRawDebugRef.current })
             worker.postMessage({ type: 'frame', payload: msg })
@@ -229,7 +226,7 @@ export function useBacktestPlayback(backtestId: string) {
               lastConsumeTimeRef.current = now
               const next = frameBufferRef.current.shift()!
               const bufAfter = frameBufferRef.current.length
-              // eslint-disable-next-line no-console
+
               console.debug('[diag][raf.consume]', {
                 dt,
                 buf_before: bufBefore,

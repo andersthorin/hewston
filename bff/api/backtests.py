@@ -146,45 +146,21 @@ async def create_backtest_via_bff(
         raise HTTPException(status_code=500, detail="Internal error creating backtest") from e
 
 
-@router.get("/backtests")
-async def list_backtests(
-    request: Request,
-    limit: int = Query(default=20, description="Maximum number of backtests to return"),
-    offset: int = Query(default=0, description="Number of backtests to skip"),
-    symbol: str | None = Query(default=None, description="Filter by trading symbol"),
-    strategy_id: str | None = Query(default=None, description="Filter by strategy ID"),
-    run_from: str | None = Query(
-        default=None, alias="run_from", description="Filter backtests from this date"
-    ),
-    run_to: str | None = Query(
-        default=None, alias="run_to", description="Filter backtests to this date"
-    ),
-    order: str | None = Query(default=None, description="Sort order (created_at, -created_at)"),
-    backend_client: httpx.AsyncClient = Depends(get_backend_client),
-    redis_client=Depends(get_redis_client),
+async def _list_backtests_core(
+    *,
+    request: Request | None,
+    limit: int,
+    offset: int,
+    symbol: str | None,
+    strategy_id: str | None,
+    run_from: str | None,
+    run_to: str | None,
+    order: str | None,
+    backend_client: httpx.AsyncClient,
+    redis_client,
 ) -> dict[str, Any]:
     """
-    List backtests with filtering and pagination.
-
-    Canonical backtests endpoint with BFF enhancements like caching and
-    response optimization.
-
-    Args:
-        limit: Maximum number of backtests to return (1-500, default 20)
-        offset: Number of backtests to skip (default 0)
-        symbol: Filter by trading symbol (optional)
-        strategy_id: Filter by strategy identifier (optional)
-        from_date: Filter created from this date (optional)
-        to_date: Filter created to this date (optional)
-        order: Sort order - 'created_at' or '-created_at' (default -created_at)
-
-    Returns:
-        Dict containing:
-        - items: List of backtest summaries
-        - total: Total number of matching backtests
-        - limit: Applied limit
-        - offset: Applied offset
-        - meta: Response metadata (cache info, performance metrics)
+    Core implementation for listing backtests. Used by both the FastAPI route and direct tests.
     """
     start_time = time.perf_counter()
     correlation_id = f"list_backtests_{int(time.time() * 1000)}"
@@ -233,7 +209,7 @@ async def list_backtests(
         response = await backend_proxy.proxy_request(
             method="GET",
             path="/backtests",
-            headers=dict(request.headers),
+            headers=(dict(request.headers) if request else {}),
             params=params,
             correlation_id=correlation_id,
         )
@@ -242,13 +218,11 @@ async def list_backtests(
         if getattr(response, "status_code", 200) != 200:
             return response
 
-
         # Parse JSON response
         if hasattr(response, "json") and callable(response.json):
             backend_data = response.json()
         else:
             import json
-
             backend_data = json.loads(response.body.decode())
 
         # Transform items to backtest_id-only identifiers (robust to backend shapes)
@@ -427,6 +401,67 @@ async def list_backtests(
                 status_code=500,
                 detail="Internal server error while fetching backtests",
             ) from e
+
+
+@router.get("/backtests")
+async def list_backtests_route(
+    request: Request,
+    limit: int = Query(default=20, description="Maximum number of backtests to return"),
+    offset: int = Query(default=0, description="Number of backtests to skip"),
+    symbol: str | None = Query(default=None, description="Filter by trading symbol"),
+    strategy_id: str | None = Query(default=None, description="Filter by strategy ID"),
+    run_from: str | None = Query(
+        default=None, alias="run_from", description="Filter backtests from this date"
+    ),
+    run_to: str | None = Query(
+        default=None, alias="run_to", description="Filter backtests to this date"
+    ),
+    order: str | None = Query(default=None, description="Sort order (created_at, -created_at)"),
+    backend_client: httpx.AsyncClient = Depends(get_backend_client),
+    redis_client=Depends(get_redis_client),
+) -> dict[str, Any]:
+    return await _list_backtests_core(
+        request=request,
+        limit=limit,
+        offset=offset,
+        symbol=symbol,
+        strategy_id=strategy_id,
+        run_from=run_from,
+        run_to=run_to,
+        order=order,
+        backend_client=backend_client,
+        redis_client=redis_client,
+    )
+
+
+# Test-friendly wrapper with no FastAPI Request in the signature
+async def list_backtests(
+    limit: int = 20,
+    offset: int = 0,
+    symbol: str | None = None,
+    strategy_id: str | None = None,
+    run_from: str | None = None,
+    run_to: str | None = None,
+    order: str | None = None,
+    backend_client: httpx.AsyncClient | None = None,
+    redis_client=None,
+) -> dict[str, Any]:
+    if backend_client is None:
+        raise RuntimeError(
+            "backend_client must be provided when calling list_backtests() directly"
+        )
+    return await _list_backtests_core(
+        request=None,
+        limit=limit,
+        offset=offset,
+        symbol=symbol,
+        strategy_id=strategy_id,
+        run_from=run_from,
+        run_to=run_to,
+        order=order,
+        backend_client=backend_client,
+        redis_client=redis_client,
+    )
 
 
 @router.get("/backtests/{backtest_id}/complete")
