@@ -1,4 +1,6 @@
 # ruff: noqa: B008
+# fmt: off
+
 
 """
 Backtests API
@@ -721,3 +723,6 @@ async def get_backtest_status(
 
 
 # --- Backward-compatible aliases using backtests terminology ---
+
+
+# fmt: on
