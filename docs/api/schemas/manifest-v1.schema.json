@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hewston.app/schemas/manifest-v1.schema.json",
+  "title": "Agentic Manifest (v1)",
+  "type": "object",
+  "required": ["version", "plan", "run_ids", "code_hash", "created_at", "timeline"],
+  "properties": {
+    "version": {"const": "1"},
+    "plan": {"$ref": "./plan-v1.schema.json"},
+    "run_ids": {"type": "array", "items": {"type": "string"}},
+    "code_hash": {"type": "string"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "seeds": {"type": "array", "items": {"type": ["integer", "string"]}},
+    "timeline": {
+      "type": "object",
+      "required": ["plan", "start", "finish"],
+      "properties": {
+        "plan": {"type": "string", "format": "date-time"},
+        "start": {"type": "string", "format": "date-time"},
+        "finish": {"type": "string", "format": "date-time"},
+        "post": {"type": "string", "format": "date-time"}
+      },
+      "additionalProperties": false
+    },
+    "metrics_summary": {"type": "object", "additionalProperties": true},
+    "consented_by": {"type": "string"},
+    "consented_at": {"type": "string", "format": "date-time"}
+  },
+  "additionalProperties": false
+}
+

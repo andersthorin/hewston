@@ -1,0 +1,83 @@
+openapi: 3.1.0
+info:
+  title: Agentic Backtests API
+  version: 0.1.0
+servers:
+  - url: https://api.local
+paths:
+  /agentic/propose_plan:
+    post:
+      summary: Propose an agentic plan for a date range
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [from_date, to_date]
+              properties:
+                from_date: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+                to_date: { type: string, pattern: "^\\d{4}-\\d{2}-\\d{2}$" }
+      responses:
+        '200':
+          description: Proposed plan and guardrail pre-checks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PlanV1'
+        '400':
+          description: Invalid date range or inputs
+        '429':
+          description: Backpressure (too many requests)
+  /agentic/start:
+    post:
+      summary: Start execution of an agentic plan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                plan_id: { type: string }
+                plan: { $ref: '#/components/schemas/PlanV1' }
+      responses:
+        '200':
+          description: Run started (idempotent on plan_hash)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  run_ids: { type: array, items: { type: string } }
+                  manifest: { $ref: '#/components/schemas/ManifestV1' }
+        '202':
+          description: Duplicate plan — returning existing run(s)
+        '400':
+          description: Guardrail failure — see reason codes
+        '429':
+          description: Backpressure (too many concurrent jobs)
+  /runs/{run_id}/manifest:
+    get:
+      summary: Fetch manifest for a run
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Manifest
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ManifestV1'
+        '404':
+          description: Not found
+components:
+  schemas:
+    PlanV1:
+      $ref: './schemas/plan-v1.schema.json'
+    ManifestV1:
+      $ref: './schemas/manifest-v1.schema.json'
+
