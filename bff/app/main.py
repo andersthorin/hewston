@@ -1,5 +1,4 @@
-"""
-BFF FastAPI Application
+"""BFF FastAPI Application.
 
 Main application factory for the Backend-for-Frontend service.
 Follows the pattern established in backend/app/main.py with BFF-specific enhancements.
@@ -13,7 +12,6 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from bff.app.logging_setup import configure_logging
 from bff.api.backtests import router as backtests_router
 from bff.api.chart_data import router as chart_data_router
 from bff.api.health import router as health_router
@@ -27,13 +25,12 @@ from bff.app.config import (
     LOG_LEVEL,
 )
 from bff.app.dependencies import cleanup_dependencies
+from bff.app.logging_setup import configure_logging
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Application lifespan manager for startup and shutdown events.
-    """
+    """Application lifespan manager for startup and shutdown events."""
     # Startup
     logger = logging.getLogger("bff.startup")
     logger.info("BFF service starting up", extra={"service": "hewston-bff"})
@@ -46,8 +43,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    """
-    Create and configure the BFF FastAPI application.
+    """Create and configure the BFF FastAPI application.
 
     Returns:
         FastAPI: Configured application instance
@@ -77,8 +73,7 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def request_logger(request: Request, call_next):
-        """
-        Request logging middleware following backend patterns.
+        """Request logging middleware following backend patterns.
         Adds correlation ID and timing information.
         """
         req_id = uuid4().hex

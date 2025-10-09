@@ -1,7 +1,6 @@
 # ruff: noqa: B008
 
-"""
-BFF Proxy API Routes
+"""BFF Proxy API Routes.
 
 Provides transparent proxy functionality for existing backend APIs.
 Maintains exact API compatibility while adding BFF-specific enhancements.
@@ -50,8 +49,7 @@ async def proxy_get_daily_bars(
     backend_client: BackendClient = Depends(get_backend_proxy_client),
     correlation_id: str = Depends(get_correlation_id),
 ):
-    """
-    Proxy GET /bars/daily to backend.
+    """Proxy GET /bars/daily to backend.
 
     Gets daily OHLCV bars for a symbol.
     """
@@ -83,8 +81,7 @@ async def proxy_get_minute_bars(
     backend_client: BackendClient = Depends(get_backend_proxy_client),
     correlation_id: str = Depends(get_correlation_id),
 ):
-    """
-    Proxy GET /bars/minute to backend.
+    """Proxy GET /bars/minute to backend.
 
     Gets minute OHLCV bars for a symbol.
     """
@@ -117,8 +114,7 @@ async def proxy_get_minute_decimated_bars(
     backend_client: BackendClient = Depends(get_backend_proxy_client),
     correlation_id: str = Depends(get_correlation_id),
 ):
-    """
-    Proxy GET /bars/minute_decimated to backend.
+    """Proxy GET /bars/minute_decimated to backend.
 
     Gets decimated minute OHLCV bars for a symbol.
     """
@@ -151,8 +147,7 @@ async def proxy_get_hour_bars(
     backend_client: BackendClient = Depends(get_backend_proxy_client),
     correlation_id: str = Depends(get_correlation_id),
 ):
-    """
-    Proxy GET /bars/hour to backend.
+    """Proxy GET /bars/hour to backend.
 
     Gets hourly OHLCV bars for a symbol.
     """

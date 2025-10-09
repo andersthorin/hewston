@@ -1,3 +1,5 @@
+"""Logging setup for the BFF using structlog and JSON output."""
+
 from __future__ import annotations
 
 import json

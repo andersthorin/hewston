@@ -1,5 +1,4 @@
-"""
-BFF Dependency Injection
+"""BFF dependency injection.
 
 Provides dependency injection for BFF services, following FastAPI patterns
 and enabling easy testing and configuration management.
@@ -8,11 +7,12 @@ and enabling easy testing and configuration management.
 import asyncio
 import logging
 import time
+from contextlib import suppress
 
 import httpx
 from fastapi import Depends
 
-from bff.app import config as config
+from bff.app import config
 
 # Global HTTP client for backend communication
 _backend_client: httpx.AsyncClient | None = None
@@ -28,8 +28,7 @@ _redis_disabled_until: float = 0.0
 
 
 async def get_backend_client() -> httpx.AsyncClient:
-    """
-    Get async HTTP client for backend communication.
+    """Get async HTTP client for backend communication.
 
     Returns:
         httpx.AsyncClient: Configured client for backend API calls
@@ -54,10 +53,8 @@ async def get_backend_client() -> httpx.AsyncClient:
     if needs_new:
         # Close existing client if present
         if _backend_client is not None:
-            try:
+            with suppress(Exception):
                 await _backend_client.aclose()
-            except Exception:
-                pass
         _backend_client = httpx.AsyncClient(
             base_url=desired_base_url,
             timeout=httpx.Timeout(config.BACKEND_TIMEOUT_SECONDS),
@@ -72,8 +69,7 @@ async def get_backend_client() -> httpx.AsyncClient:
 
 
 async def get_redis_client():
-    """
-    Get Redis client for caching (if enabled), with fast-fail and circuit breaker.
+    """Get Redis client for caching (if enabled), with fast-fail and circuit breaker.
 
     Returns:
         Redis client or None if Redis is disabled/unavailable
@@ -120,8 +116,7 @@ async def get_redis_client():
 
 
 async def get_logger() -> logging.Logger:
-    """
-    Get configured logger for BFF operations.
+    """Get configured logger for BFF operations.
 
     Returns:
         logging.Logger: Configured logger instance
@@ -136,9 +131,7 @@ Logger = Depends(get_logger)
 
 
 async def cleanup_dependencies():
-    """
-    Cleanup function to close connections on shutdown.
-    """
+    """Close client connections on shutdown."""
     global _backend_client, _redis_client
 
     if _backend_client:
