@@ -1,24 +1,42 @@
+"""Retention job tests: selection and application of deletions."""
+
 import sqlite3
 from pathlib import Path
 
 from backend.adapters.sqlite_catalog import SqliteCatalog
 from backend.jobs.retention import apply_deletions, retention_main, select_candidates
 
+EXPECT_R1_SIZE = 10
+EXPECT_R2_SIZE = 20
+EXPECT_DELETED = 2
+EXPECT_RECLAIMED = 30
+
 
 def _insert_run(db_path: Path, run_id: str, created_at: str) -> None:
+
+
+
     with sqlite3.connect(db_path) as conn:
         conn.execute(
             """
-            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
-                                  code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
+            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json,
+                                  seed, slippage_fees_json, speed,
+                                  code_hash, created_at, status, duration_ms,
+                                  metrics_path, equity_path, orders_path,
                                   fills_path, run_manifest_path, input_hash, idempotency_key)
-            VALUES (?, 'ds', 'sma', '{}', 42, '{}', 60, 'x', ?, 'DONE', 10, NULL, NULL, NULL, NULL, 'm', NULL, NULL)
+            VALUES (
+                ?, 'ds', 'sma', '{}', 42, '{}', 60,
+                'x', ?, 'DONE', 10,
+                NULL, NULL, NULL,
+                NULL, 'm', NULL, NULL
+            )
             """,
             (run_id, created_at),
         )
 
 
 def test_retention_dry_run_and_apply(tmp_path, monkeypatch, capsys):
+    """End-to-end: select candidates, dry-run summary, and apply deletions."""
     monkeypatch.setenv("HEWSTON_DATA_DIR", str(tmp_path))
     dbp = tmp_path / "catalog.db"
     monkeypatch.setenv("HEWSTON_CATALOG_PATH", str(dbp))
@@ -32,7 +50,7 @@ def test_retention_dry_run_and_apply(tmp_path, monkeypatch, capsys):
     _insert_run(dbp, "r3", "2025-01-01T00:00:00Z")  # newest
 
     # Create artifact dirs
-    for rid, size in [("r1", 10), ("r2", 20), ("r3", 30)]:
+    for rid, size in [("r1", EXPECT_R1_SIZE), ("r2", EXPECT_R2_SIZE), ("r3", EXPECT_RECLAIMED)]:
         d = tmp_path / "backtests" / rid
         d.mkdir(parents=True, exist_ok=True)
         (d / "a.bin").write_bytes(b"x" * size)
@@ -43,7 +61,8 @@ def test_retention_dry_run_and_apply(tmp_path, monkeypatch, capsys):
     assert set(ids) == {"r1", "r2"}
     # Sizes computed
     sizes = {c.run_id: c.size_bytes for c in cands}
-    assert sizes["r1"] == 10 and sizes["r2"] == 20
+    assert sizes["r1"] == EXPECT_R1_SIZE
+    assert sizes["r2"] == EXPECT_R2_SIZE
     assert kept == ["r3"]
 
     # Dry run prints summary
@@ -53,8 +72,8 @@ def test_retention_dry_run_and_apply(tmp_path, monkeypatch, capsys):
 
     # Apply deletions
     deleted, reclaimed = apply_deletions(cands)
-    assert deleted == 2
-    assert reclaimed == 30
+    assert deleted == EXPECT_DELETED
+    assert reclaimed == EXPECT_RECLAIMED
     # Directories removed
     assert not (tmp_path / "backtests" / "r1").exists()
     assert not (tmp_path / "backtests" / "r2").exists()
@@ -63,4 +82,5 @@ def test_retention_dry_run_and_apply(tmp_path, monkeypatch, capsys):
     with sqlite3.connect(dbp) as conn:
         rows = conn.execute("SELECT backtest_id FROM backtests").fetchall()
         have = {r[0] for r in rows}
-        assert "r3" in have and not {"r1", "r2"} & have
+        assert "r3" in have
+        assert not {"r1", "r2"} & have

@@ -1,11 +1,19 @@
+"""Tests for compute_cumulative_metrics basic behavior."""
+
 import math
 
 import pytest
 
 from backend.utils.metrics import compute_cumulative_metrics
 
+EQ_INIT = 100.0
+EPS_12 = 1e-12
+RET_1PCT = 0.01
+PNL_5 = 5.0
+
 
 def test_compute_cumulative_metrics_basic():
+    """Smoke test expected shapes and core metrics behavior."""
     equity = [
         {"ts_utc": "2024-01-01T00:00:00Z", "value": 100.0},
         {"ts_utc": "2024-01-01T00:01:00Z", "value": 101.0},
@@ -24,20 +32,20 @@ def test_compute_cumulative_metrics_basic():
     # First point: no return, total_return 0, realized_pnl None
     ts0, m0 = series[0]
     assert ts0 == "2024-01-01T00:00:00+00:00" or ts0.endswith("Z")
-    assert m0["equity"] == 100.0
+    assert m0["equity"] == EQ_INIT
     assert m0["return"] is None
-    assert abs(m0["total_return"]) < 1e-12
+    assert abs(m0["total_return"]) < EPS_12
     assert m0["realized_pnl"] is None
 
     # Second point: +1% return, realized_pnl 5.0, win_rate 1.0
     _, m1 = series[1]
-    assert pytest.approx(m1["return"], rel=1e-9) == 0.01
-    assert m1["realized_pnl"] == 5.0
+    assert pytest.approx(m1["return"], rel=1e-9) == RET_1PCT
+    assert m1["realized_pnl"] == PNL_5
     assert m1["win_rate"] == 1.0
 
     # Third point: small loss -> win_rate decreases
     _, m2 = series[2]
-    assert m2["realized_pnl"] == 5.0  # unchanged
+    assert m2["realized_pnl"] == PNL_5  # unchanged
     assert 0.0 <= (m2["win_rate"] or 0.0) <= 1.0
 
     # Sharpe should be finite from >=2 returns

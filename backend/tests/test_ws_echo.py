@@ -1,9 +1,12 @@
+"""WebSocket echo tests for ctrl message roundtrip."""
+
 from fastapi.testclient import TestClient
 
 from backend.app.main import app
 
 
 def test_ws_echo_ctrl_message():
+    """Sends a ctrl message and expects an echo with same cmd."""
     client = TestClient(app)
     with client.websocket_connect("/api/v1/backtests/abc/ws") as ws:
         ws.send_json({"t": "ctrl", "cmd": "play"})

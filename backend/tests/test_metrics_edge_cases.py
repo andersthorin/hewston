@@ -1,9 +1,12 @@
+"""Edge-case tests for cumulative metrics (sharpe/win-rate)."""
+
 import pytest
 
 from backend.utils.metrics import compute_cumulative_metrics
 
 
 def test_sharpe_null_when_std_zero():
+    """Sharpe is None when returns variance is zero across the window."""
     # Equity flat -> all returns zero -> std = 0 => sharpe is None
     equity = [
         {"ts_utc": "2024-01-01T00:00:00Z", "value": 100.0},
@@ -18,6 +21,7 @@ def test_sharpe_null_when_std_zero():
 
 
 def test_win_rate_ignores_zero_deltas():
+    """Win rate ignores zero delta realized PnLs (counts only >0/<0)."""
     equity = [
         {"ts_utc": "2024-01-01T00:00:00Z", "value": 100.0},
         {"ts_utc": "2024-01-01T00:01:00Z", "value": 101.0},
