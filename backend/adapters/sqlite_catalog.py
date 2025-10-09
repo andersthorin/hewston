@@ -12,6 +12,7 @@ from datetime import UTC
 from typing import Any
 
 from backend.domain.models import BacktestSummary, Dataset
+from backend.domain.queries import BacktestListQuery
 from backend.ports.catalog import CatalogPort
 
 DDL = """
@@ -63,6 +64,7 @@ CREATE TABLE IF NOT EXISTS backtest_metrics (
 
 class SqliteCatalog(CatalogPort):
     """SQLite-backed catalog for storing backtests, datasets, and metrics."""
+
     def __init__(self, db_path: str | None = None) -> None:
         """Initialize the catalog, creating directories and schema when needed.
 
@@ -241,36 +243,26 @@ class SqliteCatalog(CatalogPort):
                 "manifest": {"path": run_manifest_path} if run_manifest_path else None,
             }
 
-    def list_backtests(
-        self,
-        *,
-        symbol: str | None = None,
-        strategy_id: str | None = None,
-        from_date: str | None = None,
-        to_date: str | None = None,
-        limit: int = 20,
-        offset: int = 0,
-        order: str = "-created_at",
-    ) -> tuple[list[BacktestSummary], int]:
+    def list_backtests(self, q: BacktestListQuery) -> tuple[list[BacktestSummary], int]:
         """List backtests and total count with optional filters and pagination."""
         clauses = []
         params: list = []
-        if symbol:
+        if q.symbol:
             clauses.append("symbol = ?")
-            params.append(symbol)
-        if strategy_id:
+            params.append(q.symbol)
+        if q.strategy_id:
             clauses.append("strategy_id = ?")
-            params.append(strategy_id)
+            params.append(q.strategy_id)
         # Overlap semantics
-        if from_date:
+        if q.from_date:
             clauses.append("to_date >= ?")
-            params.append(from_date)
-        if to_date:
+            params.append(q.from_date)
+        if q.to_date:
             clauses.append("from_date <= ?")
-            params.append(to_date)
+            params.append(q.to_date)
         where = ("WHERE " + " AND ".join(clauses)) if clauses else ""
 
-        order_dir = "DESC" if str(order).strip().startswith("-") else "ASC"
+        order_dir = "DESC" if str(q.order).strip().startswith("-") else "ASC"
 
         with self._connect() as conn:
             total = conn.execute(
@@ -281,13 +273,13 @@ class SqliteCatalog(CatalogPort):
                 ),
                 params,
             ).fetchone()["c"]
-            q = (
+            qsql = (
                 "SELECT b.backtest_id AS run_id, b.created_at, b.strategy_id, b.status, "
                 "d.symbol AS symbol, b.duration_ms AS duration_ms "
                 f"FROM backtests b LEFT JOIN datasets d ON d.dataset_id = b.dataset_id {where} "
                 f"ORDER BY b.created_at {order_dir} LIMIT ? OFFSET ?"
             )
-            rows = conn.execute(q, (*params, limit, offset)).fetchall()
+            rows = conn.execute(qsql, (*params, q.limit, q.offset)).fetchall()
             items = [
                 BacktestSummary(
                     run_id=r["run_id"],
@@ -373,24 +365,21 @@ class SqliteCatalog(CatalogPort):
                 values,
             )
 
-    def create_backtest(
-        self,
-        *,
-        run_id: str,
-        dataset_id: str | None,  # Allow None - FK constraint allows NULL
-        strategy_id: str,
-        params_json: str,
-        seed: int,
-        slippage_fees_json: str,
-        speed: int,
-        code_hash: str,
-        created_at: str,
-        status: str,
-        run_manifest_path: str,
-        input_hash: str | None,
-        idempotency_key: str | None,
-    ) -> str:
+    def create_backtest(self, *, row: dict[str, Any]) -> str:
         """Insert a new backtest row and return run_id."""
+        run_id = row["run_id"]
+        dataset_id = row.get("dataset_id")
+        strategy_id = row["strategy_id"]
+        params_json = row["params_json"]
+        seed = row["seed"]
+        slippage_fees_json = row["slippage_fees_json"]
+        speed = row["speed"]
+        code_hash = row["code_hash"]
+        created_at = row["created_at"]
+        status = row["status"]
+        run_manifest_path = row["run_manifest_path"]
+        input_hash = row.get("input_hash")
+        idempotency_key = row.get("idempotency_key")
         with self._connect() as conn:
             conn.execute(
                 (
@@ -424,29 +413,30 @@ class SqliteCatalog(CatalogPort):
         *,
         status: str,
         duration_ms: int | None = None,
-        metrics_path: str | None = None,
-        equity_path: str | None = None,
-        orders_path: str | None = None,
-        fills_path: str | None = None,
+        artifacts: dict[str, str] | None = None,
     ) -> None:
-        """Update backtest status and optional artifact paths/fields."""
+        """Update backtest status and optional artifact paths/fields.
+
+        artifacts may include any of: metrics_path, equity_path, orders_path, fills_path.
+        """
         sets = ["status = ?"]
         params: list = [status]
         if duration_ms is not None:
             sets.append("duration_ms = ?")
             params.append(int(duration_ms))
-        if metrics_path is not None:
-            sets.append("metrics_path = ?")
-            params.append(metrics_path)
-        if equity_path is not None:
-            sets.append("equity_path = ?")
-            params.append(equity_path)
-        if orders_path is not None:
-            sets.append("orders_path = ?")
-            params.append(orders_path)
-        if fills_path is not None:
-            sets.append("fills_path = ?")
-            params.append(fills_path)
+        if artifacts:
+            if (mp := artifacts.get("metrics_path")) is not None:
+                sets.append("metrics_path = ?")
+                params.append(mp)
+            if (ep := artifacts.get("equity_path")) is not None:
+                sets.append("equity_path = ?")
+                params.append(ep)
+            if (op := artifacts.get("orders_path")) is not None:
+                sets.append("orders_path = ?")
+                params.append(op)
+            if (fp := artifacts.get("fills_path")) is not None:
+                sets.append("fills_path = ?")
+                params.append(fp)
         params.append(run_id)
         with self._connect() as conn:
             conn.execute(f"UPDATE backtests SET {', '.join(sets)} WHERE backtest_id = ?", params)

@@ -39,11 +39,7 @@ try:  # pragma: no cover - exercised in integration
             instrument_id: str,
             fast: int = 20,
             slow: int = 50,
-
-            qty: int = 1,
-            rth_only: bool = False,
-            eod_flat: bool = False,
-            **_: Any,
+            **kwargs: Any,
         ) -> None:
             """Initialize SMA crossover strategy.
 
@@ -54,6 +50,7 @@ try:  # pragma: no cover - exercised in integration
               qty: Fixed order quantity per signal.
               rth_only: If True, ignore pre/post-market bars.
               eod_flat: If True, flatten at end of RTH.
+              **kwargs: Additional options; currently supports `qty`, `rth_only`, and `eod_flat`.
             """
             super().__init__()
             if fast >= slow:
@@ -62,10 +59,10 @@ try:  # pragma: no cover - exercised in integration
             self.instrument_id = InstrumentId.from_str(instrument_id)
             self.fast_period = int(fast)
             self.slow_period = int(slow)
-            self.qty = int(qty)
-            self.rth_only = bool(rth_only)
-            self.eod_flat = bool(eod_flat)
-
+            # Extract known options from kwargs (backward-compatible)
+            self.qty = int(kwargs.get("qty", 1))
+            self.rth_only = bool(kwargs.get("rth_only", False))
+            self.eod_flat = bool(kwargs.get("eod_flat", False))
 
             # Runtime state for artifact mapping (MVP, independent of engine internals)
             self._bar_type: BarType | None = None
@@ -102,6 +99,7 @@ try:  # pragma: no cover - exercised in integration
         def _get_tz_ny(self):
             try:  # pragma: no cover
                 from zoneinfo import ZoneInfo
+
                 return ZoneInfo("America/New_York")
             except Exception:
                 return None
@@ -118,12 +116,14 @@ try:  # pragma: no cover - exercised in integration
 
         def _compute_equity_snapshot(self) -> float:
             import logging
+
             logger = logging.getLogger("strategy.equity")
             try:
                 portfolio = self.portfolio
                 venue = self.instrument_id.venue
                 account = portfolio.account(venue)
                 from nautilus_trader.model.currencies import USD
+
                 bal_money = account.balance_total(USD)
                 bal_val = (
                     float(bal_money.as_double())
@@ -169,7 +169,6 @@ try:  # pragma: no cover - exercised in integration
             if self.eod_flat and self._in_position and mins is not None and mins == (15 * 60 + 59):
                 self._place(OrderSide.SELL, px, ts)
 
-
         def on_bar(self, bar) -> None:
             """Handle an incoming bar for this instrument and update signals."""
             # Only handle our instrument/BarType
@@ -200,6 +199,7 @@ try:  # pragma: no cover - exercised in integration
         def on_event(self, event) -> None:  # pragma: no cover
             """Handle a generic engine event (debug logging only)."""
             import logging
+
             logger = logging.getLogger("strategy.events")
 
             event_type = type(event).__name__
@@ -215,6 +215,7 @@ try:  # pragma: no cover - exercised in integration
         def on_order_filled(self, event) -> None:  # pragma: no cover
             """Handle order fill events and update local artifacts."""
             import logging
+
             logger = logging.getLogger("strategy.fills")
 
             logger.info(f"🎯 on_order_filled CALLED! Event: {event}")

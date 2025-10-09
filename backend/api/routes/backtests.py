@@ -7,11 +7,12 @@ import contextlib
 import json
 import logging
 from datetime import datetime as _dt
-from typing import Any
+from typing import Annotated, Any
 
 import pandas as pd
-from fastapi import APIRouter, Header, Query, Request, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, Header, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
 
 from backend.api.controllers.backtests import (
     create_backtest as create_backtest_ctrl,
@@ -23,6 +24,7 @@ from backend.api.controllers.backtests import (
     list_backtests as list_backtests_ctrl,
 )
 from backend.constants import DEFAULT_FPS
+from backend.domain.queries import BacktestListQuery
 
 
 def _json_default(o):
@@ -87,47 +89,47 @@ async def create_backtest(
 
     # Delegate to module controller (pilot exemplar)
 
-    payload, code = create_backtest_ctrl(
-        body if isinstance(body, dict) else {}, idempotency_key
-    )
+    payload, code = create_backtest_ctrl(body if isinstance(body, dict) else {}, idempotency_key)
     if status.HTTP_200_OK <= code < status.HTTP_300_MULTIPLE_CHOICES:
         return JSONResponse(status_code=code, content=payload)
     # Error branch
     return JSONResponse(status_code=code, content=payload)
 
 
+class BacktestListParams(BaseModel):
+    """Query params model for /backtests listing.
+
+    Using a single model with Depends to reduce PLR0913 violations in route
+    signatures while preserving FastAPI's parsing and docs.
+    """
+
+    symbol: str | None = None
+    strategy_id: str | None = None
+    run_from: str | None = Field(None, alias="run_from")
+    run_to: str | None = Field(None, alias="run_to")
+
+    limit: int = 20
+    offset: int = 0
+    order: str | None = None
+
+
 @router.get("/backtests")
-async def list_backtests(
-    limit: int = 20,
-    offset: int = 0,
-    symbol: str | None = None,
-    strategy_id: str | None = None,
-    run_from: str | None = Query(None, alias="run_from"),
-    run_to: str | None = Query(None, alias="run_to"),
-    order: str | None = None,
-):
+async def list_backtests(q: Annotated[BacktestListParams, Depends()]):
     """List backtests with optional filters and pagination."""
     logger.info(
         "list_backtests",
-        extra={
-            "symbol": symbol,
-            "strategy_id": strategy_id,
-            "run_from": run_from,
-            "run_to": run_to,
-            "limit": limit,
-            "offset": offset,
-            "order": order,
-        },
+        extra={**q.model_dump(by_alias=True)},
     )
-    return list_backtests_ctrl(
-        symbol=symbol,
-        strategy_id=strategy_id,
-        from_date=run_from,
-        to_date=run_to,
-        limit=limit,
-        offset=offset,
-        order=order,
+    q_dto = BacktestListQuery(
+        symbol=q.symbol,
+        strategy_id=q.strategy_id,
+        from_date=q.run_from,
+        to_date=q.run_to,
+        limit=q.limit,
+        offset=q.offset,
+        order=q.order or "-created_at",
     )
+    return list_backtests_ctrl(q_dto)
 
 
 @router.get("/backtests/{run_id}")
@@ -382,7 +384,11 @@ class _BacktestWSHandler:
             try:
                 logger.info("ws.stream_start", extra={"run_id": self.run_id})
                 async for fr in produce_frames(
-                    run_id=self.run_id, fps=DEFAULT_FPS, speed=1.0, realtime=True, cadence="1h"
+                    run_id=self.run_id,
+                    speed=1.0,
+                    realtime=True,
+                    cadence="1h",
+                    options={"fps": DEFAULT_FPS},
                 ):
                     await self.ws.send_text(_json_dumps(self._frame_payload(fr)))
                     self.frames_sent += 1
@@ -481,7 +487,11 @@ async def stream_backtest(run_id: str, speed: float = 1.0):
         last_dropped = 0
         try:
             async for fr in produce_frames(
-                run_id=run_id, fps=DEFAULT_FPS, speed=float(speed), realtime=True, cadence="1h"
+                run_id=run_id,
+                speed=float(speed),
+                realtime=True,
+                cadence="1h",
+                options={"fps": DEFAULT_FPS},
             ):
                 payload = {
                     "t": fr.t,

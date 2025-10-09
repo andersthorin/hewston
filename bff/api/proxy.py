@@ -9,14 +9,13 @@ Maintains exact API compatibility while adding BFF-specific enhancements.
 import logging
 
 import httpx
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Request
 
 from bff.app.dependencies import get_backend_client
 from bff.services.backend_client import BackendClient, create_backend_client
 
 router = APIRouter()
 logger = logging.getLogger("bff.proxy")
-
 
 
 class DailyBarsQuery:
@@ -113,12 +112,16 @@ async def proxy_get_daily_bars(
         params_dict["to"] = params.to_date
 
     # Forward request to backend
+    from bff.services.backend_client import ProxySpec
+
     return await backend_client.proxy_request(
-        method="GET",
-        path="/bars/daily",
-        headers=dict(request.headers),
-        params=params_dict,
-        correlation_id=correlation_id,
+        ProxySpec(
+            method="GET",
+            path="/bars/daily",
+            headers=dict(request.headers),
+            params=params_dict,
+            correlation_id=correlation_id,
+        )
     )
 
 
@@ -142,12 +145,16 @@ async def proxy_get_minute_bars(
     }
 
     # Forward request to backend
+    from bff.services.backend_client import ProxySpec
+
     return await backend_client.proxy_request(
-        method="GET",
-        path="/bars/minute",
-        headers=dict(request.headers),
-        params=params_dict,
-        correlation_id=correlation_id,
+        ProxySpec(
+            method="GET",
+            path="/bars/minute",
+            headers=dict(request.headers),
+            params=params_dict,
+            correlation_id=correlation_id,
+        )
     )
 
 
@@ -172,12 +179,16 @@ async def proxy_get_minute_decimated_bars(
     }
 
     # Forward request to backend
+    from bff.services.backend_client import ProxySpec
+
     return await backend_client.proxy_request(
-        method="GET",
-        path="/bars/minute_decimated",
-        headers=dict(request.headers),
-        params=params_dict,
-        correlation_id=correlation_id,
+        ProxySpec(
+            method="GET",
+            path="/bars/minute_decimated",
+            headers=dict(request.headers),
+            params=params_dict,
+            correlation_id=correlation_id,
+        )
     )
 
 
@@ -201,10 +212,14 @@ async def proxy_get_hour_bars(
     }
 
     # Forward request to backend
+    from bff.services.backend_client import ProxySpec
+
     return await backend_client.proxy_request(
-        method="GET",
-        path="/bars/hour",
-        headers=dict(request.headers),
-        params=params_dict,
-        correlation_id=correlation_id,
+        ProxySpec(
+            method="GET",
+            path="/bars/hour",
+            headers=dict(request.headers),
+            params=params_dict,
+            correlation_id=correlation_id,
+        )
     )

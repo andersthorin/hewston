@@ -1,6 +1,7 @@
 """Utilities for cumulative backtest metrics (returns, drawdown, Sharpe, win rate)."""
 
 import math
+from dataclasses import dataclass
 from typing import Any
 
 from backend.utils.datetime import normalize_timestamp
@@ -13,7 +14,6 @@ def _annualization_factor(
         return float("nan")
     periods_per_session = max(1, int(minutes_per_session / bar_minutes))
     return float(periods_per_session * sessions_per_year)
-
 
 
 def _preprocess_realized_epochs(
@@ -29,27 +29,26 @@ def _preprocess_realized_epochs(
     return epochs
 
 
-def _advance_realized(
-    realized_epochs: list[tuple[int, float]],
-    realized_idx: int,
-    last_realized_val: float | None,
-    epoch: int,
-    wins: int,
-    losses: int,
-) -> tuple[int, float | None, int, int]:
-    while (
-        (realized_idx + 1) < len(realized_epochs)
-        and realized_epochs[realized_idx + 1][0] <= epoch
-    ):
-        next_val = realized_epochs[realized_idx + 1][1]
-        delta = next_val - (last_realized_val if last_realized_val is not None else 0.0)
+@dataclass(slots=True)
+class _RealizedState:
+    epochs: list[tuple[int, float]]
+    idx: int = -1
+    last_val: float | None = None
+    wins: int = 0
+    losses: int = 0
+
+
+def _advance_realized(state: _RealizedState, epoch: int) -> _RealizedState:
+    while (state.idx + 1) < len(state.epochs) and state.epochs[state.idx + 1][0] <= epoch:
+        next_val = state.epochs[state.idx + 1][1]
+        delta = next_val - (state.last_val if state.last_val is not None else 0.0)
         if delta > 0:
-            wins += 1
+            state.wins += 1
         elif delta < 0:
-            losses += 1
-        last_realized_val = next_val
-        realized_idx += 1
-    return realized_idx, last_realized_val, wins, losses
+            state.losses += 1
+        state.last_val = next_val
+        state.idx += 1
+    return state
 
 
 def _calc_returns(prev_val: float | None, v_cur: float | None) -> tuple[float | None, float | None]:
@@ -120,12 +119,13 @@ def compute_cumulative_metrics(
         return out
 
     # Prepare realized pointer and preprocessed epochs
-    realized_idx = -1
-    last_realized_val: float | None = None
-    wins = 0
-    losses = 0
-
-    realized_epochs = _preprocess_realized_epochs(realized_series)
+    _state = _RealizedState(
+        epochs=_preprocess_realized_epochs(realized_series),
+        idx=-1,
+        last_val=None,
+        wins=0,
+        losses=0,
+    )
 
     # Running stats for Sharpe
     returns_sum = 0.0
@@ -149,9 +149,7 @@ def compute_cumulative_metrics(
             continue
 
         # Advance realized pointer to <= current epoch
-        realized_idx, last_realized_val, wins, losses = _advance_realized(
-            realized_epochs, realized_idx, last_realized_val, epoch, wins, losses
-        )
+        _state = _advance_realized(_state, epoch)
 
         # Returns + totals
         v_cur = None
@@ -173,7 +171,8 @@ def compute_cumulative_metrics(
         )
 
         # Win rate
-        win_rate = (wins / (wins + losses)) if (wins + losses) > 0 else None
+        denom = _state.wins + _state.losses
+        win_rate = (_state.wins / denom) if denom > 0 else None
 
         out.append(
             (
@@ -181,7 +180,7 @@ def compute_cumulative_metrics(
                 {
                     "equity": float(er.get("value")) if er.get("value") is not None else None,
                     "return": r_cur,
-                    "realized_pnl": last_realized_val,
+                    "realized_pnl": _state.last_val,
                     "total_return": total_ret,
                     "drawdown": drawdown,
                     "sharpe": sharpe,

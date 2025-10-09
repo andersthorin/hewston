@@ -1,1 +1,1 @@
-# BFF Tests Module
+"""BFF tests package."""

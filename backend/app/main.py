@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
         response = await call_next(request)
         dur_ms = int((time.perf_counter() - start) * 1000)
         import contextlib
+
         with contextlib.suppress(Exception):
             logger.info(
                 "http.access",

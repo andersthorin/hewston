@@ -26,7 +26,6 @@ def _run_data(symbol: str, year: int, force: bool) -> int:
         return 2
 
 
-
 if typer is not None:
     app = typer.Typer(no_args_is_help=True, add_completion=False)
 
@@ -62,7 +61,7 @@ if typer is not None:
         raise typer.Exit(code)
 
     @app.command(name="backtest")
-    def backtest_cmd(
+    def backtest_cmd(  # noqa: PLR0913 - CLI command intentionally exposes multiple options
         symbol: str = OPT_SYMBOL_OPT,
         year: int = OPT_YEAR_OPT,
         dataset_id: str = OPT_DATASET_ID,
@@ -90,13 +89,17 @@ if typer is not None:
         from backend.jobs.run_backtest import run_backtest_and_persist
 
         out = run_backtest_and_persist(
-            dataset_id=dataset_id,
-            strategy_id=strategy_id,
-            params=p,
-            seed=seed,
-            speed=speed,
-            slippage_fees={},
-            run_id=run_id,
+            req={
+                "dataset_id": dataset_id,
+                "strategy_id": strategy_id,
+                "params": p,
+                "seed": seed,
+                "speed": speed,
+                "slippage_fees": {},
+                "run_id": run_id,
+                "from_date": from_date,
+                "to_date": to_date,
+            }
         )
         print(f"[backtest] run_id={out['run_id']} duration_ms={out['duration_ms']}")
         raise typer.Exit(0)
@@ -120,7 +123,6 @@ def main_argv(argv: list[str] | None = None) -> int:
     if typer is not None:
         # Delegate to Typer if present
 
-
         try:
             # Build a Typer app on the fly to parse argv
 
@@ -131,7 +133,6 @@ def main_argv(argv: list[str] | None = None) -> int:
             return 0
         except Exception:
             pass
-
 
     # Fallback: argparse minimal parser
     import argparse

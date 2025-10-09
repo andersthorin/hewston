@@ -15,7 +15,6 @@ LIMIT_MAX = 500
 MIN_EXPECTED_TOTAL = 2
 
 
-
 def seed_sample_db(db_path: str):
     """Seed sample datasets and backtests across two symbols."""
     SqliteCatalog(db_path)

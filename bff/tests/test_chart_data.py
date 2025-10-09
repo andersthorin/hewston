@@ -1,12 +1,29 @@
-"""
-Chart Data Tests
+"""Chart Data Tests.
 
 Tests for the chart data aggregation functionality following the acceptance criteria
 from Story 8.3 and the QA checklist.
 """
 
+from http import HTTPStatus
+
 import pytest
 from fastapi.testclient import TestClient
+
+# Constants to avoid magic values in assertions
+EXPECTED_DAILY_BARS_COUNT = 2
+EXPECTED_TOTAL_BARS_COUNT = 2
+DECIMATION_TARGET_POINTS = 5000
+DECIMATION_TARGET_SMALL = 100
+OPEN_100 = 100.0
+HIGH_105 = 105.0
+LOW_99 = 99.0
+CLOSE_104 = 104.0
+VOLUME_1000 = 1000
+VOLUME_100 = 100
+TTL_5_MIN = 300
+TTL_1_HOUR = 3600
+TTL_24_HOURS = 86400
+KEY_TARGET_POINTS_10000 = 10000
 
 
 class TestChartDataEndpoint:
@@ -38,7 +55,7 @@ class TestChartDataEndpoint:
                 },
             ],
         }
-        mock_response = mock_backend_response(200, backend_data)
+        mock_response = mock_backend_response(HTTPStatus.OK, backend_data)
         mock_backend_client.request.return_value = mock_response
 
         # Act
@@ -54,18 +71,18 @@ class TestChartDataEndpoint:
         )
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
 
         assert data["symbol"] == "AAPL"
         assert data["timeframe"] == "1D"
         assert data["from_date"] == "2024-01-01"
         assert data["to_date"] == "2024-01-31"
-        assert len(data["bars"]) == 2
+        assert len(data["bars"]) == EXPECTED_DAILY_BARS_COUNT
 
         # Verify metadata
         metadata = data["metadata"]
-        assert metadata["total_bars"] == 2
+        assert metadata["total_bars"] == EXPECTED_TOTAL_BARS_COUNT
         assert metadata["decimated"] is False
         assert metadata["cache_hit"] is False
         assert metadata["backend_calls"] == 1
@@ -91,7 +108,7 @@ class TestChartDataEndpoint:
             )
 
         backend_data = {"symbol": "AAPL", "bars": bars}
-        mock_response = mock_backend_response(200, backend_data)
+        mock_response = mock_backend_response(HTTPStatus.OK, backend_data)
         mock_backend_client.request.return_value = mock_response
 
         # Act
@@ -107,12 +124,12 @@ class TestChartDataEndpoint:
         )
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
 
         assert data["symbol"] == "AAPL"
         assert data["timeframe"] == "1M"
-        assert len(data["bars"]) <= 5000  # Should be decimated
+        assert len(data["bars"]) <= DECIMATION_TARGET_POINTS  # Should be decimated
 
         # Verify decimation metadata
         metadata = data["metadata"]
@@ -135,7 +152,7 @@ class TestChartDataEndpoint:
         )
 
         # Assert
-        assert response.status_code == 400
+        assert response.status_code == HTTPStatus.BAD_REQUEST
         assert "to_date must be after from_date" in response.json()["detail"]
 
     def test_chart_data_symbol_not_found(
@@ -143,7 +160,7 @@ class TestChartDataEndpoint:
     ):
         """Test chart data request for non-existent symbol."""
         # Arrange
-        mock_response = mock_backend_response(404)
+        mock_response = mock_backend_response(HTTPStatus.NOT_FOUND)
         mock_backend_client.request.return_value = mock_response
 
         # Act
@@ -158,7 +175,7 @@ class TestChartDataEndpoint:
         )
 
         # Assert
-        assert response.status_code == 404
+        assert response.status_code == HTTPStatus.NOT_FOUND
         assert "No data found" in response.json()["detail"]
 
     def test_chart_data_backend_error(
@@ -166,7 +183,7 @@ class TestChartDataEndpoint:
     ):
         """Test chart data request with backend error."""
         # Arrange
-        mock_response = mock_backend_response(500)
+        mock_response = mock_backend_response(HTTPStatus.INTERNAL_SERVER_ERROR)
         mock_backend_client.request.return_value = mock_response
 
         # Act
@@ -176,7 +193,7 @@ class TestChartDataEndpoint:
         )
 
         # Assert
-        assert response.status_code == 500
+        assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
         assert "Backend error" in response.json()["detail"]
 
 
@@ -218,13 +235,13 @@ class TestDataTransformation:
         )
 
         # Assert
-        assert len(bars) == 2
+        assert len(bars) == EXPECTED_DAILY_BARS_COUNT
         assert bars[0].timestamp == "2024-01-01T00:00:00Z"
-        assert bars[0].open == 100.0
-        assert bars[0].high == 105.0
-        assert bars[0].low == 99.0
-        assert bars[0].close == 104.0
-        assert bars[0].volume == 1000
+        assert bars[0].open == OPEN_100
+        assert bars[0].high == HIGH_105
+        assert bars[0].low == LOW_99
+        assert bars[0].close == CLOSE_104
+        assert bars[0].volume == VOLUME_1000
 
     def test_decimate_data(self):
         """Test data decimation functionality."""
@@ -248,11 +265,11 @@ class TestDataTransformation:
 
         # Act
         decimated_bars, stride = transformer.decimate_data(
-            bars, target_points=100, correlation_id="test-correlation-id"
+            bars, target_points=DECIMATION_TARGET_SMALL, correlation_id="test-correlation-id"
         )
 
         # Assert
-        assert len(decimated_bars) <= 100
+        assert len(decimated_bars) <= DECIMATION_TARGET_SMALL
         assert stride > 1
         assert decimated_bars[0] == bars[0]  # First bar preserved
         # Last bar may or may not be preserved depending on stride and target_points
@@ -300,7 +317,7 @@ class TestDataTransformation:
 
         # Assert
         assert len(valid_bars) == 1  # Only first bar is valid
-        assert valid_bars[0].open == 100.0
+        assert valid_bars[0].open == OPEN_100
 
 
 class TestCaching:
@@ -309,20 +326,41 @@ class TestCaching:
     @pytest.mark.asyncio
     async def test_cache_key_generation(self):
         """Test cache key generation."""
-        from bff.services.cache import CacheService
+        from bff.services.cache import CacheService, ChartCacheKeyArgs
 
         # Arrange
         cache_service = CacheService()
 
         # Act
         key1 = cache_service.generate_chart_cache_key(
-            "AAPL", "1D", "2024-01-01", "2024-01-31", 10000, True
+            ChartCacheKeyArgs(
+                "AAPL",
+                "1D",
+                "2024-01-01",
+                "2024-01-31",
+                KEY_TARGET_POINTS_10000,
+                True,
+            )
         )
         key2 = cache_service.generate_chart_cache_key(
-            "AAPL", "1D", "2024-01-01", "2024-01-31", 10000, True
+            ChartCacheKeyArgs(
+                "AAPL",
+                "1D",
+                "2024-01-01",
+                "2024-01-31",
+                KEY_TARGET_POINTS_10000,
+                True,
+            )
         )
         key3 = cache_service.generate_chart_cache_key(
-            "AAPL", "1H", "2024-01-01", "2024-01-31", 10000, True
+            ChartCacheKeyArgs(
+                "AAPL",
+                "1H",
+                "2024-01-01",
+                "2024-01-31",
+                KEY_TARGET_POINTS_10000,
+                True,
+            )
         )
 
         # Assert
@@ -359,14 +397,14 @@ class TestCaching:
         # Recent data (today)
         recent_date = now.isoformat()
         ttl_recent = cache_service.calculate_ttl("2024-01-01", recent_date, "1D")
-        assert ttl_recent == 300  # 5 minutes
+        assert ttl_recent == TTL_5_MIN  # 5 minutes
 
         # Week old data
         week_old = (now - timedelta(days=7)).isoformat()
         ttl_week = cache_service.calculate_ttl("2024-01-01", week_old, "1D")
-        assert ttl_week == 3600  # 1 hour
+        assert ttl_week == TTL_1_HOUR  # 1 hour
 
         # Historical data
         historical = (now - timedelta(days=100)).isoformat()
         ttl_historical = cache_service.calculate_ttl("2024-01-01", historical, "1D")
-        assert ttl_historical == 86400  # 24 hours
+        assert ttl_historical == TTL_24_HOURS  # 24 hours

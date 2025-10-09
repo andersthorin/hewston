@@ -10,7 +10,6 @@ from backend.services import streamer as streamer_mod
 FRAMES_EXPECTED = 3
 
 
-
 @pytest.mark.asyncio
 async def test_streamer_fallback_metrics_when_no_artifact(tmp_path: Path, monkeypatch):
     """Ensure streamer computes metrics if artifact is missing."""

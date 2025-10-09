@@ -2,14 +2,28 @@
 
 No stubs or fallbacks; all data and metrics come from Nautilus outputs.
 """
+
 from __future__ import annotations
 
 import math
 from contextlib import suppress
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pandas as pd  # type: ignore
+
+
+@dataclass(slots=True)
+class RunSpec:
+    """Parameter object for Nautilus backtest runs."""
+
+    dataset_id: str
+    strategy_id: str
+    params: dict[str, Any]
+    seed: int
+    from_date: str | None = None
+    to_date: str | None = None
 
 
 def _compute_date_list(from_date: str | None, to_date: str | None) -> list[str]:
@@ -26,6 +40,7 @@ def _compute_date_list(from_date: str | None, to_date: str | None) -> list[str]:
 
 def _load_quotes_dataframe(venue: str, symbol: str, dates: list[str]):
     """Load and normalize warehouse QuoteTicks parquet for given (venue, symbol, dates)."""
+
     def _qpath(date_str: str) -> Path:
         return (
             Path("data/warehouse/quotes")
@@ -230,32 +245,15 @@ class NautilusBacktestRunner:
     def run(
         self,
         *,
-        dataset_id: str,
-        strategy_id: str,
-        params: dict[str, Any],
-        seed: int,
-        from_date: str | None = None,
-        to_date: str | None = None,
+        spec: RunSpec,
     ) -> dict[str, Any]:
         """Execute a backtest via the real Nautilus engine and return artifacts."""
-        return self._run_real(
-            dataset_id=dataset_id,
-            strategy_id=strategy_id,
-            params=params,
-            seed=seed,
-            from_date=from_date,
-            to_date=to_date,
-        )
+        return self._run_real(spec=spec)
 
     def _run_real(
         self,
         *,
-        dataset_id: str,
-        strategy_id: str,
-        params: dict[str, Any],
-        seed: int,
-        from_date: str | None,
-        to_date: str | None,
+        spec: RunSpec,
     ) -> dict[str, Any]:
         """Real engine execution path using nautilus-trader.
 
@@ -267,16 +265,16 @@ class NautilusBacktestRunner:
         # Load QuoteTicks from warehouse and feed to Nautilus (Approach A: INTERNAL MID)
         # - Instrument: default to AAPL.XNAS unless provided via params
 
-        instrument_id = str(params.get("instrument_id", "AAPL.XNAS"))
+        instrument_id = str(spec.params.get("instrument_id", "AAPL.XNAS"))
 
         # Resolve venue/symbol and date range, then load quotes
         symbol = instrument_id.split(".")[0]
         venue = instrument_id.split(".")[1] if "." in instrument_id else "XNAS"
-        dates = _compute_date_list(from_date, to_date)
+        dates = _compute_date_list(spec.from_date, spec.to_date)
         pdf = _load_quotes_dataframe(venue, symbol, dates)
 
         # Build strategy
-        strategy = _prepare_strategy(strategy_id, params, instrument_id)
+        strategy = _prepare_strategy(spec.strategy_id, spec.params, instrument_id)
 
         # Engine wiring (Nautilus 1.219.0 API)
         engine, instr, client_id = _setup_engine_and_instrument(venue, instrument_id)

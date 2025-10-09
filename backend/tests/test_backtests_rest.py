@@ -9,7 +9,6 @@ from backend.app.main import app
 DEFAULT_LIMIT = 20
 
 
-
 def test_post_backtests_idempotency():
     """Ensure POST /backtests is idempotent."""
     client = TestClient(app)

@@ -8,10 +8,9 @@ into optimized responses for frontend consumption.
 
 import logging
 import time
+from dataclasses import dataclass
 from datetime import date
 from http import HTTPStatus
-from dataclasses import dataclass
-
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -25,12 +24,11 @@ from bff.models.chart_data import (
     TimeframeEnum,
 )
 from bff.services.backend_client import BackendClient, create_backend_client
-from bff.services.cache import CacheService
+from bff.services.cache import CacheService, ChartCacheKeyArgs
 from bff.services.data_transformer import DataTransformer
 
 router = APIRouter()
 logger = logging.getLogger("bff.chart_data")
-
 
 
 class ChartQuery:
@@ -125,12 +123,14 @@ async def get_chart_data(
 
     # Check cache first
     cache_key = cache_service.generate_chart_cache_key(
-        symbol=request_data.symbol,
-        timeframe=request_data.timeframe,
-        from_date=str(request_data.from_date),
-        to_date=str(request_data.to_date),
-        target_points=request_data.target_points,
-        rth_only=request_data.rth_only,
+        ChartCacheKeyArgs(
+            symbol=request_data.symbol,
+            timeframe=request_data.timeframe,
+            from_date=str(request_data.from_date),
+            to_date=str(request_data.to_date),
+            target_points=request_data.target_points,
+            rth_only=request_data.rth_only,
+        )
     )
 
     t_cache_get = time.perf_counter()
@@ -155,8 +155,7 @@ async def get_chart_data(
 
         # Server-Timing for cache hit
         server_timing = (
-            f"cache;dur={cache_get_ms}, "
-            f"total;dur={cached_response.metadata.load_time_ms}"
+            f"cache;dur={cache_get_ms}, " f"total;dur={cached_response.metadata.load_time_ms}"
         )
         headers = {"Server-Timing": server_timing}
         return JSONResponse(content=cached_response.model_dump(), headers=headers)
@@ -181,17 +180,20 @@ async def get_chart_data(
         )
 
         # Build response, cache it, and compute headers
+        ctx = FinalizeContext(
+            bars=bars,
+            decimated=decimated,
+            decimation_stride=decimation_stride,
+            backend_calls=backend_calls,
+            backend_time_ms=backend_time_ms,
+            transform_time_ms=transform_time_ms,
+            cache_get_ms=cache_get_ms,
+            start_time=start_time,
+        )
         response_dict, headers, cache_set_ms = await _finalize_and_cache(
             cache_service,
             request_data,
-            bars,
-            decimated,
-            decimation_stride,
-            backend_calls,
-            backend_time_ms,
-            transform_time_ms,
-            cache_get_ms,
-            start_time,
+            ctx,
             correlation_id,
         )
 
@@ -314,7 +316,6 @@ async def _fetch_backend_data(
         )
 
 
-
 def _transform_and_decimate(
     transformer: DataTransformer,
     backend_data: dict,
@@ -342,18 +343,10 @@ def _transform_and_decimate(
     return bars, transform_time_ms, decimated, decimation_stride
 
 
-def _finalize_and_cache(
-    cache: CacheService,
-    request: ChartDataRequest,
-    bars: list[dict],
-    decimated: bool,
-    decimation_stride: int,
-    backend_calls: int,
-    backend_time_ms: int,
-
-
 @dataclass
 class FinalizeContext:
+    """Context container for finalize-and-cache step."""
+
     bars: list[dict]
     decimated: bool
     decimation_stride: int
@@ -363,9 +356,11 @@ class FinalizeContext:
     cache_get_ms: int
     start_time: float
 
-    transform_time_ms: int,
-    cache_get_ms: int,
-    start_time: float,
+
+async def _finalize_and_cache(
+    cache: CacheService,
+    request: ChartDataRequest,
+    ctx: FinalizeContext,
     correlation_id: str,
 ) -> tuple[dict, dict, int]:
     """Build response model, cache it, and compute headers.
@@ -374,45 +369,45 @@ class FinalizeContext:
         (response_dict, headers, cache_set_ms)
     """
     data_source = _get_data_source_endpoint(request.timeframe)
-    load_time_ms = int((time.perf_counter() - start_time) * 1000)
+    load_time_ms = int((time.perf_counter() - ctx.start_time) * 1000)
 
     response = ChartDataResponse(
         symbol=request.symbol,
         timeframe=request.timeframe,
         from_date=str(request.from_date),
         to_date=str(request.to_date),
-        bars=bars,
+        bars=ctx.bars,
         metadata=ResponseMetadata(
-            total_bars=len(bars),
-            decimated=decimated,
-            decimation_stride=decimation_stride if decimated else None,
+            total_bars=len(ctx.bars),
+            decimated=ctx.decimated,
+            decimation_stride=ctx.decimation_stride if ctx.decimated else None,
             cache_hit=False,
             load_time_ms=load_time_ms,
-            backend_calls=backend_calls,
+            backend_calls=ctx.backend_calls,
             data_source=data_source,
         ),
     )
 
-
     ttl = cache.calculate_ttl(str(request.from_date), str(request.to_date), request.timeframe)
     cache_key = cache.generate_chart_cache_key(
-        symbol=request.symbol,
-        timeframe=request.timeframe,
-        from_date=str(request.from_date),
-        to_date=str(request.to_date),
-        target_points=request.target_points,
-        rth_only=request.rth_only,
+        ChartCacheKeyArgs(
+            symbol=request.symbol,
+            timeframe=request.timeframe,
+            from_date=str(request.from_date),
+            to_date=str(request.to_date),
+            target_points=request.target_points,
+            rth_only=request.rth_only,
+        )
     )
 
     t_cache_set = time.perf_counter()
-    # Fire-and-forget cache set is acceptable here but we await to keep timing accurate
     await cache.set_chart_data(cache_key, response, ttl, correlation_id)
     cache_set_ms = int((time.perf_counter() - t_cache_set) * 1000)
 
     server_timing = (
-        f"backend;dur={backend_time_ms}, "
-        f"transform;dur={transform_time_ms}, "
-        f"cache_get;dur={cache_get_ms}, "
+        f"backend;dur={ctx.backend_time_ms}, "
+        f"transform;dur={ctx.transform_time_ms}, "
+        f"cache_get;dur={ctx.cache_get_ms}, "
         f"cache_set;dur={cache_set_ms}, "
         f"total;dur={load_time_ms}"
     )

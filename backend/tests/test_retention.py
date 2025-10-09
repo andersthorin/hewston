@@ -14,8 +14,6 @@ EXPECT_RECLAIMED = 30
 
 def _insert_run(db_path: Path, run_id: str, created_at: str) -> None:
 
-
-
     with sqlite3.connect(db_path) as conn:
         conn.execute(
             """

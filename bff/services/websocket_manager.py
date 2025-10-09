@@ -1,5 +1,4 @@
-"""
-WebSocket Connection Manager
+"""WebSocket Connection Manager.
 
 Manages WebSocket connections, subscriptions, and message routing.
 Handles connection lifecycle and error recovery.
@@ -8,6 +7,7 @@ Handles connection lifecycle and error recovery.
 import asyncio
 import json
 import logging
+from contextlib import suppress
 from datetime import datetime
 from typing import Any
 
@@ -32,6 +32,7 @@ class WebSocketConnectionManager:
     """Manages WebSocket connections and message routing."""
 
     def __init__(self):
+        """Initialize the connection manager."""
         self.logger = logging.getLogger("bff.websocket_manager")
 
         # Client connections: {connection_id: WebSocket}
@@ -47,8 +48,7 @@ class WebSocketConnectionManager:
         self.connection_metadata: dict[str, dict[str, Any]] = {}
 
     async def connect_client(self, websocket: WebSocket, connection_id: str) -> None:
-        """
-        Accept a new client WebSocket connection.
+        """Accept a new client WebSocket connection.
 
         Args:
             websocket: Client WebSocket connection
@@ -81,8 +81,7 @@ class WebSocketConnectionManager:
         )
 
     async def disconnect_client(self, connection_id: str) -> None:
-        """
-        Handle client disconnection and cleanup.
+        """Handle client disconnection and cleanup.
 
         Args:
             connection_id: Connection identifier to disconnect
@@ -96,11 +95,8 @@ class WebSocketConnectionManager:
             subscriptions = meta.get("subscriptions", set()) or set()
             # Create a copy to avoid "set changed size during iteration" error
             for run_id in list(subscriptions):
-                try:
+                with suppress(Exception):
                     await self._unsubscribe_from_run(connection_id, run_id)
-                except Exception:
-                    # Best-effort cleanup; ignore errors during disconnect
-                    pass
 
         self.logger.info(
             "client.disconnected",
@@ -111,8 +107,7 @@ class WebSocketConnectionManager:
         )
 
     async def handle_client_message(self, connection_id: str, message_data: str) -> None:
-        """
-        Handle incoming message from client.
+        """Handle incoming message from client.
 
         Args:
             connection_id: Client connection identifier
@@ -343,8 +338,7 @@ class WebSocketConnectionManager:
             )
 
     async def _ensure_backend_connection(self, run_id: str) -> None:
-        """
-        Ensure backend WebSocket connection exists for run.
+        """Ensure backend WebSocket connection exists for run.
 
         Args:
             run_id: Run identifier
@@ -402,8 +396,7 @@ class WebSocketConnectionManager:
             )
 
     async def _forward_backend_messages(self, run_id: str, backend_ws: Any) -> None:
-        """
-        Forward messages from backend to subscribed clients.
+        """Forward messages from backend to subscribed clients.
 
         Args:
             run_id: Run identifier
@@ -468,7 +461,6 @@ class WebSocketConnectionManager:
         if connection_id in self.connection_metadata:
             self.connection_metadata[connection_id]["subscriptions"].discard(run_id)
 
-
     def _get_connection(self, connection_id: str):
         return self.active_connections.get(connection_id)
 
@@ -480,13 +472,18 @@ class WebSocketConnectionManager:
         return json.dumps(message)
 
     def _is_connected(self, websocket: Any) -> bool:
-        # In tests or mocks, state may not exist; treat as connected in that case
+        # In tests or mocks, state may not exist or may not be a real WebSocketState;
+        # treat such cases as connected to avoid false disconnects.
         if not hasattr(websocket, "application_state"):
             return True
         try:
             from starlette.websockets import WebSocketState
+
             app_state = getattr(websocket, "application_state", None)
-            return isinstance(app_state, WebSocketState) and app_state == WebSocketState.CONNECTED
+            # If state is missing or not an actual WebSocketState (e.g., a mock), assume connected
+            if app_state is None or not isinstance(app_state, WebSocketState):
+                return True
+            return app_state == WebSocketState.CONNECTED
         except Exception:
             return True
 
@@ -507,11 +504,13 @@ class WebSocketConnectionManager:
 
         try:
             if not self._is_connected(websocket):
+                app_state = getattr(websocket, "application_state", None)
+                app_state_name = getattr(app_state, "name", None)
                 self.logger.debug(
                     "client.websocket_not_connected",
                     extra={
                         "connection_id": connection_id,
-                        "app_state": getattr(getattr(websocket, "application_state", None), "name", None),
+                        "app_state": app_state_name,
                     },
                 )
                 await self.disconnect_client(connection_id)

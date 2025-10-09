@@ -1,4 +1,5 @@
 """Retention helpers to prune old backtest artifacts and rows."""
+
 from __future__ import annotations
 
 import json
@@ -16,12 +17,11 @@ from backend.adapters.sqlite_catalog import SqliteCatalog
 @dataclass
 class Candidate:
     """A deletion candidate backtest with its artifact location and size."""
+
     run_id: str
     created_at: str
     dir_path: Path
     size_bytes: int
-
-
 
 
 def _parse_dt(s: str) -> datetime:
@@ -43,6 +43,7 @@ def _dir_size(p: Path) -> int:
             fp = Path(root) / f
             with suppress(OSError, FileNotFoundError):
                 total += fp.stat().st_size
+    return total
 
 
 def select_candidates(
@@ -106,7 +107,6 @@ def apply_deletions(cands: list[Candidate]) -> tuple[int, int]:
         deleted += 1
         bytes_reclaimed += c.size_bytes
     return deleted, bytes_reclaimed
-
 
 
 # Typer CLI

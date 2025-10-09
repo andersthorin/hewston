@@ -31,7 +31,6 @@ def _isoz(ts: datetime | str | None) -> str | None:
             return None
 
 
-
 def _parse_iso_date_range(from_date: str | None, to_date: str | None) -> tuple[datetime, datetime]:
     try:
         ts_from = datetime.fromisoformat((from_date or "1970-01-01") + "T00:00:00+00:00")

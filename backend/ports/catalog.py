@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Protocol
 
 from backend.domain.models import BacktestSummary, Dataset
+from backend.domain.queries import BacktestListQuery
 
 
 class CatalogPort(Protocol):
@@ -14,18 +15,8 @@ class CatalogPort(Protocol):
         """Return the backtest row for the given id, or None if not found."""
         ...
 
-    def list_backtests(
-        self,
-        *,
-        symbol: str | None = None,
-        strategy_id: str | None = None,
-        from_date: str | None = None,
-        to_date: str | None = None,
-        limit: int = 20,
-        offset: int = 0,
-        order: str = "-created_at",
-    ) -> tuple[list[BacktestSummary], int]:
-        """Return (items, total)."""
+    def list_backtests(self, q: BacktestListQuery) -> tuple[list[BacktestSummary], int]:
+        """Return (items, total) for the given query."""
         ...
 
     def get_dataset(self, dataset_id: str) -> Dataset | None:

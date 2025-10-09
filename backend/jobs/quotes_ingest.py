@@ -25,9 +25,9 @@ except Exception:  # pragma: no cover
     DBNStore = None  # type: ignore
 
 
-
 # Filename token length for YYYYMMDD
 DATE_TOKEN_LEN = 8
+
 
 def _warehouse_base() -> Path:
     return Path("data/warehouse/quotes").resolve()

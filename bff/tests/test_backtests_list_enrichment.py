@@ -1,18 +1,19 @@
-"""
-List Enrichment Tests (Epic 15.2)
+"""List Enrichment Tests (Epic 15.2).
 
 Validates that the BFF list enrichment logic attaches summary metrics
 for terminal runs. This test calls the endpoint function directly to
 avoid router conflicts with the generic proxy route for GET /backtests.
 """
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 
 from bff.api.backtests import list_backtests
 
 
 def create_mock_response(data: dict, status_code: int = 200):
+    """Create a minimal MagicMock HTTP response with JSON body."""
     resp = MagicMock()
     resp.status_code = status_code
     import json
@@ -24,12 +25,15 @@ def create_mock_response(data: dict, status_code: int = 200):
 
 
 class TestBacktestsListEnrichment:
+    """Tests for enriched backtests list returned by the BFF."""
+
     @pytest.mark.asyncio
     async def test_enriches_terminal_runs_with_metrics(
         self,
         mock_backend_client,
         mock_backend_response,
     ):
+        """Attaches summary metrics for COMPLETED runs in the list response."""
         # Arrange: backend returns a COMPLETED run in the list, then metrics for that run
         backend_list = {
             "items": [
@@ -81,4 +85,5 @@ class TestBacktestsListEnrichment:
         assert row["max_drawdown"] == metrics["max_drawdown"]
         assert row["win_rate"] == metrics["win_rate"]
         # Meta includes fan-out call
-        assert result["meta"]["backend_calls"] >= 2
+        backend_calls_min_2 = 2
+        assert result["meta"]["backend_calls"] >= backend_calls_min_2

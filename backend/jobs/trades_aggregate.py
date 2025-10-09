@@ -26,6 +26,7 @@ except Exception:
 
 DATE_TOKEN_LEN = 8  # YYYYMMDD
 
+
 def _base() -> Path:
     return Path("data/warehouse/trades_agg").resolve()
 
@@ -101,7 +102,6 @@ def aggregate_trades_dbn_to_parquet(
     out_1m.to_parquet(p1, index=False)
     out_1h.to_parquet(p2, index=False)
     return p1, p2
-
 
 
 def aggregate_many(

@@ -1,4 +1,5 @@
 """Streaming helpers to compute metrics frames during playback and finalize on DONE."""
+
 from __future__ import annotations
 
 import asyncio
@@ -282,7 +283,6 @@ def _ny_date_key(epoch_sec: int) -> str:
         return dt_utc.astimezone(ZoneInfo("America/New_York")).date().isoformat()
     except Exception:
 
-
         return _dt.fromtimestamp(epoch_sec, tz=UTC).date().isoformat()
 
 
@@ -456,16 +456,13 @@ def _normalize_orders_payload(orders_by_ts: dict[int, list[dict]], key: int) -> 
     return orders_payload
 
 
-def _complete_metrics(
-    mi: dict,
-    i: int,
-    n_equity: int,
-    metrics_arrays: dict,
-    daily_sharpe_ann_by_index: list,
-    daily_return_by_index: list,
-    annualization_p: float | None,
-    r_cur: float | None,
-) -> dict:
+def _complete_metrics(mi: dict, i: int, *, ctx: dict, r_cur: float | None) -> dict:
+    n_equity: int = ctx.get("n_equity", 0)
+    metrics_arrays: dict = ctx.get("metrics_arrays", {})
+    daily_sharpe_ann_by_index: list = ctx.get("daily_sharpe_ann_by_index", [])
+    daily_return_by_index: list = ctx.get("daily_return_by_index", [])
+    annualization_p: float | None = ctx.get("annualization_p")
+
     # Fill return only if not present (preserve precomputed None)
     if "return" not in mi:
         daily_r = daily_return_by_index[i] if i < len(daily_return_by_index) else None
@@ -588,17 +585,20 @@ def _compute_frame_metrics(
     i: int,
     er: dict,
     *,
-    metrics_lookup: list[tuple[int, dict]] | None,
-    m_idx: int | None,
-    last_metrics: dict | None,
-    prev_equity_val: float | None,
-    n_equity: int,
-    metrics_arrays: dict,
-    daily_sharpe_ann_by_index: list,
-    daily_return_by_index: list,
-    annualization_p: float | None,
-) -> tuple[dict, int, dict | None, float | None]:
-    """Return (metrics, m_idx, last_metrics, prev_equity_val) for current equity row."""
+    ctx: dict,
+    state: dict,
+) -> tuple[dict, dict]:
+    """Return (metrics, state) for current equity row.
+
+    state carries m_idx, last_metrics, prev_equity_val.
+    ctx provides metrics_lookup, n_equity, metrics_arrays, daily_* series and P.
+    """
+    metrics_lookup = ctx.get("metrics_lookup")
+
+    m_idx: int | None = state.get("m_idx")
+    last_metrics: dict | None = state.get("last_metrics")
+    prev_equity_val: float | None = state.get("prev_equity_val")
+
     if metrics_lookup:
         m_idx = -1 if m_idx is None else m_idx
         m_idx, last_metrics = _advance_metrics_cursor(
@@ -614,20 +614,17 @@ def _compute_frame_metrics(
         r_cur, prev_equity_val = _compute_r_cur(prev_equity_val, v_cur)
     except Exception:
         pass
-    mi = _complete_metrics(
-        mi,
-        i,
-        n_equity,
-        metrics_arrays,
-        daily_sharpe_ann_by_index,
-        daily_return_by_index,
-        annualization_p,
-        r_cur,
-    )
+    mi = _complete_metrics(mi, i, ctx=ctx, r_cur=r_cur)
     if not metrics_lookup:
         mi.setdefault("realized_pnl", None)
         mi.setdefault("win_rate", None)
-    return mi, (m_idx or -1), last_metrics, prev_equity_val
+
+    state = {
+        "m_idx": (m_idx or -1),
+        "last_metrics": last_metrics,
+        "prev_equity_val": prev_equity_val,
+    }
+    return mi, state
 
 
 def _attach_total_frames(frame: StreamFrame, produced: int, total: int) -> None:
@@ -636,14 +633,13 @@ def _attach_total_frames(frame: StreamFrame, produced: int, total: int) -> None:
             frame.total_frames = total  # type: ignore[attr-defined]
 
 
-async def produce_frames(
+async def produce_frames(  # noqa: PLR0915 - orchestrates streaming end-to-end
     *,
     run_id: str,
-    fps: int = DEFAULT_FPS,
     speed: float = 1.0,
     realtime: bool = False,
     cadence: str = "1m",
-    rth_only: bool = True,
+    options: dict | None = None,
 ) -> AsyncGenerator[StreamFrame, None]:
     """Async generator producing StreamFrame frames.
 
@@ -659,6 +655,11 @@ async def produce_frames(
     artifacts, dataset_id = _resolve_artifacts(run_id)
     if not artifacts.get("equity") or not artifacts.get("orders"):
         raise FileNotFoundError("missing artifacts")
+    # Options with defaults
+    opts = options or {}
+    fps: int = int(opts.get("fps", DEFAULT_FPS))
+
+    rth_only: bool = bool(opts.get("rth_only", True))
 
     # Load data from parquet files
     equity_rows = (
@@ -717,6 +718,17 @@ async def produce_frames(
     debug_count = 0
     last_emit = 0.0
 
+    # Prepare context/state for metrics computation
+    ctx = {
+        "metrics_lookup": metrics_lookup,
+        "n_equity": n_equity,
+        "metrics_arrays": metrics_arrays,
+        "daily_sharpe_ann_by_index": daily_sharpe_ann_by_index,
+        "daily_return_by_index": daily_return_by_index,
+        "annualization_p": annualization_p,
+    }
+    state = {"m_idx": -1, "last_metrics": None, "prev_equity_val": None}
+
     # Produce frames
     try:
         for pos in range(0, total, stride):
@@ -725,23 +737,7 @@ async def produce_frames(
             key, iso = normalize_timestamp(er["ts_utc"])
             ohlc = bars_map.get(key)
             orders_payload = _normalize_orders_payload(orders_by_ts, key)
-            # Prefer precomputed metrics if available; otherwise fallback to on-the-fly estimates
-            if "m_idx" not in locals():
-                m_idx = -1
-                last_metrics = None
-            mi, m_idx, last_metrics, prev_equity_val = _compute_frame_metrics(
-                i,
-                er,
-                metrics_lookup=metrics_lookup,
-                m_idx=locals().get("m_idx"),
-                last_metrics=locals().get("last_metrics"),
-                prev_equity_val=locals().get("prev_equity_val"),
-                n_equity=n_equity,
-                metrics_arrays=metrics_arrays,
-                daily_sharpe_ann_by_index=daily_sharpe_ann_by_index,
-                daily_return_by_index=daily_return_by_index,
-                annualization_p=annualization_p,
-            )
+            mi, state = _compute_frame_metrics(i, er, ctx=ctx, state=state)
             frame = StreamFrame(
                 t="frame",
                 ts=iso,

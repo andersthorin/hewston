@@ -15,11 +15,11 @@ from fastapi import Depends
 from bff.app import config
 
 
-
 class DependencyContainer:
     """Holds BFF singletons to avoid module-level globals and PLW0603."""
 
     def __init__(self) -> None:
+        """Initialize empty container for lazy-initialized singletons."""
         self.backend_client: httpx.AsyncClient | None = None
         self.backend_client_loop_id: int | None = None
         self.backend_client_base_url: str | None = None

@@ -1,5 +1,4 @@
-"""
-Backtest Data Aggregation Service (canonical)
+"""Backtest Data Aggregation Service (canonical).
 
 Handles concurrent backend calls and data aggregation for complete backtest data.
 Provides intelligent error handling and partial data recovery.
@@ -11,6 +10,7 @@ import asyncio
 import json
 import logging
 import time
+from http import HTTPStatus
 from typing import Any
 
 from bff.models.backtest_data import (
@@ -29,6 +29,7 @@ class BacktestDataAggregator:
     """Service for aggregating backtest data from multiple backend sources."""
 
     def __init__(self):
+        """Initialize aggregator with module logger."""
         self.logger = logging.getLogger("bff.backtest_aggregator")
 
     async def _build_fetch_tasks(
@@ -111,8 +112,7 @@ class BacktestDataAggregator:
         request_params: BacktestDataRequest,
         correlation_id: str | None = None,
     ) -> CompleteBacktestResponse:
-        """
-        Aggregate complete backtest data from multiple backend sources.
+        """Aggregate complete backtest data from multiple backend sources.
 
         Args:
             run_id: Backtest identifier (retained name for cross-layer compat)
@@ -229,7 +229,7 @@ class BacktestDataAggregator:
             correlation_id=correlation_id,
         )
 
-        if response.status_code == 200:
+        if response.status_code == HTTPStatus.OK:
             response_content = response.body if hasattr(response, "body") else response.content
             response_text = (
                 response_content.decode("utf-8")
@@ -237,7 +237,7 @@ class BacktestDataAggregator:
                 else str(response_content)
             )
             return json.loads(response_text)
-        elif response.status_code == 404:
+        elif response.status_code == HTTPStatus.NOT_FOUND:
             raise ValueError(f"Backtest {run_id} not found")
         else:
             raise RuntimeError(f"Backend error fetching backtest details: {response.status_code}")
@@ -255,7 +255,7 @@ class BacktestDataAggregator:
             correlation_id=correlation_id,
         )
 
-        if response.status_code == 200:
+        if response.status_code == HTTPStatus.OK:
             response_content = response.body if hasattr(response, "body") else response.content
             response_text = (
                 response_content.decode("utf-8")
@@ -263,7 +263,7 @@ class BacktestDataAggregator:
                 else str(response_content)
             )
             return json.loads(response_text)
-        elif response.status_code == 404:
+        elif response.status_code == HTTPStatus.NOT_FOUND:
             return None
         else:
             raise RuntimeError(f"Backend error fetching metrics: {response.status_code}")
@@ -281,7 +281,7 @@ class BacktestDataAggregator:
             correlation_id=correlation_id,
         )
 
-        if response.status_code == 200:
+        if response.status_code == HTTPStatus.OK:
             response_content = response.body if hasattr(response, "body") else response.content
             response_text = (
                 response_content.decode("utf-8")
@@ -289,7 +289,7 @@ class BacktestDataAggregator:
                 else str(response_content)
             )
             return json.loads(response_text)
-        elif response.status_code == 404:
+        elif response.status_code == HTTPStatus.NOT_FOUND:
             return None
         else:
             raise RuntimeError(f"Backend error fetching equity: {response.status_code}")
@@ -307,7 +307,7 @@ class BacktestDataAggregator:
             correlation_id=correlation_id,
         )
 
-        if response.status_code == 200:
+        if response.status_code == HTTPStatus.OK:
             response_content = response.body if hasattr(response, "body") else response.content
             response_text = (
                 response_content.decode("utf-8")
@@ -315,7 +315,7 @@ class BacktestDataAggregator:
                 else str(response_content)
             )
             return json.loads(response_text)
-        elif response.status_code == 404:
+        elif response.status_code == HTTPStatus.NOT_FOUND:
             return None
         else:
             raise RuntimeError(f"Backend error fetching orders: {response.status_code}")
@@ -373,6 +373,7 @@ class BacktestDataAggregator:
         correlation_id: str | None,
     ) -> list[BacktestEquityPoint]:
         """Transform backend equity data to frontend contract {ts, value, drawdown?}.
+
         Avoid per-row pandas conversions; backend already emits ISO timestamps.
         """
         out: list[BacktestEquityPoint] = []
@@ -404,6 +405,7 @@ class BacktestDataAggregator:
         correlation_id: str | None,
     ) -> list[BacktestOrderData]:
         """Transform backend order data to frontend contract with {ts, side, quantity, price, ...}.
+
         Avoid per-row pandas conversions; backend already emits ISO timestamps.
         """
         out: list[BacktestOrderData] = []

@@ -7,7 +7,10 @@ from typing import Any
 
 import httpx
 
-from bff.modules.backtests.application.ports.backend_gateway import BackendGatewayPort
+from bff.modules.backtests.application.ports.backend_gateway import (
+    BackendGatewayPort,
+    ListBacktestsQuery,
+)
 
 
 class BackendGatewayHTTPX(BackendGatewayPort):
@@ -37,26 +40,16 @@ class BackendGatewayHTTPX(BackendGatewayPort):
         resp.raise_for_status()
         return resp.json()
 
-    async def list_backtests(
-        self,
-        *,
-        symbol: str | None = None,
-        strategy_id: str | None = None,
-        run_from: str | None = None,
-        run_to: str | None = None,
-        limit: int = 20,
-        offset: int = 0,
-        order: str | None = None,
-    ) -> dict[str, Any]:
+    async def list_backtests(self, query: ListBacktestsQuery) -> dict[str, Any]:
         """List backtests using optional filters and pagination."""
         params = {
-            "symbol": symbol,
-            "strategy_id": strategy_id,
-            "run_from": run_from,
-            "run_to": run_to,
-            "limit": str(limit),
-            "offset": str(offset),
-            "order": order,
+            "symbol": query.symbol,
+            "strategy_id": query.strategy_id,
+            "run_from": query.run_from,
+            "run_to": query.run_to,
+            "limit": str(query.limit),
+            "offset": str(query.offset),
+            "order": query.order,
         }
         # remove None values
         params = {k: v for k, v in params.items() if v is not None}

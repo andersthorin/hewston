@@ -10,9 +10,9 @@ import pandas as pd
 
 # Thresholds and divisors for epoch unit detection
 NS_THRESHOLD = 1_000_000_000_000_000  # nanoseconds threshold (>= 1e15)
-MS_THRESHOLD = 1_000_000_000_000      # milliseconds threshold (>= 1e12)
-SEC_TO_NS_DIVISOR = 1_000_000_000     # 1e9
-MS_TO_SEC_DIVISOR = 1_000             # 1e3
+MS_THRESHOLD = 1_000_000_000_000  # milliseconds threshold (>= 1e12)
+SEC_TO_NS_DIVISOR = 1_000_000_000  # 1e9
+MS_TO_SEC_DIVISOR = 1_000  # 1e3
 
 
 def utc_now() -> datetime:

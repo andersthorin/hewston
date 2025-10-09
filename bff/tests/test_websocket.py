@@ -1,15 +1,20 @@
-"""
-WebSocket Tests
+"""WebSocket Tests.
 
 Tests for the WebSocket functionality following the acceptance criteria
 from Story 8.5 and the QA checklist.
 """
 
 import json
+from http import HTTPStatus
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+
+EXPECTED_ACTIVE_CONNECTIONS = 2
+EXPECTED_RUN_SUBSCRIPTIONS = 2
+EXPECTED_BACKEND_CONNECTIONS = 1
+EXPECTED_TOTAL_SUBSCRIBERS = 3
 
 
 class TestWebSocketConnectionManager:
@@ -150,10 +155,10 @@ class TestWebSocketConnectionManager:
         stats = manager.get_connection_stats()
 
         # Assert
-        assert stats["active_connections"] == 2
-        assert stats["run_subscriptions"] == 2
-        assert stats["backend_connections"] == 1
-        assert stats["total_subscribers"] == 3  # conn1 + conn2 + conn1
+        assert stats["active_connections"] == EXPECTED_ACTIVE_CONNECTIONS
+        assert stats["run_subscriptions"] == EXPECTED_RUN_SUBSCRIPTIONS
+        assert stats["backend_connections"] == EXPECTED_BACKEND_CONNECTIONS
+        assert stats["total_subscribers"] == EXPECTED_TOTAL_SUBSCRIBERS  # conn1 + conn2 + conn1
 
 
 class TestWebSocketAPI:
@@ -165,7 +170,7 @@ class TestWebSocketAPI:
         response = test_client.get("/api/v1/websocket/stats")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert "websocket_stats" in data
         assert "active_connections" in data["websocket_stats"]
@@ -179,7 +184,7 @@ class TestWebSocketAPI:
         response = test_client.get("/api/v1/websocket/health")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert data["status"] == "healthy"
         assert data["service"] == "websocket"
@@ -250,7 +255,7 @@ class TestWebSocketModels:
         assert update.type == MessageType.RUN_UPDATE
         assert update.run_id == "test-run-123"
         assert update.status == "RUNNING"
-        assert update.progress == 45.5
+        assert update.progress == 45.5  # noqa: PLR2004
         assert update.message == "Processing data"
 
 
@@ -284,7 +289,7 @@ class TestWebSocketIntegration:
             assert run_id in manager.run_subscriptions
             assert conn1_id in manager.run_subscriptions[run_id]
             assert conn2_id in manager.run_subscriptions[run_id]
-            assert len(manager.run_subscriptions[run_id]) == 2
+            assert len(manager.run_subscriptions[run_id]) == EXPECTED_RUN_SUBSCRIPTIONS
 
     @pytest.mark.asyncio
     async def test_client_disconnect_cleanup(self):

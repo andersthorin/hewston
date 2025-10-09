@@ -1,5 +1,4 @@
-"""
-Data Transformation Service
+"""Data Transformation Service.
 
 Handles data transformation, aggregation, and decimation for chart data.
 Moves complex data processing logic from frontend to BFF layer.
@@ -16,6 +15,7 @@ class DataTransformer:
     """Service for transforming and optimizing chart data."""
 
     def __init__(self):
+        """Initialize the data transformer service."""
         self.logger = logging.getLogger("bff.data_transformer")
 
     def transform_backend_bars(
@@ -24,8 +24,7 @@ class DataTransformer:
         timeframe: TimeframeEnum,
         correlation_id: str | None = None,
     ) -> list[BarData]:
-        """
-        Transform backend bar data to frontend-optimized format.
+        """Transform backend bar data to frontend-optimized format.
 
         Args:
             backend_data: Raw data from backend API
@@ -86,8 +85,7 @@ class DataTransformer:
     def decimate_data(
         self, bars: list[BarData], target_points: int, correlation_id: str | None = None
     ) -> tuple[list[BarData], int]:
-        """
-        Decimate bar data to target number of points.
+        """Decimate bar data to target number of points.
 
         Uses intelligent sampling to preserve important price movements
         while reducing data size for performance.
@@ -155,8 +153,7 @@ class DataTransformer:
         timeframe: TimeframeEnum = TimeframeEnum.DAILY,
         correlation_id: str | None = None,
     ) -> list[BarData]:
-        """
-        Aggregate data from multiple timeframes if needed.
+        """Aggregate data from multiple timeframes if needed.
 
         For future use when combining multiple data sources.
         Currently uses single timeframe data.
@@ -194,8 +191,7 @@ class DataTransformer:
             return []
 
     def _normalize_timestamp(self, timestamp: Any) -> str:
-        """
-        Normalize timestamp to ISO format.
+        """Normalize timestamp to ISO format.
 
         Args:
             timestamp: Timestamp in various formats
@@ -218,8 +214,7 @@ class DataTransformer:
     def validate_bar_data(
         self, bars: list[BarData], correlation_id: str | None = None
     ) -> list[BarData]:
-        """
-        Validate and clean bar data.
+        """Validate and clean bar data.
 
         Args:
             bars: Bar data to validate

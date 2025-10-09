@@ -13,6 +13,7 @@ RET_1PCT = 0.01
 PNL_5 = 5.0
 FRAMES_EXPECTED = 2
 
+
 @pytest.mark.asyncio
 async def test_streamer_uses_precomputed_metrics(tmp_path: Path, monkeypatch):
     """Precomputed metrics in metrics.json should drive frame metrics."""

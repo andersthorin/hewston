@@ -1,15 +1,17 @@
-"""
-BFF Proxy Tests
+"""BFF Proxy Tests.
 
 Tests for the HTTP proxy functionality following the acceptance criteria
 from Story 8.2 and the QA checklist.
 """
 
 import json
+from http import HTTPStatus
 from unittest.mock import MagicMock
 
 import httpx
 from fastapi.testclient import TestClient
+
+LIMIT_10 = 10
 
 
 class TestBacktestsProxy:
@@ -19,7 +21,7 @@ class TestBacktestsProxy:
         """Test successful POST /backtests proxy."""
         # Arrange
         mock_response = MagicMock()
-        mock_response.status_code = 202
+        mock_response.status_code = HTTPStatus.ACCEPTED
         mock_response.headers = {"content-type": "application/json"}
         mock_response.json.return_value = {"status": "QUEUED", "run_id": "test-run-123"}
         mock_response.content = json.dumps({"status": "QUEUED", "run_id": "test-run-123"}).encode()
@@ -33,7 +35,7 @@ class TestBacktestsProxy:
         )
 
         # Assert
-        assert response.status_code == 202
+        assert response.status_code == HTTPStatus.ACCEPTED
         data = response.json()
         assert data["status"] == "QUEUED"
         assert data["run_id"] == "test-run-123"
@@ -49,7 +51,7 @@ class TestBacktestsProxy:
         """Test successful GET /backtests proxy."""
         # Arrange
         mock_response = MagicMock()
-        mock_response.status_code = 200
+        mock_response.status_code = HTTPStatus.OK
         mock_response.headers = {"content-type": "application/json"}
         mock_response.json.return_value = {"runs": [], "total": 0}
         mock_response.content = json.dumps({"runs": [], "total": 0}).encode()
@@ -59,7 +61,7 @@ class TestBacktestsProxy:
         response = test_client.get("/api/v1/backtests", params={"limit": 10, "symbol": "AAPL"})
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert "items" in data
         assert "total" in data
@@ -69,7 +71,7 @@ class TestBacktestsProxy:
         call_args = mock_backend_client.request.call_args
         assert call_args[1]["method"] == "GET"
         assert call_args[1]["url"] == "/backtests"
-        assert call_args[1]["params"]["limit"] == 10
+        assert call_args[1]["params"]["limit"] == LIMIT_10
         assert call_args[1]["params"]["symbol"] == "AAPL"
 
     def test_proxy_get_backtest_success(self, test_client: TestClient, mock_backend_client):
@@ -77,7 +79,7 @@ class TestBacktestsProxy:
         # Arrange
         run_id = "test-run-123"
         mock_response = MagicMock()
-        mock_response.status_code = 200
+        mock_response.status_code = HTTPStatus.OK
         mock_response.headers = {"content-type": "application/json"}
         mock_response.json.return_value = {"run_id": run_id, "status": "COMPLETED"}
         mock_response.content = json.dumps({"run_id": run_id, "status": "COMPLETED"}).encode()
@@ -87,7 +89,7 @@ class TestBacktestsProxy:
         response = test_client.get(f"/api/v1/backtests/{run_id}")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert data["run_id"] == run_id
         assert data["status"] == "COMPLETED"
@@ -103,7 +105,7 @@ class TestBacktestsProxy:
         # Arrange
         run_id = "nonexistent-run"
         mock_response = MagicMock()
-        mock_response.status_code = 404
+        mock_response.status_code = HTTPStatus.NOT_FOUND
         mock_response.headers = {"content-type": "application/json"}
         mock_response.json.return_value = {
             "error": {"code": "RUN_NOT_FOUND", "message": f"Run {run_id} not found"}
@@ -117,7 +119,7 @@ class TestBacktestsProxy:
         response = test_client.get(f"/api/v1/backtests/{run_id}")
 
         # Assert
-        assert response.status_code == 404
+        assert response.status_code == HTTPStatus.NOT_FOUND
         data = response.json()
         assert data["error"]["code"] == "RUN_NOT_FOUND"
 
@@ -129,7 +131,7 @@ class TestBarsProxy:
         """Test successful GET /bars/daily proxy."""
         # Arrange
         mock_response = MagicMock()
-        mock_response.status_code = 200
+        mock_response.status_code = HTTPStatus.OK
         mock_response.headers = {"content-type": "application/json"}
         mock_response.json.return_value = {
             "symbol": "AAPL",
@@ -168,7 +170,7 @@ class TestBarsProxy:
         )
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert data["symbol"] == "AAPL"
         assert len(data["bars"]) == 1
@@ -186,7 +188,7 @@ class TestBarsProxy:
         """Test successful GET /bars/minute proxy."""
         # Arrange
         mock_response = MagicMock()
-        mock_response.status_code = 200
+        mock_response.status_code = HTTPStatus.OK
         mock_response.headers = {"content-type": "application/json"}
         mock_response.json.return_value = {"symbol": "AAPL", "bars": []}
         mock_response.content = json.dumps({"symbol": "AAPL", "bars": []}).encode()
@@ -199,7 +201,7 @@ class TestBarsProxy:
         )
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert data["symbol"] == "AAPL"
 
@@ -214,7 +216,7 @@ class TestBarsProxy:
         """Test successful GET /bars/hour proxy."""
         # Arrange
         mock_response = MagicMock()
-        mock_response.status_code = 200
+        mock_response.status_code = HTTPStatus.OK
         mock_response.headers = {"content-type": "application/json"}
         mock_response.json.return_value = {"symbol": "AAPL", "bars": []}
         mock_response.content = json.dumps({"symbol": "AAPL", "bars": []}).encode()
@@ -226,7 +228,7 @@ class TestBarsProxy:
         )
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert data["symbol"] == "AAPL"
 
@@ -243,7 +245,7 @@ class TestProxyErrorHandling:
         response = test_client.get("/api/v1/backtests")
 
         # Assert
-        assert response.status_code == 504
+        assert response.status_code == HTTPStatus.GATEWAY_TIMEOUT
         data = response.json()
         assert data["error"]["code"] == "BACKEND_TIMEOUT"
         assert "timed out" in data["error"]["message"]
@@ -257,7 +259,7 @@ class TestProxyErrorHandling:
         response = test_client.get("/api/v1/backtests")
 
         # Assert
-        assert response.status_code == 502
+        assert response.status_code == HTTPStatus.BAD_GATEWAY
         data = response.json()
         assert data["error"]["code"] == "BACKEND_UNAVAILABLE"
         assert "unavailable" in data["error"]["message"]
@@ -271,7 +273,7 @@ class TestProxyErrorHandling:
         response = test_client.get("/api/v1/backtests")
 
         # Assert
-        assert response.status_code == 500
+        assert response.status_code == HTTPStatus.INTERNAL_SERVER_ERROR
         data = response.json()
         assert data["error"]["code"] == "PROXY_ERROR"
 
@@ -283,7 +285,7 @@ class TestAuthenticationPassThrough:
         """Test that Authorization header is forwarded to backend."""
         # Arrange
         mock_response = MagicMock()
-        mock_response.status_code = 200
+        mock_response.status_code = HTTPStatus.OK
         mock_response.headers = {"content-type": "application/json"}
         mock_response.json.return_value = {"runs": []}
         mock_response.content = json.dumps({"runs": []}).encode()
@@ -295,7 +297,7 @@ class TestAuthenticationPassThrough:
         response = test_client.get("/api/v1/backtests", headers={"Authorization": auth_token})
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
 
         # Verify Authorization header was forwarded
         mock_backend_client.request.assert_called_once()
@@ -306,7 +308,7 @@ class TestAuthenticationPassThrough:
         """Test that correlation ID is added to backend requests."""
         # Arrange
         mock_response = MagicMock()
-        mock_response.status_code = 200
+        mock_response.status_code = HTTPStatus.OK
         mock_response.headers = {"content-type": "application/json"}
         mock_response.json.return_value = {"runs": []}
         mock_response.content = json.dumps({"runs": []}).encode()
@@ -316,7 +318,7 @@ class TestAuthenticationPassThrough:
         response = test_client.get("/api/v1/backtests")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         assert "X-Correlation-ID" in response.headers
 
         # Verify correlation ID was sent to backend

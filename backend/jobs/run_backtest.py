@@ -1,4 +1,5 @@
 """Backtest execution job: runs Nautilus and persists canonical artifacts."""
+
 from __future__ import annotations
 
 import json
@@ -11,7 +12,7 @@ from typing import Any
 
 import polars as pl
 
-from backend.adapters.nautilus import NautilusBacktestRunner
+from backend.adapters.nautilus import NautilusBacktestRunner, RunSpec
 from backend.services.backtests import get_catalog
 from backend.utils.datetime import utc_now
 from backend.utils.git import get_git_commit_hash
@@ -35,31 +36,23 @@ def _write_parquet(records: list[dict], path: Path) -> None:
     df.write_parquet(path)
 
 
+def _execute_and_persist_backtest(*, args: dict[str, Any]) -> dict:
+    """Execute Nautilus, write artifacts, and return a summary.
 
+    Args holds all required fields (dataset/strategy/spec, paths, ids, etc.).
+    """
+    # Unpack frequently used fields locally for readability
+    dataset_id = args.get("dataset_id")
+    strategy_id = args["strategy_id"]
+    params = args["params"]
+    seed = args["seed"]
+    from_date = args.get("from_date")
+    to_date = args.get("to_date")
+    equity_path = args["equity_path"]
+    orders_path = args["orders_path"]
+    fills_path = args["fills_path"]
+    logger: logging.Logger = args["logger"]
 
-def _execute_and_persist_backtest(
-    *,
-    dataset_id: str | None,
-    strategy_id: str,
-    params: dict[str, Any],
-    seed: int,
-    from_date: str | None,
-    to_date: str | None,
-    speed: int,
-    slippage_fees: dict[str, Any],
-    cat,
-    out_dir: Path,
-    out_dir_abs: Path,
-    equity_path: Path,
-    orders_path: Path,
-    fills_path: Path,
-    metrics_path: Path,
-    manifest_path: Path,
-    run_id: str,
-    code_hash: str,
-    created_at_iso: str,
-    logger: logging.Logger,
-) -> dict:
     t0 = time.perf_counter()
 
     logger.info("Initializing Nautilus backtest runner...")
@@ -67,12 +60,14 @@ def _execute_and_persist_backtest(
 
     logger.info("Running backtest...")
     result = runner.run(
-        dataset_id=dataset_id,
-        strategy_id=strategy_id,
-        params=params,
-        seed=seed,
-        from_date=from_date,
-        to_date=to_date,
+        spec=RunSpec(
+            dataset_id=dataset_id,
+            strategy_id=strategy_id,
+            params=params,
+            seed=seed,
+            from_date=from_date,
+            to_date=to_date,
+        )
     )
     duration_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -147,30 +142,11 @@ def _execute_and_persist_backtest(
     _surface_nautilus_metrics(metrics_artifact, res_metrics)
 
     return _persist_artifacts_and_finalize(
-        out_dir=out_dir,
+        args=args,
         metrics_artifact=metrics_artifact,
-        metrics_path=metrics_path,
-        logger=logger,
-        run_id=run_id,
-        dataset_id=dataset_id,
-        strategy_id=strategy_id,
-        params=params,
-        seed=seed,
-        slippage_fees=slippage_fees,
-        speed=speed,
-        from_date=from_date,
-        to_date=to_date,
-        code_hash=code_hash,
         bar_interval_minutes=bar_interval_minutes,
-        created_at_iso=created_at_iso,
-        cat=cat,
-        equity_path=equity_path,
-        orders_path=orders_path,
-        fills_path=fills_path,
-        manifest_path=manifest_path,
         duration_ms=duration_ms,
     )
-
 
 
 def _compact_metrics_series(metrics_series: list[tuple[str, dict]]) -> list:
@@ -230,29 +206,31 @@ def _surface_nautilus_metrics(metrics_artifact: dict, res_metrics: dict) -> None
 
 def _persist_artifacts_and_finalize(
     *,
-    out_dir: Path,
+    args: dict[str, Any],
     metrics_artifact: dict,
-    metrics_path: Path,
-    logger: logging.Logger,
-    run_id: str,
-    dataset_id: str | None,
-    strategy_id: str,
-    params: dict[str, Any],
-    seed: int,
-    slippage_fees: dict[str, Any],
-    speed: int,
-    from_date: str | None,
-    to_date: str | None,
-    code_hash: str,
     bar_interval_minutes: int,
-    created_at_iso: str,
-    cat,
-    equity_path: Path,
-    orders_path: Path,
-    fills_path: Path,
-    manifest_path: Path,
     duration_ms: int,
 ) -> dict:
+    out_dir: Path = args["out_dir"]
+    metrics_path: Path = args["metrics_path"]
+    logger: logging.Logger = args["logger"]
+    run_id: str = args["run_id"]
+    dataset_id = args.get("dataset_id")
+    strategy_id: str = args["strategy_id"]
+    params: dict[str, Any] = args["params"]
+    seed: int = args["seed"]
+    slippage_fees: dict[str, Any] = args["slippage_fees"]
+    speed: int = args["speed"]
+    from_date = args.get("from_date")
+    to_date = args.get("to_date")
+    code_hash: str = args["code_hash"]
+    created_at_iso: str = args["created_at_iso"]
+    cat = args["cat"]
+    equity_path: Path = args["equity_path"]
+    orders_path: Path = args["orders_path"]
+    fills_path: Path = args["fills_path"]
+    manifest_path: Path = args["manifest_path"]
+
     ensure_dir(out_dir)
     metrics_path.write_text(json.dumps(metrics_artifact, separators=(",", ":")))
     logger.info(f"Artifacts written to {out_dir}")
@@ -281,10 +259,12 @@ def _persist_artifacts_and_finalize(
         run_id,
         status="DONE",
         duration_ms=duration_ms,
-        metrics_path=str(metrics_path),
-        equity_path=str(equity_path),
-        orders_path=str(orders_path),
-        fills_path=str(fills_path),
+        artifacts={
+            "metrics_path": str(metrics_path),
+            "equity_path": str(equity_path),
+            "orders_path": str(orders_path),
+            "fills_path": str(fills_path),
+        },
     )
 
     return {
@@ -299,7 +279,6 @@ def _persist_artifacts_and_finalize(
             "manifest": str(manifest_path),
         },
     }
-
 
 
 def _read_nautilus_realized_series(result: dict[str, Any]) -> list[tuple[str, float]]:
@@ -346,9 +325,7 @@ def _derive_realized_from_fills(result: dict[str, Any]) -> list[tuple[str, float
             if side == "BUY" and qty > 0:
                 new_qty = pos_qty + qty
                 if new_qty > 0:
-                    avg_entry = (
-                        (avg_entry * pos_qty + px * qty) / new_qty if pos_qty > 0 else px
-                    )
+                    avg_entry = (avg_entry * pos_qty + px * qty) / new_qty if pos_qty > 0 else px
                 pos_qty = new_qty
                 cum -= fee
             elif side == "SELL" and qty > 0:
@@ -363,7 +340,6 @@ def _derive_realized_from_fills(result: dict[str, Any]) -> list[tuple[str, float
         return realized
     except Exception:
         return []
-
 
 
 def _compute_end_pos_qty_fills(fills: list[dict]) -> float:
@@ -394,7 +370,6 @@ def _extract_nautilus_stats_and_sharpe(result: dict[str, Any]) -> tuple[dict, fl
         return nautilus_stats, sr_val
     except Exception:
         return {}, None
-
 
 
 def _validate_equity_against_total_return(
@@ -437,25 +412,22 @@ def _derive_realized_series_from_result(result: dict[str, Any]) -> list[tuple[st
         return realized
     return _derive_realized_from_fills(result)
 
-def run_backtest_and_persist(
-    *,
-    dataset_id: str | None = None,  # Optional - not needed for warehouse-based backtests
-    strategy_id: str = "sma_crossover",
-    params: dict[str, Any] | None = None,
-    seed: int = 42,
-    speed: int = 60,
-    slippage_fees: dict[str, Any] | None = None,
-    run_id: str | None = None,
-    from_date: str | None = None,
-    to_date: str | None = None,
-) -> dict:
+
+def run_backtest_and_persist(*, req: dict[str, Any]) -> dict:
     """Run a Nautilus backtest and persist artifacts under backtests/<run_id>.
 
     Returns the final manifest dict.
     """
     logger = logging.getLogger("backtest.job")
-    params = params or {}
-    slippage_fees = slippage_fees or {}
+    dataset_id = req.get("dataset_id")
+    strategy_id = req.get("strategy_id", "sma_crossover")
+    params = req.get("params") or {}
+    seed = int(req.get("seed", 42))
+    speed = int(req.get("speed", 60))
+    slippage_fees = req.get("slippage_fees") or {}
+    run_id = req.get("run_id")
+    from_date = req.get("from_date")
+    to_date = req.get("to_date")
     cat = get_catalog()
 
     """Run a Nautilus backtest and persist artifacts under backtests/<run_id>.
@@ -477,19 +449,21 @@ def run_backtest_and_persist(
         # Prepare manifest path for DB row
         manifest_path_tmp = get_backtests_dir(run_id) / "run-manifest.json"
         cat.create_backtest(
-            run_id=run_id,
-            dataset_id=dataset_id,
-            strategy_id=strategy_id,
-            params_json=json.dumps(params, sort_keys=True),
-            seed=seed,
-            slippage_fees_json=json.dumps(slippage_fees, sort_keys=True),
-            speed=speed,
-            code_hash=code_hash,
-            created_at=created_at_iso,
-            status="QUEUED",
-            run_manifest_path=str(manifest_path_tmp),
-            input_hash=None,
-            idempotency_key=None,
+            row={
+                "run_id": run_id,
+                "dataset_id": dataset_id,
+                "strategy_id": strategy_id,
+                "params_json": json.dumps(params, sort_keys=True),
+                "seed": seed,
+                "slippage_fees_json": json.dumps(slippage_fees, sort_keys=True),
+                "speed": speed,
+                "code_hash": code_hash,
+                "created_at": created_at_iso,
+                "status": "QUEUED",
+                "run_manifest_path": str(manifest_path_tmp),
+                "input_hash": None,
+                "idempotency_key": None,
+            }
         )
 
     # Prepare paths (absolute)
@@ -511,26 +485,28 @@ def run_backtest_and_persist(
     t0 = time.perf_counter()
     try:
         return _execute_and_persist_backtest(
-            dataset_id=dataset_id,
-            strategy_id=strategy_id,
-            params=params,
-            seed=seed,
-            from_date=from_date,
-            to_date=to_date,
-            speed=speed,
-            slippage_fees=slippage_fees,
-            cat=cat,
-            out_dir=out_dir,
-            out_dir_abs=out_dir_abs,
-            equity_path=equity_path,
-            orders_path=orders_path,
-            fills_path=fills_path,
-            metrics_path=metrics_path,
-            manifest_path=manifest_path,
-            run_id=run_id,
-            code_hash=code_hash,
-            created_at_iso=created_at_iso,
-            logger=logger,
+            args={
+                "dataset_id": dataset_id,
+                "strategy_id": strategy_id,
+                "params": params,
+                "seed": seed,
+                "from_date": from_date,
+                "to_date": to_date,
+                "speed": speed,
+                "slippage_fees": slippage_fees,
+                "cat": cat,
+                "out_dir": out_dir,
+                "out_dir_abs": out_dir_abs,
+                "equity_path": equity_path,
+                "orders_path": orders_path,
+                "fills_path": fills_path,
+                "metrics_path": metrics_path,
+                "manifest_path": manifest_path,
+                "run_id": run_id,
+                "code_hash": code_hash,
+                "created_at_iso": created_at_iso,
+                "logger": logger,
+            },
         )
     except BaseException as e:
         # Fail hard: mark as ERROR, write manifest with error, do not write artifacts

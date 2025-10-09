@@ -6,8 +6,8 @@
 import asyncio
 import logging
 import time
-from dataclasses import dataclass
 from contextlib import suppress
+from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Any
 
@@ -28,7 +28,7 @@ _METRICS_CACHE: dict[str, tuple[int, dict[str, Any]]] = {}
 _METRICS_TTL_SECONDS = 120
 # cache requested run window from create calls
 # shape: backtest_id -> (expires_epoch_ms, {run_from, run_to})
-_REQUESTED_WINDOW_CACHE: dict[str, tuple[int, dict[str, str | None]] ] = {}
+_REQUESTED_WINDOW_CACHE: dict[str, tuple[int, dict[str, str | None]]] = {}
 _REQUESTED_WINDOW_TTL_SECONDS = 6 * 3600  # 6 hours
 
 
@@ -70,12 +70,15 @@ class CompleteBacktestQuery:
     def __init__(self, request: Request) -> None:
         """Initialize from FastAPI Request query params."""
         qp = request.query_params
+
         def _b(key: str, default: bool = True) -> bool:
             v = qp.get(key)
             return (str(v).lower() in {"true", "1", "yes"}) if v is not None else default
+
         self.include_orders = _b("include_orders", True)
         self.include_equity = _b("include_equity", True)
         self.include_metrics = _b("include_metrics", True)
+
 
 @dataclass
 class ListBacktestsOptions:
@@ -102,11 +105,9 @@ def _options_from_query(q: ListBacktestsQuery) -> ListBacktestsOptions:
     )
 
 
-
-
-
 def _decode_create_body(raw_body: bytes) -> dict[str, Any]:
     import json as _json
+
     try:
         incoming = _json.loads(raw_body.decode("utf-8") or "{}")
         return incoming if isinstance(incoming, dict) else {}
@@ -145,6 +146,7 @@ def _map_create_payload(incoming: dict[str, Any]) -> dict[str, Any]:
         mapped["slippage_fees"] = incoming["slippage_fees"]
     return mapped
 
+
 def _parse_and_map_create_payload(raw_body: bytes) -> dict[str, Any]:
     incoming = _decode_create_body(raw_body)
     return _map_create_payload(incoming)
@@ -166,7 +168,6 @@ def _extract_json_from_response(response) -> dict[str, Any]:
         except Exception:
             data = None
     return data if isinstance(data, dict) else {}
-
 
 
 def _build_backend_query_params(
@@ -196,6 +197,7 @@ def _safe_parse_backend_json(response) -> dict:
             data = response.json()
         else:
             import json as _json
+
             body = response.body if hasattr(response, "body") else response.content
             data = _json.loads(body.decode()) if isinstance(body, bytes | bytearray) else {}
         return data if isinstance(data, dict) else {}
@@ -325,7 +327,6 @@ async def _fetch_metric_for_id(
     return run_id, None, 1
 
 
-
 async def _enrich_terminal_metrics(
     new_items: list[dict[str, Any]],
     backend_client: httpx.AsyncClient,
@@ -339,10 +340,7 @@ async def _enrich_terminal_metrics(
     backend_proxy = await create_backend_client(backend_client)
 
     results = await asyncio.gather(
-        *[
-            _fetch_metric_for_id(backend_proxy, rid, sem, correlation_id)
-            for rid in term_ids
-        ]
+        *[_fetch_metric_for_id(backend_proxy, rid, sem, correlation_id) for rid in term_ids]
     )
     backend_calls = sum(calls for (_, __, calls) in results)
     fetched_map: dict[str, dict] = {
@@ -415,7 +413,6 @@ async def _list_backtests_core(
     """Core implementation for listing backtests used by the route and tests."""
     start_time = time.perf_counter()
     correlation_id = f"list_backtests_{int(time.time() * 1000)}"
-
 
     # Unpack options for logging/validation
     limit = options.limit
@@ -548,17 +545,33 @@ async def list_backtests_route(
     )
 
 
-# Test-friendly wrapper with no FastAPI Request in the signature
+# Test-friendly wrapper compatible with legacy keyword args and new options object
 async def list_backtests(
-    options: ListBacktestsOptions,
+    options: ListBacktestsOptions | None = None,
     backend_client: httpx.AsyncClient | None = None,
     redis_client=None,
+    **kwargs,
 ) -> dict[str, Any]:
-    """List backtests using provided backend client (test helper)."""
+    """List backtests using provided backend client (test helper).
+
+    Accepts either a ListBacktestsOptions instance or legacy keyword args:
+    limit, offset, symbol, strategy_id, run_from, run_to, order.
+    """
     if backend_client is None:
-        raise RuntimeError(
-            "backend_client must be provided when calling list_backtests() directly"
+        raise RuntimeError("backend_client must be provided when calling list_backtests() directly")
+
+    # If options not provided, build from legacy keyword args
+    if options is None:
+        options = ListBacktestsOptions(
+            limit=int(kwargs.get("limit", 20)),
+            offset=int(kwargs.get("offset", 0)),
+            symbol=kwargs.get("symbol"),
+            strategy_id=kwargs.get("strategy_id"),
+            run_from=kwargs.get("run_from"),
+            run_to=kwargs.get("run_to"),
+            order=kwargs.get("order"),
         )
+
     return await _list_backtests_core(
         request=None,
         options=options,
@@ -760,8 +773,6 @@ async def get_complete_backtest_data(
         ) from e
 
 
-
-
 @router.get("/backtests/{backtest_id}/status")
 async def get_backtest_status(
     backtest_id: str = Path(..., description="Backtest identifier"),
@@ -862,7 +873,6 @@ async def get_backtest_status(
         ) from e
 
 
-
 @router.get("/backtests/{backtest_id}")
 async def get_backtest_by_id(
     backtest_id: str = Path(..., description="Backtest identifier"),
@@ -878,6 +888,7 @@ async def get_backtest_by_id(
         headers=dict(request.headers) if request else {},
         correlation_id=correlation_id,
     )
+
 
 # --- Backward-compatible aliases using backtests terminology ---
 

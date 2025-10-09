@@ -1,5 +1,4 @@
-"""
-Caching Service
+"""Caching Service.
 
 Provides intelligent caching for chart data and other expensive operations.
 Uses Redis for distributed caching with appropriate TTL strategies.
@@ -8,6 +7,7 @@ Uses Redis for distributed caching with appropriate TTL strategies.
 import hashlib
 import json
 import logging
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
@@ -15,48 +15,59 @@ from bff.app.config import DEFAULT_CHART_TARGET_POINTS, REDIS_ENABLED, REDIS_TTL
 from bff.models.backtest_data import CompleteBacktestResponse
 from bff.models.chart_data import ChartDataResponse
 
+# Threshold constants for TTL decisions
+DAYS_ONE_WEEK = 7
+DAYS_ONE_MONTH = 30
+
+
+@dataclass(frozen=True)
+class ChartCacheKeyArgs:
+    """Arguments composing the chart cache key."""
+
+    symbol: str
+    timeframe: str
+    from_date: str
+    to_date: str
+    target_points: int = DEFAULT_CHART_TARGET_POINTS
+    rth_only: bool = True
+
 
 class CacheService:
     """Service for caching chart data and responses."""
 
     def __init__(self, redis_client=None):
+        """Initialize cache service with optional redis client."""
         self.redis_client = redis_client
         self.logger = logging.getLogger("bff.cache")
         self.enabled = REDIS_ENABLED and redis_client is not None
 
-    def generate_chart_cache_key(
-        self,
-        symbol: str,
-        timeframe: str,
-        from_date: str,
-        to_date: str,
-        target_points: int = DEFAULT_CHART_TARGET_POINTS,
-        rth_only: bool = True,
-    ) -> str:
-        """
-        Generate cache key for chart data.
+    def generate_chart_cache_key(self, args: ChartCacheKeyArgs) -> str:
+        """Generate cache key for chart data.
 
         Args:
-            symbol: Trading symbol
-            timeframe: Data timeframe
-            from_date: Start date
-            to_date: End date
-            target_points: Target data points
-            rth_only: Regular trading hours only
+            args: Cache key components
 
         Returns:
             str: Cache key
         """
-        # Create deterministic cache key
-        key_data = f"{symbol}:{timeframe}:{from_date}:{to_date}:{target_points}:{rth_only}"
+        # Create deterministic cache key (split for readability / line length)
+        key_data = ":".join(
+            [
+                args.symbol,
+                args.timeframe,
+                args.from_date,
+                args.to_date,
+                str(args.target_points),
+                str(args.rth_only),
+            ]
+        )
         key_hash = hashlib.md5(key_data.encode()).hexdigest()
         return f"chart:{key_hash}"
 
     async def get_chart_data(
         self, cache_key: str, correlation_id: str | None = None
     ) -> ChartDataResponse | None:
-        """
-        Get chart data from cache.
+        """Get chart data from cache.
 
         Args:
             cache_key: Cache key
@@ -112,8 +123,7 @@ class CacheService:
         ttl_seconds: int = REDIS_TTL_CHART_DATA,
         correlation_id: str | None = None,
     ) -> bool:
-        """
-        Store chart data in cache.
+        """Store chart data in cache.
 
         Args:
             cache_key: Cache key
@@ -162,8 +172,7 @@ class CacheService:
             return False
 
     async def invalidate_chart_data(self, symbol: str, correlation_id: str | None = None) -> int:
-        """
-        Invalidate all cached chart data for a symbol.
+        """Invalidate all cached chart data for a symbol.
 
         Args:
             symbol: Trading symbol
@@ -208,8 +217,7 @@ class CacheService:
             return 0
 
     def calculate_ttl(self, from_date: str, to_date: str, timeframe: str) -> int:
-        """
-        Calculate appropriate TTL based on data recency.
+        """Calculate appropriate TTL based on data recency.
 
         Args:
             from_date: Start date
@@ -229,10 +237,10 @@ class CacheService:
             if days_old <= 1:
                 # Recent data: 5 minutes
                 return 300
-            elif days_old <= 7:
+            elif days_old <= DAYS_ONE_WEEK:
                 # Week old: 1 hour
                 return 3600
-            elif days_old <= 30:
+            elif days_old <= DAYS_ONE_MONTH:
                 # Month old: 6 hours
                 return 21600
             else:
@@ -244,8 +252,7 @@ class CacheService:
             return REDIS_TTL_CHART_DATA
 
     async def get_cache_stats(self, correlation_id: str | None = None) -> dict[str, Any]:
-        """
-        Get cache statistics.
+        """Get cache statistics.
 
         Args:
             correlation_id: Request correlation ID
@@ -294,8 +301,7 @@ class CacheService:
         include_equity: bool = True,
         include_metrics: bool = True,
     ) -> str:
-        """
-        Generate cache key for backtest data.
+        """Generate cache key for backtest data.
 
         Args:
             run_id: Backtest identifier (preserves field name for cross-layer compat)
@@ -307,17 +313,24 @@ class CacheService:
             str: Cache key
         """
         # Version bump to invalidate stale cached shapes and partial responses
-        CACHE_VERSION = "v2"
+        cache_version = "v2"
         # Create deterministic cache key
-        key_data = f"{CACHE_VERSION}:{run_id}:{include_orders}:{include_equity}:{include_metrics}"
+        key_data = ":".join(
+            [
+                cache_version,
+                run_id,
+                str(include_orders),
+                str(include_equity),
+                str(include_metrics),
+            ]
+        )
         key_hash = hashlib.md5(key_data.encode()).hexdigest()
         return f"backtest:{key_hash}"
 
     async def get_backtest_data(
         self, cache_key: str, correlation_id: str | None = None
     ) -> CompleteBacktestResponse | None:
-        """
-        Get backtest data from cache.
+        """Get backtest data from cache.
 
         Args:
             cache_key: Cache key
@@ -373,8 +386,7 @@ class CacheService:
         ttl_seconds: int,
         correlation_id: str | None = None,
     ) -> bool:
-        """
-        Store backtest data in cache.
+        """Store backtest data in cache.
 
         Args:
             cache_key: Cache key
