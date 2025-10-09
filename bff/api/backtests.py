@@ -101,6 +101,170 @@ def _extract_json_from_response(response) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+
+def _build_backend_query_params(
+    *, limit: int, offset: int, order: str | None, symbol: str | None, strategy_id: str | None, run_from: str | None, run_to: str | None,
+) -> dict[str, Any]:
+    params: dict[str, Any] = {"limit": limit, "offset": offset}
+    if symbol:
+        params["symbol"] = symbol
+    if strategy_id:
+        params["strategy_id"] = strategy_id
+    if run_from:
+        params["run_from"] = run_from
+    if run_to:
+        params["run_to"] = run_to
+    if order:
+        params["order"] = order
+    return params
+
+
+def _safe_parse_backend_json(response) -> dict:
+    try:
+        if hasattr(response, "json") and callable(response.json):
+            data = response.json()
+        else:
+            import json as _json
+            body = response.body if hasattr(response, "body") else response.content
+            data = _json.loads(body.decode()) if isinstance(body, (bytes, bytearray)) else {}
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def _map_list_items(items: list[dict]) -> list[dict[str, Any]]:
+    new_items: list[dict[str, Any]] = []
+    now_ms = int(time.time() * 1000)
+    for item in items or []:
+        run_obj = item.get("run") if isinstance(item, dict) else None
+        bt_id = (
+            (item.get("backtest_id") if isinstance(item, dict) else None)
+            or (item.get("run_id") if isinstance(item, dict) else None)
+            or (item.get("id") if isinstance(item, dict) else None)
+            or ((run_obj or {}).get("run_id") if isinstance(run_obj, dict) else None)
+            or ((run_obj or {}).get("id") if isinstance(run_obj, dict) else None)
+        )
+        created_at = (
+            (item.get("created_at") if isinstance(item, dict) else None)
+            or ((run_obj or {}).get("created_at") if isinstance(run_obj, dict) else None)
+            or (item.get("createdAt") if isinstance(item, dict) else None)
+        )
+        strategy_id = (
+            (item.get("strategy_id") if isinstance(item, dict) else None)
+            or ((run_obj or {}).get("strategy_id") if isinstance(run_obj, dict) else None)
+            or (item.get("strategyId") if isinstance(item, dict) else None)
+        )
+        status = (item.get("status") if isinstance(item, dict) else None) or (
+            (run_obj or {}).get("status") if isinstance(run_obj, dict) else None
+        )
+        symbol = (item.get("symbol") if isinstance(item, dict) else None) or (
+            (run_obj or {}).get("symbol") if isinstance(run_obj, dict) else None
+        )
+        item_run_from = item.get("run_from") if isinstance(item, dict) else None
+        item_run_to = item.get("run_to") if isinstance(item, dict) else None
+        # fill run_from/run_to for non-terminal runs from cache
+        try:
+            s_val = str(status or "").upper()
+            TERMINAL = {"DONE", "COMPLETED", "ERROR", "FAILED"}
+            rid = str(bt_id or "")
+            cached_window = _REQUESTED_WINDOW_CACHE.get(rid)
+            if s_val not in TERMINAL and cached_window and cached_window[0] > now_ms:
+                if not item_run_from:
+                    item_run_from = cached_window[1].get("run_from")
+                if not item_run_to:
+                    item_run_to = cached_window[1].get("run_to")
+            elif s_val in TERMINAL and rid in _REQUESTED_WINDOW_CACHE:
+                _REQUESTED_WINDOW_CACHE.pop(rid, None)
+        except Exception:
+            pass
+
+        duration_ms = (
+            (item.get("duration_ms") if isinstance(item, dict) else None)
+            or ((run_obj or {}).get("duration_ms") if isinstance(run_obj, dict) else None)
+            or (item.get("durationMs") if isinstance(item, dict) else None)
+        )
+        new_items.append(
+            {
+                "backtest_id": bt_id,
+                "created_at": created_at,
+                "strategy_id": strategy_id,
+                "status": status,
+                "symbol": symbol,
+                "run_from": item_run_from,
+                "run_to": item_run_to,
+                "duration_ms": duration_ms,
+                "total_return": item.get("total_return") if isinstance(item, dict) else None,
+                "sharpe_ratio": item.get("sharpe_ratio") if isinstance(item, dict) else None,
+                "max_drawdown": item.get("max_drawdown") if isinstance(item, dict) else None,
+                "win_rate": item.get("win_rate") if isinstance(item, dict) else None,
+            }
+        )
+    return new_items
+
+
+def _collect_terminal_ids(new_items: list[dict[str, Any]]) -> list[str]:
+    term_ids: list[str] = []
+    for it in new_items:
+        s = str(it.get("status") or "").upper()
+        if s in {"DONE", "COMPLETED"} and it.get("backtest_id"):
+            term_ids.append(str(it["backtest_id"]))
+    return term_ids
+
+
+def _attach_metrics(new_items: list[dict[str, Any]], fetched_map: dict[str, dict]) -> None:
+    for it in new_items:
+        rid = str(it.get("backtest_id") or "")
+        if rid and rid in fetched_map:
+            m = fetched_map[rid]
+            tr = m.get("total_return")
+            dd = m.get("max_drawdown") if m.get("max_drawdown") is not None else m.get("drawdown")
+            sh = m.get("sharpe_ratio") if m.get("sharpe_ratio") is not None else m.get("sharpe")
+            wr = m.get("win_rate")
+            if tr is not None:
+                it["total_return"] = tr
+            if dd is not None:
+                it["max_drawdown"] = dd
+            if sh is not None:
+                it["sharpe_ratio"] = sh
+            if wr is not None:
+                it["win_rate"] = wr
+
+
+async def _fetch_metric_for_id(backend_proxy, run_id: str, sem: asyncio.Semaphore, correlation_id: str):
+    # Check in-memory cache first
+    now_ms = int(time.time() * 1000)
+    cached = _METRICS_CACHE.get(run_id)
+    if cached and cached[0] > now_ms:
+        return run_id, cached[1], 0
+    async with sem:
+        resp = await backend_proxy.proxy_request(
+            method="GET",
+            path=f"/backtests/{run_id}/metrics",
+            correlation_id=correlation_id,
+        )
+    data = _safe_parse_backend_json(resp)
+    if isinstance(data, dict):
+        _METRICS_CACHE[run_id] = (now_ms + _METRICS_TTL_SECONDS * 1000, data)
+        return run_id, data, 1
+    return run_id, None, 1
+
+
+
+async def _enrich_terminal_metrics(new_items: list[dict[str, Any]], backend_client: httpx.AsyncClient, correlation_id: str) -> int:
+    term_ids = _collect_terminal_ids(new_items)
+    if not term_ids:
+        return 0
+
+    sem = asyncio.Semaphore(max(4, min(6, MAX_CONCURRENT_BACKEND_REQUESTS)))
+    backend_proxy = await create_backend_client(backend_client)
+
+    results = await asyncio.gather(*[_fetch_metric_for_id(backend_proxy, rid, sem, correlation_id) for rid in term_ids])
+    backend_calls = sum(calls for (_, __, calls) in results)
+    fetched_map: dict[str, dict] = {rid: payload for (rid, payload, _) in results if isinstance(payload, dict)}
+    _attach_metrics(new_items, fetched_map)
+    return backend_calls
+
+
 @router.post("/backtests")
 async def create_backtest_via_bff(
     request: Request,
@@ -201,22 +365,15 @@ async def _list_backtests_core(
     order = order if order in allowed_orders else "-created_at"
 
     # Build query parameters for backend
-    params = {
-        "limit": limit,
-        "offset": offset,
-    }
-    if symbol:
-        params["symbol"] = symbol
-    if strategy_id:
-        params["strategy_id"] = strategy_id
-    if run_from:
-        params["run_from"] = run_from
-    if run_to:
-        params["run_to"] = run_to
-    if order:
-        params["order"] = order
-
-    # Skip caching for now
+    params = _build_backend_query_params(
+        limit=limit,
+        offset=offset,
+        order=order,
+        symbol=symbol,
+        strategy_id=strategy_id,
+        run_from=run_from,
+        run_to=run_to,
+    )
 
     # Fetch from backend
     try:
@@ -233,152 +390,12 @@ async def _list_backtests_core(
         if getattr(response, "status_code", 200) != 200:
             return response
 
-        # Parse JSON response
-        if hasattr(response, "json") and callable(response.json):
-            backend_data = response.json()
-        else:
-            import json
-            backend_data = json.loads(response.body.decode())
+        backend_data = _safe_parse_backend_json(response)
+        new_items = _map_list_items(backend_data.get("items", []) or [])
 
-        # Transform items to backtest_id-only identifiers (robust to backend shapes)
-        items = backend_data.get("items", []) or []
-        new_items = []
-        for item in items:
-            run_obj = item.get("run") if isinstance(item, dict) else None
-            bt_id = (
-                (item.get("backtest_id") if isinstance(item, dict) else None)
-                or (item.get("run_id") if isinstance(item, dict) else None)
-                or (item.get("id") if isinstance(item, dict) else None)
-                or ((run_obj or {}).get("run_id") if isinstance(run_obj, dict) else None)
-                or ((run_obj or {}).get("id") if isinstance(run_obj, dict) else None)
-            )
-            created_at = (
-                (item.get("created_at") if isinstance(item, dict) else None)
-                or ((run_obj or {}).get("created_at") if isinstance(run_obj, dict) else None)
-                or (item.get("createdAt") if isinstance(item, dict) else None)
-            )
-            strategy_id = (
-                (item.get("strategy_id") if isinstance(item, dict) else None)
-                or ((run_obj or {}).get("strategy_id") if isinstance(run_obj, dict) else None)
-                or (item.get("strategyId") if isinstance(item, dict) else None)
-            )
-            status = (item.get("status") if isinstance(item, dict) else None) or (
-                (run_obj or {}).get("status") if isinstance(run_obj, dict) else None
-            )
-            symbol = (item.get("symbol") if isinstance(item, dict) else None) or (
-                (run_obj or {}).get("symbol") if isinstance(run_obj, dict) else None
-            )
-            # Do not fallback to nested run.run_from/run.run_to to avoid cross-run contamination
-            item_run_from = item.get("run_from") if isinstance(item, dict) else None
-            item_run_to = item.get("run_to") if isinstance(item, dict) else None
-            # If item is non-terminal and we have a cached requested window from create time,
-            # use it to populate missing run_from/run_to so rows don't inherit another run's window.
-            try:
-                s_val = str(status or "").upper()
-                TERMINAL = {"DONE", "COMPLETED", "ERROR", "FAILED"}
-                rid = str(bt_id or "")
-                now_ms = int(time.time() * 1000)
-                cached_window = _REQUESTED_WINDOW_CACHE.get(rid)
-                if s_val not in TERMINAL and cached_window and cached_window[0] > now_ms:
-                    if not item_run_from:
-                        item_run_from = cached_window[1].get("run_from")
-                    if not item_run_to:
-                        item_run_to = cached_window[1].get("run_to")
-                elif s_val in TERMINAL and rid in _REQUESTED_WINDOW_CACHE:
-                    # Clean up cache once terminal
-                    _REQUESTED_WINDOW_CACHE.pop(rid, None)
-            except Exception:
-                pass
-
-            duration_ms = (
-                (item.get("duration_ms") if isinstance(item, dict) else None)
-                or ((run_obj or {}).get("duration_ms") if isinstance(run_obj, dict) else None)
-                or (item.get("durationMs") if isinstance(item, dict) else None)
-            )
-            new_items.append(
-                {
-                    "backtest_id": bt_id,
-                    "created_at": created_at,
-                    "strategy_id": strategy_id,
-                    "status": status,
-                    "symbol": symbol,
-                    "run_from": item_run_from,
-                    "run_to": item_run_to,
-                    "duration_ms": duration_ms,
-                    "total_return": item.get("total_return") if isinstance(item, dict) else None,
-                    "sharpe_ratio": item.get("sharpe_ratio") if isinstance(item, dict) else None,
-                    "max_drawdown": item.get("max_drawdown") if isinstance(item, dict) else None,
-                    "win_rate": item.get("win_rate") if isinstance(item, dict) else None,
-                }
-            )
-
-        # Optional metrics enrichment for terminal runs on the current page
         backend_calls = 1
-        # Always enrich metrics for terminal runs (remove feature flag gating to avoid silent omissions)
         if new_items:
-            term_ids: list[str] = []
-            for it in new_items:
-                s = str(it.get("status") or "").upper()
-                if s in {"DONE", "COMPLETED"} and it.get("backtest_id"):
-                    term_ids.append(str(it["backtest_id"]))
-
-            async def _fetch_one(backend_proxy, run_id: str, sem: asyncio.Semaphore):
-                # Check in-memory cache first
-                now_ms = int(time.time() * 1000)
-                cached = _METRICS_CACHE.get(run_id)
-                if cached and cached[0] > now_ms:
-                    return run_id, cached[1], 0
-                async with sem:
-                    resp = await backend_proxy.proxy_request(
-                        method="GET",
-                        path=f"/backtests/{run_id}/metrics",
-                        correlation_id=correlation_id,
-                    )
-                # FastAPI Response wrapper; extract JSON
-                data = None
-                try:
-                    if hasattr(resp, "json") and callable(resp.json):
-                        data = resp.json()
-                    else:
-                        import json as _json
-                        body = resp.body if hasattr(resp, "body") else resp.content
-                        data = _json.loads(body.decode()) if isinstance(body, (bytes, bytearray)) else None
-                except Exception:
-                    data = None
-                if isinstance(data, dict):
-                    # Cache with TTL
-                    _METRICS_CACHE[run_id] = (now_ms + _METRICS_TTL_SECONDS * 1000, data)
-                    return run_id, data, 1
-                return run_id, None, 1
-
-            if term_ids:
-                sem = asyncio.Semaphore(max(4, min(6, MAX_CONCURRENT_BACKEND_REQUESTS)))
-                backend_proxy = await create_backend_client(backend_client)
-                results = await asyncio.gather(*[_fetch_one(backend_proxy, rid, sem) for rid in term_ids])
-                # Merge results
-                fetched_map: dict[str, dict] = {}
-                for rid, payload, calls in results:
-                    backend_calls += calls
-                    if isinstance(payload, dict):
-                        fetched_map[rid] = payload
-                # Attach metrics fields when present
-                for it in new_items:
-                    rid = str(it.get("backtest_id") or "")
-                    if rid and rid in fetched_map:
-                        m = fetched_map[rid]
-                        # Map a few known alt keys from Nautilus metrics for robustness
-                        tr = m.get("total_return")
-                        dd = m.get("max_drawdown") if m.get("max_drawdown") is not None else m.get("drawdown")
-                        sh = m.get("sharpe_ratio") if m.get("sharpe_ratio") is not None else m.get("sharpe")
-                        wr = m.get("win_rate")
-                        if tr is not None:
-                            it["total_return"] = tr
-                        if dd is not None:
-                            it["max_drawdown"] = dd
-                        if sh is not None:
-                            it["sharpe_ratio"] = sh
-                        if wr is not None:
-                            it["win_rate"] = wr
+            backend_calls += await _enrich_terminal_metrics(new_items, backend_client, correlation_id)
 
         load_time_ms = int((time.perf_counter() - start_time) * 1000)
         enhanced_response = {

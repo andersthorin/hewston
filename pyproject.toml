@@ -23,4 +23,8 @@ exclude = [
 
 [tool.ruff.lint]
 # Temporarily relax some checks to get CI green for Epic 14; tighten later.
+select = ["E", "F", "C90"]
 ignore = []
+
+[tool.ruff.lint.mccabe]
+max-complexity = 12
