@@ -1,5 +1,4 @@
-"""
-Chart Data Models
+"""Chart data models.
 
 Pydantic models for chart data aggregation requests and responses.
 """
