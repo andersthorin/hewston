@@ -468,6 +468,28 @@ class WebSocketConnectionManager:
         if connection_id in self.connection_metadata:
             self.connection_metadata[connection_id]["subscriptions"].discard(run_id)
 
+
+    def _get_connection(self, connection_id: str):
+        return self.active_connections.get(connection_id)
+
+    def _normalize_message_json(self, message: Any) -> str:
+        if hasattr(message, "model_dump_json"):
+            return message.model_dump_json()
+        if hasattr(message, "json"):
+            return message.json()
+        return json.dumps(message)
+
+    def _is_connected(self, websocket: Any) -> bool:
+        # In tests or mocks, state may not exist; treat as connected in that case
+        if not hasattr(websocket, "application_state"):
+            return True
+        try:
+            from starlette.websockets import WebSocketState
+            app_state = getattr(websocket, "application_state", None)
+            return isinstance(app_state, WebSocketState) and app_state == WebSocketState.CONNECTED
+        except Exception:
+            return True
+
     async def _broadcast_to_run_subscribers(self, run_id: str, message: Any) -> None:
         """Broadcast message to all subscribers of a run."""
         if run_id not in self.run_subscriptions:
@@ -479,48 +501,28 @@ class WebSocketConnectionManager:
 
     async def _send_to_client(self, connection_id: str, message: Any) -> None:
         """Send message to specific client."""
-        if connection_id not in self.active_connections:
+        websocket = self._get_connection(connection_id)
+        if websocket is None:
             return
 
         try:
-            websocket = self.active_connections[connection_id]
+            if not self._is_connected(websocket):
+                self.logger.debug(
+                    "client.websocket_not_connected",
+                    extra={
+                        "connection_id": connection_id,
+                        "app_state": getattr(getattr(websocket, "application_state", None), "name", None),
+                    },
+                )
+                await self.disconnect_client(connection_id)
+                return
 
-            # Check if WebSocket is still open when state attributes are available
-            # Be defensive in tests where websocket may be a mock without real state
-            if hasattr(websocket, "application_state"):
-                try:
-                    from starlette.websockets import WebSocketState
-
-                    app_state = getattr(websocket, "application_state", None)
-                    if isinstance(app_state, WebSocketState):
-                        if app_state != WebSocketState.CONNECTED:
-                            self.logger.debug(
-                                "client.websocket_not_connected",
-                                extra={
-                                    "connection_id": connection_id,
-                                    "app_state": app_state.name,
-                                },
-                            )
-                            await self.disconnect_client(connection_id)
-                            return
-                except Exception:
-                    # If state inspection is unreliable (e.g., mocks), skip state check
-                    pass
-
-            # Convert message to JSON
-            if hasattr(message, "model_dump_json"):
-                message_json = message.model_dump_json()
-            elif hasattr(message, "json"):
-                message_json = message.json()
-            else:
-                message_json = json.dumps(message)
-
+            message_json = self._normalize_message_json(message)
             await websocket.send_text(message_json)
 
         except WebSocketDisconnect:
             await self.disconnect_client(connection_id)
         except (ConnectionResetError, BrokenPipeError, OSError) as e:
-            # Connection-related errors - disconnect client but don't log as error
             self.logger.debug(
                 "client.connection_lost",
                 extra={

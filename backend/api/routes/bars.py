@@ -29,46 +29,49 @@ def _isoz(ts: datetime | str | None) -> str | None:
             return None
 
 
+
+def _parse_iso_date_range(from_date: str | None, to_date: str | None) -> tuple[datetime, datetime]:
+    try:
+        ts_from = datetime.fromisoformat((from_date or "1970-01-01") + "T00:00:00+00:00")
+        ts_to = datetime.fromisoformat((to_date or "2100-01-01") + "T23:59:59+00:00")
+        return ts_from, ts_to
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Invalid from/to format; expected YYYY-MM-DD") from e
+
+
+def _list_dates_1h(base: Path) -> list[str]:
+    if not base.exists():
+        return []
+    return sorted([p.name.split("=")[1] for p in base.glob("date=*") if p.is_dir() and "=" in p.name])
+
+
+def _paths_1h_for_range(base: Path, ts_from: datetime, ts_to: datetime) -> list[str]:
+    if not base.exists():
+        return []
+    out: list[str] = []
+    d = ts_from.date()
+    while d <= ts_to.date():
+        p = base / f"date={d}" / "bars.parquet"
+        if p.exists():
+            out.append(str(p))
+        d = (datetime.combine(d, datetime.min.time(), tzinfo=UTC) + timedelta(days=1)).date()
+    return out
+
+
 @router.get("/bars/daily")
 async def get_daily(
     symbol: str,
     from_date: str | None = Query(None, alias="from"),
     to_date: str | None = Query(None, alias="to"),
 ):
-    # Build list of warehouse paths (prefer 1h pre-aggregated; fall back to 1min)
-    try:
-        ts_from = datetime.fromisoformat((from_date or "1970-01-01") + "T00:00:00+00:00")
-        ts_to = datetime.fromisoformat((to_date or "2100-01-01") + "T23:59:59+00:00")
-    except Exception as e:
-        raise HTTPException(
-            status_code=400, detail="Invalid from/to format; expected YYYY-MM-DD"
-        ) from e
-
-    def _paths(base: Path, ts_from: datetime, ts_to: datetime) -> list[str]:
-        if not base.exists():
-            return []
-        out: list[str] = []
-        d = ts_from.date()
-        while d <= ts_to.date():
-            p = base / f"date={d}" / "bars.parquet"
-            if p.exists():
-                out.append(str(p))
-            d = (datetime.combine(d, datetime.min.time(), tzinfo=UTC) + timedelta(days=1)).date()
-        return out
+    # Build list of warehouse paths (prefer 1h pre-aggregated)
+    ts_from, ts_to = _parse_iso_date_range(from_date, to_date)
 
     base_1h = _base_dir() / "warehouse" / "bars" / "mid_1h" / "venue=XNAS" / f"symbol={symbol}"
 
     # If no explicit range provided, bound by available dates in warehouse
     if (from_date is None) and (to_date is None):
-
-        def _list_dates(base: Path) -> list[str]:
-            if not base.exists():
-                return []
-            return sorted(
-                [p.name.split("=")[1] for p in base.glob("date=*") if p.is_dir() and "=" in p.name]
-            )
-
-        ds = _list_dates(base_1h)
+        ds = _list_dates_1h(base_1h)
         if not ds:
             raise HTTPException(
                 status_code=404,
@@ -77,7 +80,7 @@ async def get_daily(
         ts_from = datetime.fromisoformat(ds[0] + "T00:00:00+00:00")
         ts_to = datetime.fromisoformat(ds[-1] + "T23:59:59+00:00")
 
-    paths_1h = _paths(base_1h, ts_from, ts_to)
+    paths_1h = _paths_1h_for_range(base_1h, ts_from, ts_to)
     if not paths_1h:
         _from = from_date or ts_from.date().isoformat()
         _to = to_date or ts_to.date().isoformat()

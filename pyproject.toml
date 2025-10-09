@@ -27,4 +27,4 @@ select = ["E", "F", "C90"]
 ignore = []
 
 [tool.ruff.lint.mccabe]
-max-complexity = 12
+max-complexity = 10

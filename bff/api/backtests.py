@@ -42,22 +42,24 @@ async def get_correlation_id_from_state(request) -> str:
     return getattr(request.state, "correlation_id", "unknown")
 
 
-def _parse_and_map_create_payload(raw_body: bytes) -> dict[str, Any]:
-    import json as _json
 
+
+def _decode_create_body(raw_body: bytes) -> dict[str, Any]:
+    import json as _json
     try:
         incoming = _json.loads(raw_body.decode("utf-8") or "{}")
-        if not isinstance(incoming, dict):
-            incoming = {}
+        return incoming if isinstance(incoming, dict) else {}
     except Exception:
-        incoming = {}
+        return {}
 
+
+def _map_create_payload(incoming: dict[str, Any]) -> dict[str, Any]:
+    mapped: dict[str, Any] = {}
     strategy_id = incoming.get("strategy_id")
     symbol = incoming.get("symbol")
     run_from = incoming.get("run_from")
     run_to = incoming.get("run_to")
 
-    mapped: dict[str, Any] = {}
     if strategy_id:
         mapped["strategy_id"] = strategy_id
     if symbol:
@@ -81,6 +83,10 @@ def _parse_and_map_create_payload(raw_body: bytes) -> dict[str, Any]:
     if isinstance(incoming.get("slippage_fees"), dict):
         mapped["slippage_fees"] = incoming["slippage_fees"]
     return mapped
+
+def _parse_and_map_create_payload(raw_body: bytes) -> dict[str, Any]:
+    incoming = _decode_create_body(raw_body)
+    return _map_create_payload(incoming)
 
 
 def _extract_json_from_response(response) -> dict[str, Any]:

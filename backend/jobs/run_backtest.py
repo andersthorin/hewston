@@ -123,13 +123,7 @@ def _execute_and_persist_backtest(
     end_pos_qty_fills = _compute_end_pos_qty_fills(result.get("fills", []) or [])
 
     # Annualization factor (P)
-    try:
-        minutes_per_session = 390
-        sessions_per_year = 252
-        periods_per_session = max(1, int(minutes_per_session / max(1, int(bar_interval_minutes))))
-        annualization_P = float(periods_per_session * sessions_per_year)
-    except Exception:
-        annualization_P = float(252 * 390)
+    annualization_P = _compute_annualization_P(bar_interval_minutes)
 
     nautilus_stats, sr_val = _extract_nautilus_stats_and_sharpe(result)
 
@@ -144,8 +138,70 @@ def _execute_and_persist_backtest(
         metrics_artifact["sharpe_ratio"] = sr_val
 
     # Surface a few canonical Nautilus metrics to top-level if present
+    res_metrics = result.get("metrics") or {}
+    _surface_nautilus_metrics(metrics_artifact, res_metrics)
+
+    return _persist_artifacts_and_finalize(
+        out_dir=out_dir,
+        metrics_artifact=metrics_artifact,
+        metrics_path=metrics_path,
+        logger=logger,
+        run_id=run_id,
+        dataset_id=dataset_id,
+        strategy_id=strategy_id,
+        params=params,
+        seed=seed,
+        slippage_fees=slippage_fees,
+        speed=speed,
+        from_date=from_date,
+        to_date=to_date,
+        code_hash=code_hash,
+        bar_interval_minutes=bar_interval_minutes,
+        created_at_iso=created_at_iso,
+        cat=cat,
+        equity_path=equity_path,
+        orders_path=orders_path,
+        fills_path=fills_path,
+        manifest_path=manifest_path,
+        duration_ms=duration_ms,
+    )
+
+
+
+def _compact_metrics_series(metrics_series: list[tuple[str, dict]]) -> list:
+    """Store only points where realized_pnl or win_rate changes, plus final point."""
+    compact_series: list = []
+    prev_rp = object()
+    prev_wr = object()
+    for ts_iso, m in metrics_series:
+        rp = m.get("realized_pnl")
+        wr = m.get("win_rate")
+        changed = (rp != prev_rp) or (wr != prev_wr)
+        if not compact_series or changed:
+            compact_series.append([ts_iso, {"realized_pnl": rp, "win_rate": wr}])
+            prev_rp, prev_wr = rp, wr
+    if metrics_series:
+        last_ts = metrics_series[-1][0]
+        if not compact_series or compact_series[-1][0] != last_ts:
+            last_m = metrics_series[-1][1]
+            compact_series.append(
+                [last_ts, {"realized_pnl": last_m.get("realized_pnl"), "win_rate": last_m.get("win_rate")}]
+            )
+    return compact_series
+
+
+def _compute_annualization_P(bar_interval_minutes: int) -> float:
     try:
-        res_metrics = result.get("metrics") or {}
+        minutes_per_session = 390
+        sessions_per_year = 252
+        periods_per_session = max(1, int(minutes_per_session / max(1, int(bar_interval_minutes))))
+        return float(periods_per_session * sessions_per_year)
+    except Exception:
+        return float(252 * 390)
+
+
+def _surface_nautilus_metrics(metrics_artifact: dict, res_metrics: dict) -> None:
+    try:
         for k in ("total_return", "max_drawdown", "win_rate"):
             if res_metrics.get(k) is not None:
                 metrics_artifact[k] = float(res_metrics.get(k))
@@ -160,11 +216,36 @@ def _execute_and_persist_backtest(
     except Exception:
         pass
 
+
+def _persist_artifacts_and_finalize(
+    *,
+    out_dir: Path,
+    metrics_artifact: dict,
+    metrics_path: Path,
+    logger: logging.Logger,
+    run_id: str,
+    dataset_id: str | None,
+    strategy_id: str,
+    params: dict[str, Any],
+    seed: int,
+    slippage_fees: dict[str, Any],
+    speed: int,
+    from_date: str | None,
+    to_date: str | None,
+    code_hash: str,
+    bar_interval_minutes: int,
+    created_at_iso: str,
+    cat,
+    equity_path: Path,
+    orders_path: Path,
+    fills_path: Path,
+    manifest_path: Path,
+    duration_ms: int,
+) -> dict:
     ensure_dir(out_dir)
     metrics_path.write_text(json.dumps(metrics_artifact, separators=(",", ":")))
     logger.info(f"Artifacts written to {out_dir}")
 
-    # Write manifest
     manifest = {
         "run_id": run_id,
         "dataset_id": dataset_id,
@@ -185,7 +266,6 @@ def _execute_and_persist_backtest(
     }
     manifest_path.write_text(json.dumps(manifest, indent=2))
 
-    # Finalize DB row
     cat.set_backtest_status(
         run_id,
         status="DONE",
@@ -211,26 +291,66 @@ def _execute_and_persist_backtest(
 
 
 
-def _compact_metrics_series(metrics_series: list[tuple[str, dict]]) -> list:
-    """Store only points where realized_pnl or win_rate changes, plus final point."""
-    compact_series: list = []
-    prev_rp = object()
-    prev_wr = object()
-    for ts_iso, m in metrics_series:
-        rp = m.get("realized_pnl")
-        wr = m.get("win_rate")
-        changed = (rp != prev_rp) or (wr != prev_wr)
-        if not compact_series or changed:
-            compact_series.append([ts_iso, {"realized_pnl": rp, "win_rate": wr}])
-            prev_rp, prev_wr = rp, wr
-    if metrics_series:
-        last_ts = metrics_series[-1][0]
-        if not compact_series or compact_series[-1][0] != last_ts:
-            last_m = metrics_series[-1][1]
-            compact_series.append(
-                [last_ts, {"realized_pnl": last_m.get("realized_pnl"), "win_rate": last_m.get("win_rate")}]
-            )
-    return compact_series
+def _read_nautilus_realized_series(result: dict[str, Any]) -> list[tuple[str, float]]:
+    try:
+        rp = ((result.get("nautilus") or {}).get("series") or {}).get("realized_pnl") or []
+        return [
+            (str(a[0]), float(a[1])) for a in rp if isinstance(a, (list, tuple)) and len(a) >= 2
+        ]
+    except Exception:
+        return []
+
+
+def _derive_realized_from_fills(result: dict[str, Any]) -> list[tuple[str, float]]:
+    try:
+        from backend.utils.datetime import normalize_timestamp
+
+        fills_rows = list(result.get("fills") or [])
+
+        def _key_ts(f: dict) -> tuple[int, str]:
+            try:
+                ep, iso = normalize_timestamp(f.get("ts_utc"))
+                return int(ep), iso
+            except Exception:
+                return (0, str(f.get("ts_utc") or ""))
+
+        fills_rows.sort(key=lambda f: _key_ts(f)[0])
+
+        cum = 0.0
+        pos_qty = 0.0
+        avg_entry = 0.0
+        realized: list[tuple[str, float]] = []
+        for f in fills_rows:
+            side = (f.get("side") or "").upper()
+            qty = float(f.get("qty") or 0.0)
+            px = float(f.get("price") or 0.0)
+            fee = float(f.get("fee") or 0.0)
+            try:
+                _, iso = normalize_timestamp(f.get("ts_utc"))
+            except Exception:
+                iso = str(f.get("ts_utc") or "")
+
+            if side == "BUY" and qty > 0:
+                new_qty = pos_qty + qty
+                if new_qty > 0:
+                    avg_entry = (
+                        (avg_entry * pos_qty + px * qty) / new_qty if pos_qty > 0 else px
+                    )
+                pos_qty = new_qty
+                cum -= fee
+            elif side == "SELL" and qty > 0:
+                realized_qty = min(qty, pos_qty) if pos_qty > 0 else 0.0
+                pnl = (px - avg_entry) * realized_qty
+                cum += pnl
+                cum -= fee
+                pos_qty = max(0.0, pos_qty - realized_qty)
+                if pos_qty == 0.0:
+                    avg_entry = 0.0
+                realized.append((iso, float(cum)))
+        return realized
+    except Exception:
+        return []
+
 
 
 def _compute_end_pos_qty_fills(fills: list[dict]) -> float:
@@ -298,72 +418,10 @@ def _derive_realized_series_from_result(result: dict[str, Any]) -> list[tuple[st
 
     Prefer Nautilus analyzer series; if absent, derive from fills conservatively.
     """
-    realized: list[tuple[str, float]] = []
-    # Prefer Nautilus analyzer series
-    try:
-        rp = ((result.get("nautilus") or {}).get("series") or {}).get("realized_pnl") or []
-        realized = [
-            (str(a[0]), float(a[1]))
-            for a in rp
-            if isinstance(a, (list, tuple)) and len(a) >= 2
-        ]
-    except Exception:
-        realized = []
-
+    realized = _read_nautilus_realized_series(result)
     if realized:
         return realized
-
-    # Fallback: derive from fills (BUY/SELL pairs), preserving fees
-    try:
-        from backend.utils.datetime import normalize_timestamp  # local import for isolation
-
-        fills_rows = list(result.get("fills") or [])
-
-        def _key_ts(f: dict) -> tuple[int, str]:
-            try:
-                ep, iso = normalize_timestamp(f.get("ts_utc"))
-                return int(ep), iso
-            except Exception:
-                return (0, str(f.get("ts_utc") or ""))
-
-        fills_rows.sort(key=lambda f: _key_ts(f)[0])
-
-        cum = 0.0
-        pos_qty = 0.0
-        avg_entry = 0.0
-        realized = []
-        for f in fills_rows:
-            side = (f.get("side") or "").upper()
-            qty = float(f.get("qty") or 0.0)
-            px = float(f.get("price") or 0.0)
-            fee = float(f.get("fee") or 0.0)
-            try:
-                _, iso = normalize_timestamp(f.get("ts_utc"))
-            except Exception:
-                iso = str(f.get("ts_utc") or "")
-
-            if side == "BUY" and qty > 0:
-                # Update weighted average entry price
-                new_qty = pos_qty + qty
-                if new_qty > 0:
-                    avg_entry = (
-                        (avg_entry * pos_qty + px * qty) / new_qty if pos_qty > 0 else px
-                    )
-                pos_qty = new_qty
-                cum -= fee
-            elif side == "SELL" and qty > 0:
-                # Realize PnL on sold quantity against average entry
-                realized_qty = min(qty, pos_qty) if pos_qty > 0 else 0.0
-                pnl = (px - avg_entry) * realized_qty
-                cum += pnl
-                cum -= fee
-                pos_qty = max(0.0, pos_qty - realized_qty)
-                if pos_qty == 0.0:
-                    avg_entry = 0.0
-                realized.append((iso, float(cum)))
-        return realized
-    except Exception:
-        return []
+    return _derive_realized_from_fills(result)
 
 def run_backtest_and_persist(
     *,

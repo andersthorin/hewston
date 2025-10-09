@@ -80,19 +80,77 @@ try:  # pragma: no cover - exercised in integration
             # Subscribe to bars (let client be inferred from instrument venue)
             self.subscribe_bars(self._bar_type)
 
+        def _get_tz_ny(self):
+            try:  # pragma: no cover
+                from zoneinfo import ZoneInfo
+                return ZoneInfo("America/New_York")
+            except Exception:
+                return None
+
+        def _in_rth_window(self, ts, tz_ny, rth_only: bool) -> tuple[bool, int | None]:
+            if not rth_only or tz_ny is None or ts is None:
+                return True, None
+            try:
+                local = ts.astimezone(tz_ny)
+                mins = local.hour * 60 + local.minute
+                return ((mins >= 9 * 60 + 30) and (mins < 16 * 60)), mins
+            except Exception:
+                return True, None
+
+        def _compute_equity_snapshot(self) -> float:
+            import logging
+            logger = logging.getLogger("strategy.equity")
+            try:
+                portfolio = self.portfolio
+                venue = self.instrument_id.venue
+                account = portfolio.account(venue)
+                from nautilus_trader.model.currencies import USD
+                bal_money = account.balance_total(USD)
+                bal_val = float(bal_money.as_double()) if hasattr(bal_money, "as_double") else float(bal_money)
+                upnls = portfolio.unrealized_pnls(venue)
+                upnl_money = upnls.get(USD)
+                upnl_val = (
+                    float(upnl_money.as_double())
+                    if (upnl_money is not None and hasattr(upnl_money, "as_double"))
+                    else float(upnl_money or 0.0)
+                )
+                equity_val = bal_val + upnl_val
+                logger.debug(
+                    f"Equity snapshot: cash={bal_val:.2f}, upnl={upnl_val:.2f}, eq={equity_val:.2f}"
+                )
+                return float(equity_val)
+            except Exception as e:  # pragma: no cover
+                logger.error(
+                    f"❌ CRITICAL: Failed to obtain canonical equity (balance_total + unrealized_pnls): {type(e).__name__}: {e}"
+                )
+                raise RuntimeError(f"Canonical equity unavailable from Nautilus: {e}") from e
+
+        def _maybe_signal(self, px: float, ts) -> None:
+            if (
+                not self._fast
+                or not self._slow
+                or not self._fast.initialized
+                or not self._slow.initialized
+            ):
+                return
+            f = float(self._fast.value)
+            s = float(self._slow.value)
+            if not self._in_position and f > s:
+                self._place(OrderSide.BUY, px, ts)
+            elif self._in_position and f < s:
+                self._place(OrderSide.SELL, px, ts)
+
+        def _maybe_eod_flat(self, px: float, ts, mins: int | None) -> None:
+            if self.eod_flat and self._in_position and mins is not None and mins == (15 * 60 + 59):
+                self._place(OrderSide.SELL, px, ts)
+
+
         def on_bar(self, bar) -> None:
             # Only handle our instrument/BarType
             if self._bar_type is None or bar.bar_type != self._bar_type:
                 return
 
-            # Extract timestamp and localize to NY for RTH/EOD logic
-
-            try:
-                from zoneinfo import ZoneInfo
-
-                tz_ny = ZoneInfo("America/New_York")
-            except Exception:
-                tz_ny = None
+            tz_ny = self._get_tz_ny()
 
             px = (
                 float(bar.close.as_double())
@@ -101,83 +159,16 @@ try:  # pragma: no cover - exercised in integration
             )
             ts = getattr(bar, "ts_event", None) or getattr(bar, "ts_init", None)
 
-            # RTH filter: 09:30 <= time < 16:00 NY
-            in_rth = True
-            mins = None
-            if self.rth_only and tz_ny and ts is not None:
-                try:
-                    local = ts.astimezone(tz_ny)
-                    mins = local.hour * 60 + local.minute
-                    in_rth = (mins >= 9 * 60 + 30) and (mins < 16 * 60)
-                except Exception:
-                    in_rth = True
+            in_rth, mins = self._in_rth_window(ts, tz_ny, self.rth_only)
 
-            # Track canonical equity using Nautilus Portfolio APIs (no made-up math):
-            # equity = balance_total(USD) + unrealized_pnls(venue)[USD]
-            import logging
-
-            logger = logging.getLogger("strategy.equity")
-
-            try:
-                portfolio = self.portfolio
-                venue = self.instrument_id.venue
-                account = portfolio.account(venue)
-
-                from nautilus_trader.model.currencies import USD
-
-                bal_money = account.balance_total(USD)
-                bal_val = (
-                    float(bal_money.as_double())
-                    if hasattr(bal_money, "as_double")
-                    else float(bal_money)
-                )
-
-                upnls = portfolio.unrealized_pnls(venue)
-                upnl_money = upnls.get(USD)
-                upnl_val = (
-                    float(upnl_money.as_double())
-                    if (upnl_money is not None and hasattr(upnl_money, "as_double"))
-                    else float(upnl_money or 0.0)
-                )
-
-                equity_val = bal_val + upnl_val
-                logger.debug(
-                    f"Equity snapshot: cash={bal_val:.2f}, upnl={upnl_val:.2f}, eq={equity_val:.2f}"
-                )
-            except Exception as e:
-                logger.error(
-                    f"❌ CRITICAL: Failed to obtain canonical equity (balance_total + unrealized_pnls): {type(e).__name__}: {e}"
-                )
-                raise RuntimeError(f"Canonical equity unavailable from Nautilus: {e}") from e
-
+            equity_val = self._compute_equity_snapshot()
             self.equity.append({"ts_utc": ts, "value": equity_val})
 
             if not in_rth:
-                # Optionally flatten if outside RTH, but we rely on EOD flatten at 15:59
                 return
 
-            if (
-                not self._fast
-                or not self._slow
-                or not self._fast.initialized
-                or not self._slow.initialized
-            ):
-                # Not enough history yet for signals
-                # But allow EOD flatten safeguard below if needed
-                pass
-            else:
-                f = float(self._fast.value)
-                s = float(self._slow.value)
-
-                # Generate naive crossover signals
-                if not self._in_position and f > s:
-                    self._place(OrderSide.BUY, px, ts)
-                elif self._in_position and f < s:
-                    self._place(OrderSide.SELL, px, ts)
-
-            # End-of-day flatten at 15:59 NY
-            if self.eod_flat and self._in_position and mins is not None and mins == (15 * 60 + 59):
-                self._place(OrderSide.SELL, px, ts)
+            self._maybe_signal(px, ts)
+            self._maybe_eod_flat(px, ts, mins)
 
         # Generic event handler to catch ALL events for debugging
         def on_event(self, event) -> None:  # pragma: no cover
