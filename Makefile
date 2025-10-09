@@ -40,6 +40,28 @@ END ?=
 VENUE ?= XNAS
 WORKERS ?= 4
 
+# Use bash for better pipefail behavior in quiet runner
+SHELL := /bin/bash
+
+# Quiet runner macro: prints a green check on success; on failure, prints captured output.
+# Third arg optional: pass 'warn' to not fail the build (non-blocking), but still show output on failure.
+define RUN_QUIET
+	@printf "%-40s" "$(1)"; \
+	logfile=$$(mktemp); \
+	set -o pipefail; \
+	( $(2) ) >$$logfile 2>&1; status=$$?; \
+	if [ $$status -eq 0 ]; then \
+		printf " \033[32mOK\033[0m\n"; \
+	else \
+		printf " \033[31mFAIL\033[0m\n"; \
+		echo "----- $(1) output -----"; \
+		cat $$logfile; \
+		if [ "$(3)" != "warn" ]; then rm -f $$logfile; exit $$status; fi; \
+	fi; \
+	rm -f $$logfile
+endef
+
+
 # -------- Meta --------
 .PHONY: help
 help:
@@ -265,18 +287,18 @@ ci-architecture:
 
 .PHONY: ci
 ci:
-	@echo "[ci] Using pinned toolchain — run: make setup && make dev-install (once)" && \
-	$(MAKE) ci-versions && \
-	echo "[ci] Ruff (lint)" && ( if [ -x .venv/bin/ruff ]; then .venv/bin/ruff check backend bff; else ruff check backend bff; fi ) && \
-	echo "[ci] Black (format check)" && ( if [ -x .venv/bin/black ]; then .venv/bin/black --check backend bff; else black --check backend bff; fi ) && \
-	echo "[ci] MyPy (type check)" && ( if [ -x .venv/bin/mypy ]; then .venv/bin/mypy backend bff; else mypy backend bff; fi ) && \
-	echo "[ci] Import Linter (architecture)" && ( if [ -x .venv/bin/lint-imports ]; then .venv/bin/lint-imports --config linter.ini; else lint-imports --config linter.ini; fi ) && \
-	echo "[ci] PyTest (backend)" && ( if [ -x .venv/bin/pytest ]; then PYTHONPATH=. .venv/bin/pytest -q backend/tests --cov=backend --cov-report=term-missing; else PYTHONPATH=. pytest -q backend/tests --cov=backend --cov-report=term-missing; fi ) && \
-	echo "[ci] PyTest (bff)" && ( if [ -x .venv/bin/pytest ]; then PYTHONPATH=. .venv/bin/pytest -q bff/tests --cov=bff --cov-report=term-missing; else PYTHONPATH=. pytest -q bff/tests --cov=bff --cov-report=term-missing; fi ) && \
-	echo "[ci] Bandit (security)" && ( if [ -x .venv/bin/bandit ]; then .venv/bin/bandit -q -r backend bff; else bandit -q -r backend bff; fi ) || true && \
-	echo "[ci] pip-audit (dependencies)" && ( if [ -x .venv/bin/pip-audit ]; then .venv/bin/pip-audit --progress-spinner=off; else pip-audit --progress-spinner=off; fi ) || true && \
-	echo "[ci] Frontend: Prettier check" && cd $(FRONTEND_DIR) && { export NVM_DIR="$$HOME/.nvm"; [ -s "$$NVM_DIR/nvm.sh" ] && . "$$NVM_DIR/nvm.sh" && nvm use 22 >/dev/null 2>&1 || true; } && $(NPM) run prettier:check && \
-	echo "[ci] Frontend: ESLint (components/containers/views)" && $(NPM) run lint && \
-	echo "[ci] Frontend: ESLint (services/hooks/utils/store)" && $(NPM) run lint:services && \
-	echo "[ci] Frontend: Type check" && $(NPM) run type-check && \
-	echo "[ci] Frontend: Vitest (run once)" && $(NPM) test -s -- --run
+	@echo "[ci] Using pinned toolchain — run: make setup && make dev-install (once)"
+	$(call RUN_QUIET,Tool versions, $(MAKE) ci-versions)
+	$(call RUN_QUIET,Ruff (lint), if [ -x .venv/bin/ruff ]; then .venv/bin/ruff check backend bff -q; else ruff check backend bff -q; fi)
+	$(call RUN_QUIET,Black (format check), if [ -x .venv/bin/black ]; then .venv/bin/black --check backend bff; else black --check backend bff; fi)
+	$(call RUN_QUIET,MyPy (type check), if [ -x .venv/bin/mypy ]; then .venv/bin/mypy backend bff; else mypy backend bff; fi)
+	$(call RUN_QUIET,Import Linter (architecture), if [ -x .venv/bin/lint-imports ]; then .venv/bin/lint-imports --config linter.ini; else lint-imports --config linter.ini; fi)
+	$(call RUN_QUIET,PyTest (backend), if [ -x .venv/bin/pytest ]; then PYTHONPATH=. .venv/bin/pytest -q backend/tests --cov=backend --cov-report=term; else PYTHONPATH=. pytest -q backend/tests --cov=backend --cov-report=term; fi)
+	$(call RUN_QUIET,PyTest (bff), if [ -x .venv/bin/pytest ]; then PYTHONPATH=. .venv/bin/pytest -q bff/tests --cov=bff --cov-report=term; else PYTHONPATH=. pytest -q bff/tests --cov=bff --cov-report=term; fi)
+	$(call RUN_QUIET,Bandit (security) [non-blocking], if [ -x .venv/bin/bandit ]; then .venv/bin/bandit -q -r backend bff; else bandit -q -r backend bff; fi,warn)
+	$(call RUN_QUIET,pip-audit (dependencies) [non-blocking], if [ -x .venv/bin/pip-audit ]; then .venv/bin/pip-audit --progress-spinner=off; else pip-audit --progress-spinner=off; fi,warn)
+	$(call RUN_QUIET,Frontend: Prettier check, cd $(FRONTEND_DIR) && { export NVM_DIR="$$HOME/.nvm"; [ -s "$$NVM_DIR/nvm.sh" ] && . "$$NVM_DIR/nvm.sh" && nvm use 22 >/dev/null 2>&1 || true; } && $(NPM) run prettier:check)
+	$(call RUN_QUIET,Frontend: ESLint (components/containers/views), cd $(FRONTEND_DIR) && $(NPM) run lint)
+	$(call RUN_QUIET,Frontend: ESLint (services/hooks/utils/store), cd $(FRONTEND_DIR) && $(NPM) run lint:services)
+	$(call RUN_QUIET,Frontend: Type check, cd $(FRONTEND_DIR) && $(NPM) run type-check)
+	$(call RUN_QUIET,Frontend: Vitest (run once), cd $(FRONTEND_DIR) && $(NPM) test -s -- --run)
