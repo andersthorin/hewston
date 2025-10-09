@@ -1,5 +1,8 @@
+"""HTTPX adapter implementation for the backend backtests endpoints."""
+
 from __future__ import annotations
 
+from http import HTTPStatus
 from typing import Any
 
 import httpx
@@ -9,14 +12,17 @@ from bff.modules.backtests.application.ports.backend_gateway import BackendGatew
 
 class BackendGatewayHTTPX(BackendGatewayPort):
     """HTTPX adapter (skeleton) for backend backtests endpoints.
+
     Note: Not wired yet; pilot exemplar only.
     """
 
     def __init__(self, base_url: str, client: httpx.AsyncClient | None = None) -> None:
+        """Initialize the HTTPX backend gateway adapter."""
         self.base_url = base_url.rstrip("/")
         self.client = client or httpx.AsyncClient(base_url=self.base_url, timeout=10.0)
 
     async def create_backtest(self, body: dict, idempotency_key: str | None) -> tuple[dict, int]:
+        """Create a backtest via backend API; returns JSON and status code."""
         headers = {}
         if idempotency_key:
             headers["Idempotency-Key"] = idempotency_key
@@ -24,8 +30,9 @@ class BackendGatewayHTTPX(BackendGatewayPort):
         return resp.json(), resp.status_code
 
     async def get_backtest(self, run_id: str) -> dict[str, Any] | None:
+        """Fetch a backtest by ID; returns None if not found (404)."""
         resp = await self.client.get(f"/backtests/{run_id}")
-        if resp.status_code == 404:
+        if resp.status_code == HTTPStatus.NOT_FOUND:
             return None
         resp.raise_for_status()
         return resp.json()
@@ -41,6 +48,7 @@ class BackendGatewayHTTPX(BackendGatewayPort):
         offset: int = 0,
         order: str | None = None,
     ) -> dict[str, Any]:
+        """List backtests using optional filters and pagination."""
         params = {
             "symbol": symbol,
             "strategy_id": strategy_id,

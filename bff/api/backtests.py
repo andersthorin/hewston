@@ -1,5 +1,4 @@
 # ruff: noqa: B008
-# fmt: off
 
 
 """Backtests API endpoints for the BFF. Provides unified aggregation for frontend."""
@@ -7,12 +6,13 @@
 import asyncio
 import logging
 import time
+from dataclasses import dataclass
 from contextlib import suppress
 from http import HTTPStatus
 from typing import Any
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Request
 from fastapi.responses import JSONResponse
 
 from bff.app.config import MAX_CONCURRENT_BACKEND_REQUESTS
@@ -38,6 +38,69 @@ logger = logging.getLogger("bff.backtests_api")
 async def get_correlation_id_from_state(request) -> str:
     """Extract correlation ID from request state."""
     return getattr(request.state, "correlation_id", "unknown")
+
+
+class ListBacktestsQuery:
+    """Parsed query params for GET /backtests using Request injection."""
+
+    def __init__(self, request: Request) -> None:
+        """Initialize from FastAPI Request query params."""
+        qp = request.query_params
+        # ints with defaults
+        try:
+            self.limit = max(1, min(int(qp.get("limit", 20)), 500))
+        except Exception:
+            self.limit = 20
+        try:
+            self.offset = max(0, int(qp.get("offset", 0)))
+        except Exception:
+            self.offset = 0
+        # strings/optionals
+        self.symbol = qp.get("symbol")
+        self.strategy_id = qp.get("strategy_id")
+        self.run_from = qp.get("run_from")
+        self.run_to = qp.get("run_to")
+        ord_val = qp.get("order")
+        self.order = ord_val if ord_val in {"created_at", "-created_at"} else "-created_at"
+
+
+class CompleteBacktestQuery:
+    """Parsed query params for GET /backtests/{id}/complete."""
+
+    def __init__(self, request: Request) -> None:
+        """Initialize from FastAPI Request query params."""
+        qp = request.query_params
+        def _b(key: str, default: bool = True) -> bool:
+            v = qp.get(key)
+            return (str(v).lower() in {"true", "1", "yes"}) if v is not None else default
+        self.include_orders = _b("include_orders", True)
+        self.include_equity = _b("include_equity", True)
+        self.include_metrics = _b("include_metrics", True)
+
+@dataclass
+class ListBacktestsOptions:
+    """Options for listing backtests used internally to reduce arg count."""
+
+    limit: int
+    offset: int
+    symbol: str | None
+    strategy_id: str | None
+    run_from: str | None
+    run_to: str | None
+    order: str | None
+
+
+def _options_from_query(q: ListBacktestsQuery) -> ListBacktestsOptions:
+    return ListBacktestsOptions(
+        limit=q.limit,
+        offset=q.offset,
+        symbol=q.symbol,
+        strategy_id=q.strategy_id,
+        run_from=q.run_from,
+        run_to=q.run_to,
+        order=q.order,
+    )
+
 
 
 
@@ -108,23 +171,20 @@ def _extract_json_from_response(response) -> dict[str, Any]:
 
 def _build_backend_query_params(
     *,
+    options: ListBacktestsOptions,
     limit: int,
     offset: int,
     order: str | None,
-    symbol: str | None,
-    strategy_id: str | None,
-    run_from: str | None,
-    run_to: str | None,
 ) -> dict[str, Any]:
     params: dict[str, Any] = {"limit": limit, "offset": offset}
-    if symbol:
-        params["symbol"] = symbol
-    if strategy_id:
-        params["strategy_id"] = strategy_id
-    if run_from:
-        params["run_from"] = run_from
-    if run_to:
-        params["run_to"] = run_to
+    if options.symbol:
+        params["symbol"] = options.symbol
+    if options.strategy_id:
+        params["strategy_id"] = options.strategy_id
+    if options.run_from:
+        params["run_from"] = options.run_from
+    if options.run_to:
+        params["run_to"] = options.run_to
     if order:
         params["order"] = order
     return params
@@ -348,19 +408,23 @@ async def create_backtest_via_bff(
 async def _list_backtests_core(
     *,
     request: Request | None,
-    limit: int,
-    offset: int,
-    symbol: str | None,
-    strategy_id: str | None,
-    run_from: str | None,
-    run_to: str | None,
-    order: str | None,
+    options: ListBacktestsOptions,
     backend_client: httpx.AsyncClient,
     redis_client,
 ) -> dict[str, Any]:
     """Core implementation for listing backtests used by the route and tests."""
     start_time = time.perf_counter()
     correlation_id = f"list_backtests_{int(time.time() * 1000)}"
+
+
+    # Unpack options for logging/validation
+    limit = options.limit
+    offset = options.offset
+    symbol = options.symbol
+    strategy_id = options.strategy_id
+    run_from = options.run_from
+    run_to = options.run_to
+    order = options.order
 
     logger.info(
         "list_backtests.request",
@@ -384,13 +448,10 @@ async def _list_backtests_core(
 
     # Build query parameters for backend
     params = _build_backend_query_params(
+        options=options,
         limit=limit,
         offset=offset,
         order=order,
-        symbol=symbol,
-        strategy_id=strategy_id,
-        run_from=run_from,
-        run_to=run_to,
     )
 
     # Fetch from backend
@@ -474,30 +535,14 @@ async def _list_backtests_core(
 @router.get("/backtests")
 async def list_backtests_route(
     request: Request,
-    limit: int = Query(default=20, description="Maximum number of backtests to return"),
-    offset: int = Query(default=0, description="Number of backtests to skip"),
-    symbol: str | None = Query(default=None, description="Filter by trading symbol"),
-    strategy_id: str | None = Query(default=None, description="Filter by strategy ID"),
-    run_from: str | None = Query(
-        default=None, alias="run_from", description="Filter backtests from this date"
-    ),
-    run_to: str | None = Query(
-        default=None, alias="run_to", description="Filter backtests to this date"
-    ),
-    order: str | None = Query(default=None, description="Sort order (created_at, -created_at)"),
+    params: ListBacktestsQuery = Depends(),
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
     redis_client=Depends(get_redis_client),
 ) -> dict[str, Any]:
     """List backtests (BFF) with optional filters."""
     return await _list_backtests_core(
         request=request,
-        limit=limit,
-        offset=offset,
-        symbol=symbol,
-        strategy_id=strategy_id,
-        run_from=run_from,
-        run_to=run_to,
-        order=order,
+        options=_options_from_query(params),
         backend_client=backend_client,
         redis_client=redis_client,
     )
@@ -505,13 +550,7 @@ async def list_backtests_route(
 
 # Test-friendly wrapper with no FastAPI Request in the signature
 async def list_backtests(
-    limit: int = 20,
-    offset: int = 0,
-    symbol: str | None = None,
-    strategy_id: str | None = None,
-    run_from: str | None = None,
-    run_to: str | None = None,
-    order: str | None = None,
+    options: ListBacktestsOptions,
     backend_client: httpx.AsyncClient | None = None,
     redis_client=None,
 ) -> dict[str, Any]:
@@ -522,13 +561,7 @@ async def list_backtests(
         )
     return await _list_backtests_core(
         request=None,
-        limit=limit,
-        offset=offset,
-        symbol=symbol,
-        strategy_id=strategy_id,
-        run_from=run_from,
-        run_to=run_to,
-        order=order,
+        options=options,
         backend_client=backend_client,
         redis_client=redis_client,
     )
@@ -537,33 +570,21 @@ async def list_backtests(
 @router.get("/backtests/{backtest_id}/complete")
 async def get_complete_backtest_data(
     backtest_id: str = Path(..., description="Backtest identifier"),
-    include_orders: bool = Query(default=True, description="Include order execution data"),
-    include_equity: bool = Query(default=True, description="Include equity curve data"),
-    include_metrics: bool = Query(default=True, description="Include performance metrics"),
+    params: CompleteBacktestQuery = Depends(),
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
     redis_client=Depends(get_redis_client),
 ):
-    """Get complete aggregated run data (orders, equity, metrics, metadata)."""
+    """Get complete aggregated run data (orders, equity, metrics, metadata).
+
+    Args:
+        backtest_id: Unique backtest identifier
+        params: Parsed include flags for orders/equity/metrics
+        backend_client: HTTP client for backend communication
+        redis_client: Redis client for caching
+    """
     # Normalize local variable name for downstream logic
     run_id = backtest_id
 
-    """
-    Get complete aggregated run data.
-
-    This endpoint aggregates data from multiple backend endpoints and provides
-    optimized responses with caching and concurrent data fetching.
-
-    Args:
-        run_id: Unique run identifier
-        include_orders: Whether to include order execution data
-        include_equity: Whether to include equity curve data
-        include_metrics: Whether to include performance metrics
-        backend_client: HTTP client for backend communication
-        redis_client: Redis client for caching
-
-    Returns:
-        CompleteRunResponse: Aggregated run data with metadata
-    """
     start_time = time.perf_counter()
     correlation_id = f"run_{run_id}_{int(time.time() * 1000)}"
 
@@ -572,9 +593,9 @@ async def get_complete_backtest_data(
         extra={
             "correlation_id": correlation_id,
             "run_id": run_id,
-            "include_orders": include_orders,
-            "include_equity": include_equity,
-            "include_metrics": include_metrics,
+            "include_orders": params.include_orders,
+            "include_equity": params.include_equity,
+            "include_metrics": params.include_metrics,
         },
     )
 
@@ -592,9 +613,9 @@ async def get_complete_backtest_data(
 
     # Create request parameters
     request_params = BacktestDataRequest(
-        include_orders=include_orders,
-        include_equity=include_equity,
-        include_metrics=include_metrics,
+        include_orders=params.include_orders,
+        include_equity=params.include_equity,
+        include_metrics=params.include_metrics,
     )
 
     # Initialize services
@@ -605,9 +626,9 @@ async def get_complete_backtest_data(
     # Check cache first
     cache_key = cache_service.generate_backtest_cache_key(
         run_id=run_id,
-        include_orders=include_orders,
-        include_equity=include_equity,
-        include_metrics=include_metrics,
+        include_orders=params.include_orders,
+        include_equity=params.include_equity,
+        include_metrics=params.include_metrics,
     )
 
     cached_response = await cache_service.get_backtest_data(cache_key, correlation_id)
@@ -659,9 +680,9 @@ async def get_complete_backtest_data(
         # Cache the response with smarter TTLs
         terminal_statuses = {"DONE", "COMPLETED", "ERROR", "FAILED"}
         status_val = str(getattr(response.run, "status", "")).upper()
-        requested_metrics = include_metrics
-        requested_equity = include_equity
-        requested_orders = include_orders
+        requested_metrics = params.include_metrics
+        requested_equity = params.include_equity
+        requested_orders = params.include_orders
         missing_component = (
             (requested_metrics and response.metrics is None)
             or (requested_equity and response.equity is None)

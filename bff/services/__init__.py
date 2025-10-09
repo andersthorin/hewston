@@ -1,1 +1,1 @@
-# BFF Services Module
+"""BFF services package."""

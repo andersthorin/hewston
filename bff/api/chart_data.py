@@ -10,9 +10,11 @@ import logging
 import time
 from datetime import date
 from http import HTTPStatus
+from dataclasses import dataclass
+
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from bff.app.dependencies import get_backend_client, get_redis_client
@@ -30,6 +32,30 @@ router = APIRouter()
 logger = logging.getLogger("bff.chart_data")
 
 
+
+class ChartQuery:
+    """Parsed query params for chart-data using Request for minimal signature."""
+
+    def __init__(self, request: Request) -> None:
+        """Initialize from the incoming FastAPI Request's query params.
+
+        Args:
+            request: FastAPI request to read query parameters from
+        """
+        qp = request.query_params
+        self.symbol = qp.get("symbol")
+        tf = qp.get("timeframe")
+        self.timeframe = TimeframeEnum(tf) if tf is not None else None
+        f = qp.get("from")
+        t = qp.get("to")
+        self.from_date = date.fromisoformat(f) if f else None
+        self.to_date = date.fromisoformat(t) if t else None
+        tp = qp.get("target_points") or qp.get("target")
+        self.target_points = int(tp) if tp is not None else 10000
+        r = qp.get("rth_only")
+        self.rth_only = (str(r).lower() in {"true", "1", "yes"}) if r is not None else True
+
+
 async def get_correlation_id_from_state(request) -> str:
     """Extract correlation ID from request state."""
     return getattr(request.state, "correlation_id", "unknown")
@@ -37,12 +63,7 @@ async def get_correlation_id_from_state(request) -> str:
 
 @router.get("/chart-data", response_model=ChartDataResponse)
 async def get_chart_data(
-    symbol: str,
-    timeframe: TimeframeEnum,
-    from_date: date = Query(..., alias="from"),
-    to_date: date = Query(..., alias="to"),
-    target_points: int = Query(default=10000, ge=100, le=50000),
-    rth_only: bool = Query(default=True),
+    params: ChartQuery = Depends(),
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
     redis_client=Depends(get_redis_client),
 ):
@@ -52,12 +73,7 @@ async def get_chart_data(
     optimized responses with caching and data decimation.
 
     Args:
-        symbol: Trading symbol (e.g., 'AAPL')
-        timeframe: Data timeframe (1D, 1H, 1M, 1M_DECIMATED)
-        from_date: Start date for data range
-        to_date: End date for data range
-        target_points: Target number of data points (for decimation)
-        rth_only: Regular trading hours only (for intraday data)
+        params: Parsed chart query parameters (symbol, timeframe, from, to, target_points, rth_only)
         backend_client: HTTP client for backend communication
         redis_client: Redis client for caching
 
@@ -71,24 +87,24 @@ async def get_chart_data(
         "chart_data.request",
         extra={
             "correlation_id": correlation_id,
-            "symbol": symbol,
-            "timeframe": timeframe,
-            "from_date": str(from_date),
-            "to_date": str(to_date),
-            "target_points": target_points,
-            "rth_only": rth_only,
+            "symbol": params.symbol,
+            "timeframe": params.timeframe,
+            "from_date": str(params.from_date),
+            "to_date": str(params.to_date),
+            "target_points": params.target_points,
+            "rth_only": params.rth_only,
         },
     )
 
     # Validate request
     try:
         request_data = ChartDataRequest(
-            symbol=symbol,
-            timeframe=timeframe,
-            from_date=from_date,
-            to_date=to_date,
-            target_points=target_points,
-            rth_only=rth_only,
+            symbol=params.symbol,
+            timeframe=params.timeframe,
+            from_date=params.from_date,
+            to_date=params.to_date,
+            target_points=params.target_points,
+            rth_only=params.rth_only,
         )
     except ValueError as e:
         logger.warning(
@@ -96,8 +112,8 @@ async def get_chart_data(
             extra={
                 "correlation_id": correlation_id,
                 "error": str(e),
-                "symbol": symbol,
-                "timeframe": timeframe,
+                "symbol": params.symbol,
+                "timeframe": params.timeframe,
             },
         )
         raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
@@ -129,8 +145,8 @@ async def get_chart_data(
             "chart_data.cache_hit",
             extra={
                 "correlation_id": correlation_id,
-                "symbol": symbol,
-                "timeframe": timeframe,
+                "symbol": params.symbol,
+                "timeframe": params.timeframe,
                 "bars_count": len(cached_response.bars),
                 "cache_get_ms": cache_get_ms,
                 "load_time_ms": cached_response.metadata.load_time_ms,
@@ -156,70 +172,37 @@ async def get_chart_data(
         if not backend_data:
             raise HTTPException(
                 status_code=HTTPStatus.NOT_FOUND,
-                detail=f"No data found for {symbol} in timeframe {timeframe}",
+                detail=f"No data found for {params.symbol} in timeframe {params.timeframe}",
             )
 
-        t_transform_start = time.perf_counter()
-        # Transform data
-        bars = data_transformer.transform_backend_bars(
-            backend_data, request_data.timeframe, correlation_id
+        # Transform and optionally decimate
+        bars, transform_time_ms, decimated, decimation_stride = _transform_and_decimate(
+            data_transformer, backend_data, request_data, correlation_id
         )
 
-        # Validate data
-        bars = data_transformer.validate_bar_data(bars, correlation_id)
-        transform_time_ms = int((time.perf_counter() - t_transform_start) * 1000)
+        # Build response, cache it, and compute headers
+        response_dict, headers, cache_set_ms = await _finalize_and_cache(
+            cache_service,
+            request_data,
+            bars,
+            decimated,
+            decimation_stride,
+            backend_calls,
+            backend_time_ms,
+            transform_time_ms,
+            cache_get_ms,
+            start_time,
+            correlation_id,
+        )
 
-        # Apply decimation if needed
-        decimated = False
-        decimation_stride = 1
-
-        if (
-            request_data.timeframe == TimeframeEnum.MINUTE_DECIMATED
-            or len(bars) > request_data.target_points
-        ):
-            bars, decimation_stride = data_transformer.decimate_data(
-                bars, request_data.target_points, correlation_id
-            )
-            decimated = decimation_stride > 1
-
-        # Determine data source
-        data_source = _get_data_source_endpoint(request_data.timeframe)
-
-        # Create response
+        # Logging
         load_time_ms = int((time.perf_counter() - start_time) * 1000)
-
-        response = ChartDataResponse(
-            symbol=request_data.symbol,
-            timeframe=request_data.timeframe,
-            from_date=str(request_data.from_date),
-            to_date=str(request_data.to_date),
-            bars=bars,
-            metadata=ResponseMetadata(
-                total_bars=len(bars),
-                decimated=decimated,
-                decimation_stride=decimation_stride if decimated else None,
-                cache_hit=False,
-                load_time_ms=load_time_ms,
-                backend_calls=backend_calls,
-                data_source=data_source,
-            ),
-        )
-
-        # Cache the response
-        ttl = cache_service.calculate_ttl(
-            str(request_data.from_date), str(request_data.to_date), request_data.timeframe
-        )
-
-        t_cache_set = time.perf_counter()
-        await cache_service.set_chart_data(cache_key, response, ttl, correlation_id)
-        cache_set_ms = int((time.perf_counter() - t_cache_set) * 1000)
-
         logger.info(
             "chart_data.success",
             extra={
                 "correlation_id": correlation_id,
-                "symbol": symbol,
-                "timeframe": timeframe,
+                "symbol": params.symbol,
+                "timeframe": params.timeframe,
                 "bars_count": len(bars),
                 "decimated": decimated,
                 "backend_calls": backend_calls,
@@ -231,17 +214,7 @@ async def get_chart_data(
             },
         )
 
-        # Add server timing headers for browser diagnostics
-        server_timing = (
-            f"backend;dur={backend_time_ms}, "
-            f"transform;dur={transform_time_ms}, "
-            f"cache_get;dur={cache_get_ms}, "
-            f"cache_set;dur={cache_set_ms}, "
-            f"total;dur={load_time_ms}"
-        )
-        headers = {"Server-Timing": server_timing}
-
-        return JSONResponse(content=response.model_dump(), headers=headers)
+        return JSONResponse(content=response_dict, headers=headers)
 
     except HTTPException:
         raise
@@ -250,8 +223,8 @@ async def get_chart_data(
             "chart_data.error",
             extra={
                 "correlation_id": correlation_id,
-                "symbol": symbol,
-                "timeframe": timeframe,
+                "symbol": params.symbol,
+                "timeframe": params.timeframe,
                 "error": str(e),
             },
         )
@@ -339,6 +312,113 @@ async def _fetch_backend_data(
         raise HTTPException(
             status_code=response.status_code, detail=f"Backend error: {response.status_code}"
         )
+
+
+
+def _transform_and_decimate(
+    transformer: DataTransformer,
+    backend_data: dict,
+    request: ChartDataRequest,
+    correlation_id: str,
+) -> tuple[list[dict], int, bool, int]:
+    """Transform backend data to bars and apply decimation if needed.
+
+    Returns:
+        (bars, transform_time_ms, decimated, decimation_stride)
+    """
+    t_transform_start = time.perf_counter()
+    bars = transformer.transform_backend_bars(backend_data, request.timeframe, correlation_id)
+    bars = transformer.validate_bar_data(bars, correlation_id)
+    transform_time_ms = int((time.perf_counter() - t_transform_start) * 1000)
+
+    decimated = False
+    decimation_stride = 1
+    if request.timeframe == TimeframeEnum.MINUTE_DECIMATED or len(bars) > request.target_points:
+        bars, decimation_stride = transformer.decimate_data(
+            bars, request.target_points, correlation_id
+        )
+        decimated = decimation_stride > 1
+
+    return bars, transform_time_ms, decimated, decimation_stride
+
+
+def _finalize_and_cache(
+    cache: CacheService,
+    request: ChartDataRequest,
+    bars: list[dict],
+    decimated: bool,
+    decimation_stride: int,
+    backend_calls: int,
+    backend_time_ms: int,
+
+
+@dataclass
+class FinalizeContext:
+    bars: list[dict]
+    decimated: bool
+    decimation_stride: int
+    backend_calls: int
+    backend_time_ms: int
+    transform_time_ms: int
+    cache_get_ms: int
+    start_time: float
+
+    transform_time_ms: int,
+    cache_get_ms: int,
+    start_time: float,
+    correlation_id: str,
+) -> tuple[dict, dict, int]:
+    """Build response model, cache it, and compute headers.
+
+    Returns:
+        (response_dict, headers, cache_set_ms)
+    """
+    data_source = _get_data_source_endpoint(request.timeframe)
+    load_time_ms = int((time.perf_counter() - start_time) * 1000)
+
+    response = ChartDataResponse(
+        symbol=request.symbol,
+        timeframe=request.timeframe,
+        from_date=str(request.from_date),
+        to_date=str(request.to_date),
+        bars=bars,
+        metadata=ResponseMetadata(
+            total_bars=len(bars),
+            decimated=decimated,
+            decimation_stride=decimation_stride if decimated else None,
+            cache_hit=False,
+            load_time_ms=load_time_ms,
+            backend_calls=backend_calls,
+            data_source=data_source,
+        ),
+    )
+
+
+    ttl = cache.calculate_ttl(str(request.from_date), str(request.to_date), request.timeframe)
+    cache_key = cache.generate_chart_cache_key(
+        symbol=request.symbol,
+        timeframe=request.timeframe,
+        from_date=str(request.from_date),
+        to_date=str(request.to_date),
+        target_points=request.target_points,
+        rth_only=request.rth_only,
+    )
+
+    t_cache_set = time.perf_counter()
+    # Fire-and-forget cache set is acceptable here but we await to keep timing accurate
+    await cache.set_chart_data(cache_key, response, ttl, correlation_id)
+    cache_set_ms = int((time.perf_counter() - t_cache_set) * 1000)
+
+    server_timing = (
+        f"backend;dur={backend_time_ms}, "
+        f"transform;dur={transform_time_ms}, "
+        f"cache_get;dur={cache_get_ms}, "
+        f"cache_set;dur={cache_set_ms}, "
+        f"total;dur={load_time_ms}"
+    )
+    headers = {"Server-Timing": server_timing}
+
+    return response.model_dump(), headers, cache_set_ms
 
 
 def _get_data_source_endpoint(timeframe: TimeframeEnum) -> str:

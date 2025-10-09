@@ -18,6 +18,59 @@ router = APIRouter()
 logger = logging.getLogger("bff.proxy")
 
 
+
+class DailyBarsQuery:
+    """Parsed query params for /bars/daily."""
+
+    def __init__(self, request: Request) -> None:
+        """Initialize from FastAPI Request query params."""
+        qp = request.query_params
+        self.symbol = qp.get("symbol")
+        self.from_date = qp.get("from")
+        self.to_date = qp.get("to")
+
+
+class MinuteBarsQuery:
+    """Parsed query params for /bars/minute."""
+
+    def __init__(self, request: Request) -> None:
+        """Initialize from FastAPI Request query params."""
+        qp = request.query_params
+        self.symbol = qp.get("symbol")
+        self.from_date = qp.get("from")
+        self.to_date = qp.get("to")
+        r = qp.get("rth_only")
+        self.rth_only = (str(r).lower() in {"true", "1", "yes"}) if r is not None else True
+
+
+class MinuteDecimatedBarsQuery:
+    """Parsed query params for /bars/minute_decimated."""
+
+    def __init__(self, request: Request) -> None:
+        """Initialize from FastAPI Request query params."""
+        qp = request.query_params
+        self.symbol = qp.get("symbol")
+        self.from_date = qp.get("from")
+        self.to_date = qp.get("to")
+        t = qp.get("target") or qp.get("target_points")
+        self.target = int(t) if t is not None else 10000
+        r = qp.get("rth_only")
+        self.rth_only = (str(r).lower() in {"true", "1", "yes"}) if r is not None else True
+
+
+class HourBarsQuery:
+    """Parsed query params for /bars/hour."""
+
+    def __init__(self, request: Request) -> None:
+        """Initialize from FastAPI Request query params."""
+        qp = request.query_params
+        self.symbol = qp.get("symbol")
+        self.from_date = qp.get("from")
+        self.to_date = qp.get("to")
+        r = qp.get("rth_only")
+        self.rth_only = (str(r).lower() in {"true", "1", "yes"}) if r is not None else True
+
+
 async def get_correlation_id(request: Request) -> str:
     """Extract correlation ID from request state."""
     return getattr(request.state, "correlation_id", "unknown")
@@ -42,9 +95,7 @@ async def get_backend_proxy_client(
 
 @router.get("/bars/daily")
 async def proxy_get_daily_bars(
-    symbol: str,
-    from_date: str | None = Query(None, alias="from"),
-    to_date: str | None = Query(None, alias="to"),
+    params: DailyBarsQuery = Depends(),
     request: Request = None,
     backend_client: BackendClient = Depends(get_backend_proxy_client),
     correlation_id: str = Depends(get_correlation_id),
@@ -54,29 +105,26 @@ async def proxy_get_daily_bars(
     Gets daily OHLCV bars for a symbol.
     """
     # Prepare query parameters
-    params = {"symbol": symbol}
+    params_dict = {"symbol": params.symbol}
 
-    if from_date:
-        params["from"] = from_date
-    if to_date:
-        params["to"] = to_date
+    if params.from_date:
+        params_dict["from"] = params.from_date
+    if params.to_date:
+        params_dict["to"] = params.to_date
 
     # Forward request to backend
     return await backend_client.proxy_request(
         method="GET",
         path="/bars/daily",
         headers=dict(request.headers),
-        params=params,
+        params=params_dict,
         correlation_id=correlation_id,
     )
 
 
 @router.get("/bars/minute")
 async def proxy_get_minute_bars(
-    symbol: str,
-    from_date: str = Query(..., alias="from"),
-    to_date: str = Query(..., alias="to"),
-    rth_only: bool = True,
+    params: MinuteBarsQuery = Depends(),
     request: Request = None,
     backend_client: BackendClient = Depends(get_backend_proxy_client),
     correlation_id: str = Depends(get_correlation_id),
@@ -86,11 +134,11 @@ async def proxy_get_minute_bars(
     Gets minute OHLCV bars for a symbol.
     """
     # Prepare query parameters
-    params = {
-        "symbol": symbol,
-        "from": from_date,
-        "to": to_date,
-        "rth_only": rth_only,
+    params_dict = {
+        "symbol": params.symbol,
+        "from": params.from_date,
+        "to": params.to_date,
+        "rth_only": params.rth_only,
     }
 
     # Forward request to backend
@@ -98,18 +146,14 @@ async def proxy_get_minute_bars(
         method="GET",
         path="/bars/minute",
         headers=dict(request.headers),
-        params=params,
+        params=params_dict,
         correlation_id=correlation_id,
     )
 
 
 @router.get("/bars/minute_decimated")
 async def proxy_get_minute_decimated_bars(
-    symbol: str,
-    from_date: str = Query(..., alias="from"),
-    to_date: str = Query(..., alias="to"),
-    target: int = 10000,
-    rth_only: bool = True,
+    params: MinuteDecimatedBarsQuery = Depends(),
     request: Request = None,
     backend_client: BackendClient = Depends(get_backend_proxy_client),
     correlation_id: str = Depends(get_correlation_id),
@@ -119,12 +163,12 @@ async def proxy_get_minute_decimated_bars(
     Gets decimated minute OHLCV bars for a symbol.
     """
     # Prepare query parameters
-    params = {
-        "symbol": symbol,
-        "from": from_date,
-        "to": to_date,
-        "target": target,
-        "rth_only": rth_only,
+    params_dict = {
+        "symbol": params.symbol,
+        "from": params.from_date,
+        "to": params.to_date,
+        "target": params.target,
+        "rth_only": params.rth_only,
     }
 
     # Forward request to backend
@@ -132,17 +176,14 @@ async def proxy_get_minute_decimated_bars(
         method="GET",
         path="/bars/minute_decimated",
         headers=dict(request.headers),
-        params=params,
+        params=params_dict,
         correlation_id=correlation_id,
     )
 
 
 @router.get("/bars/hour")
 async def proxy_get_hour_bars(
-    symbol: str,
-    from_date: str = Query(..., alias="from"),
-    to_date: str = Query(..., alias="to"),
-    rth_only: bool = True,
+    params: HourBarsQuery = Depends(),
     request: Request = None,
     backend_client: BackendClient = Depends(get_backend_proxy_client),
     correlation_id: str = Depends(get_correlation_id),
@@ -152,11 +193,11 @@ async def proxy_get_hour_bars(
     Gets hourly OHLCV bars for a symbol.
     """
     # Prepare query parameters
-    params = {
-        "symbol": symbol,
-        "from": from_date,
-        "to": to_date,
-        "rth_only": rth_only,
+    params_dict = {
+        "symbol": params.symbol,
+        "from": params.from_date,
+        "to": params.to_date,
+        "rth_only": params.rth_only,
     }
 
     # Forward request to backend
@@ -164,6 +205,6 @@ async def proxy_get_hour_bars(
         method="GET",
         path="/bars/hour",
         headers=dict(request.headers),
-        params=params,
+        params=params_dict,
         correlation_id=correlation_id,
     )

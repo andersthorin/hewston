@@ -1,5 +1,4 @@
-"""
-Backend HTTP Client Service
+"""Backend HTTP Client Service.
 
 Provides HTTP client functionality for communicating with the backend API.
 Handles request forwarding, authentication pass-through, and error handling.
@@ -19,6 +18,7 @@ class BackendClient:
     """HTTP client for backend API communication with proxy functionality."""
 
     def __init__(self, client: httpx.AsyncClient):
+        """Initialize the backend client with an AsyncClient."""
         self.client = client
         self.logger = logging.getLogger("bff.backend_client")
 
@@ -32,8 +32,7 @@ class BackendClient:
         body: bytes | None = None,
         correlation_id: str | None = None,
     ) -> Response:
-        """
-        Proxy a request to the backend API.
+        """Proxy a request to the backend API.
 
         Args:
             method: HTTP method (GET, POST, etc.)
@@ -166,8 +165,7 @@ class BackendClient:
     def _prepare_headers(
         self, headers: dict[str, str] | None, correlation_id: str | None
     ) -> dict[str, str]:
-        """
-        Prepare headers for backend request.
+        """Prepare headers for backend request.
 
         Args:
             headers: Original request headers
@@ -205,8 +203,7 @@ class BackendClient:
     def _create_response(
         self, backend_response: httpx.Response, correlation_id: str | None
     ) -> Response:
-        """
-        Create FastAPI response from backend response.
+        """Create FastAPI response from backend response.
 
         Args:
             backend_response: Response from backend
@@ -261,8 +258,7 @@ class BackendClient:
 
 
 async def create_backend_client(client: httpx.AsyncClient) -> BackendClient:
-    """
-    Create a BackendClient instance.
+    """Create and return a configured BackendClient instance.
 
     Args:
         client: HTTP client for backend communication

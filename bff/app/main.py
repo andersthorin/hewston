@@ -6,7 +6,7 @@ Follows the pattern established in backend/app/main.py with BFF-specific enhance
 
 import logging
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
@@ -74,6 +74,7 @@ def create_app() -> FastAPI:
     @app.middleware("http")
     async def request_logger(request: Request, call_next):
         """Request logging middleware following backend patterns.
+
         Adds correlation ID and timing information.
         """
         req_id = uuid4().hex
@@ -86,7 +87,7 @@ def create_app() -> FastAPI:
 
         dur_ms = int((time.perf_counter() - start) * 1000)
 
-        try:
+        with suppress(Exception):
             logger.info(
                 "http.access",
                 extra={
@@ -98,9 +99,6 @@ def create_app() -> FastAPI:
                     "service": "bff",
                 },
             )
-        except Exception:
-            # Don't let logging errors break the request
-            pass
 
         # Add correlation ID to response headers for debugging
         response.headers["X-Correlation-ID"] = req_id
@@ -115,17 +113,15 @@ def create_app() -> FastAPI:
     app.include_router(proxy_router, prefix="/api/v1")
 
     # Reset per-app backend client to avoid cross-test contamination from config reloads
-    try:
+    with suppress(Exception):
         from bff.app import dependencies as _deps
 
         _deps._backend_client = None
         _deps._backend_client_loop_id = None
         _deps._backend_client_base_url = None
-    except Exception:
-        pass
 
     # Debug: log registered routes on startup to verify routing
-    try:
+    with suppress(Exception):
         for r in app.routes:
             methods = getattr(r, "methods", None)
             path = getattr(r, "path", None)
@@ -137,8 +133,6 @@ def create_app() -> FastAPI:
                         "methods": sorted(list(methods)) if methods else "WEBSOCKET/OTHER",
                     },
                 )
-    except Exception:
-        pass
 
     app.include_router(websocket_router, prefix="/api/v1")
 
