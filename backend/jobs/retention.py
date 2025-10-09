@@ -1,22 +1,26 @@
+"""Retention helpers to prune old backtest artifacts and rows."""
 from __future__ import annotations
 
-import json
-import os
-import shutil
+from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
+import json
+import os
 from pathlib import Path
+import shutil
 from typing import Any
 
 from backend.adapters.sqlite_catalog import SqliteCatalog
 
-
 @dataclass
 class Candidate:
+    """A deletion candidate backtest with its artifact location and size."""
     run_id: str
     created_at: str
     dir_path: Path
     size_bytes: int
+
+
 
 
 def _parse_dt(s: str) -> datetime:
@@ -36,21 +40,24 @@ def _dir_size(p: Path) -> int:
     for root, _dirs, files in os.walk(p):
         for f in files:
             fp = Path(root) / f
-            try:
+            with suppress(OSError, FileNotFoundError):
                 total += fp.stat().st_size
-            except Exception:
-                pass
-    return total
 
 
 def select_candidates(
     *, keep_latest: int, max_age_days: int | None
 ) -> tuple[list[Candidate], list[str]]:
+    """Select backtests to delete and those to keep based on recency and age.
+
+    Returns:
+      tuple[list[Candidate], list[str]]: (candidates_to_delete, kept_run_ids).
+    """
     cat = SqliteCatalog()
     # Order all runs by created_at DESC
     with cat._connect() as conn:  # type: ignore[attr-defined]
         rows = conn.execute(
-            "SELECT backtest_id AS run_id, created_at FROM backtests ORDER BY datetime(created_at) DESC"
+            "SELECT backtest_id AS run_id, created_at FROM backtests "
+            "ORDER BY datetime(created_at) DESC"
         ).fetchall()
     run_ids_ordered = [r[0] for r in rows]
     kept = set(run_ids_ordered[: max(0, keep_latest)])
@@ -85,23 +92,20 @@ def apply_deletions(cands: list[Candidate]) -> tuple[int, int]:
     bytes_reclaimed = 0
     for c in cands:
         # Remove files first; if fails, skip DB delete
-        try:
+        with suppress(Exception):
             if c.dir_path.exists():
                 shutil.rmtree(c.dir_path)
-        except Exception:
+        if c.dir_path.exists():
             # Skip DB delete; leave for remediation
             continue
-        try:
-            with cat._connect() as conn:  # type: ignore[attr-defined]
-                conn.execute("DELETE FROM backtest_metrics WHERE backtest_id = ?", (c.run_id,))
-                conn.execute("DELETE FROM backtests WHERE backtest_id = ?", (c.run_id,))
-                conn.commit()
-        except Exception:
-            # Best-effort: files are gone; log/skip DB error
-            pass
+        with suppress(Exception), cat._connect() as conn:  # type: ignore[attr-defined]
+            conn.execute("DELETE FROM backtest_metrics WHERE backtest_id = ?", (c.run_id,))
+            conn.execute("DELETE FROM backtests WHERE backtest_id = ?", (c.run_id,))
+            conn.commit()
         deleted += 1
         bytes_reclaimed += c.size_bytes
     return deleted, bytes_reclaimed
+
 
 
 # Typer CLI
@@ -114,7 +118,13 @@ except Exception:  # pragma: no cover
 def retention_main(
     keep_latest: int = 100, max_age_days: int | None = None, apply: bool = False
 ) -> int:
+    """Print a summary of deletions and, when --apply, perform them.
+
+    Returns:
+      int: Exit code (0 on success).
+    """
     cands, kept = select_candidates(keep_latest=keep_latest, max_age_days=max_age_days)
+
     summary: dict[str, Any] = {
         "keep_latest": keep_latest,
         "max_age_days": max_age_days,
@@ -152,6 +162,7 @@ if typer is not None:
         ),
         apply: bool = typer.Option(False, "--apply", help="Actually delete files and DB rows"),
     ) -> None:
+        """CLI to preview and optionally apply retention deletions."""
         raise typer.Exit(
             retention_main(keep_latest=keep_latest, max_age_days=max_age_days, apply=apply)
         )

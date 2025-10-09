@@ -1,3 +1,5 @@
+"""Pydantic domain models for datasets and backtests."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -6,11 +8,14 @@ from pydantic import BaseModel, Field
 
 
 class DatasetManifest(BaseModel):
-    # Placeholder for future fields; keep as dict for now
+    """Flexible manifest metadata for a dataset."""
+
     meta: dict[str, Any] = Field(default_factory=dict)
 
 
 class Dataset(BaseModel):
+    """Dataset record with optional date window and manifest."""
+
     dataset_id: str
     symbol: str
     from_date: str | None = None

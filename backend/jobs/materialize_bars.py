@@ -1,5 +1,4 @@
-"""
-Materialize UI bars from Quotes + Trades aggregates
+"""Materialize UI bars from Quotes + Trades aggregates.
 
 Outputs:
   data/warehouse/bars/mid_1min/venue=XNAS/symbol={SYM}/date=YYYY-MM-DD/bars.parquet
@@ -18,6 +17,7 @@ Schema:
 from __future__ import annotations
 
 from pathlib import Path
+
 import pandas as pd
 
 
@@ -90,7 +90,8 @@ def _merge_trades(bars: pd.DataFrame, trades: pd.DataFrame | None) -> pd.DataFra
 
 
 def _flag_rth(bars_1m: pd.DataFrame) -> pd.DataFrame:
-    # 09:30-16:00 America/New_York corresponds to 13:30-20:00 UTC (no DST handling here; acceptable for pilot)
+    # 09:30-16:00 America/New_York corresponds to 13:30-20:00 UTC
+    # (no DST handling here; acceptable for pilot)
     t = pd.to_datetime(bars_1m["t"], utc=True)
     hours = t.dt.hour
     mins = t.dt.minute
@@ -101,6 +102,7 @@ def _flag_rth(bars_1m: pd.DataFrame) -> pd.DataFrame:
 
 
 def materialize_for_date(symbol: str, date_str: str, venue: str = "XNAS") -> tuple[Path, Path]:
+    """Build and write 1min and 1h bars parquet paths for a single date."""
     q_path = _glob_quotes(symbol, date_str, venue)
     if not q_path.exists():
         raise FileNotFoundError(f"Quotes parquet not found: {q_path}")

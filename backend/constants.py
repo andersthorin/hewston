@@ -1,5 +1,4 @@
-"""
-Backend constants and configuration values.
+"""Backend constants and configuration values.
 
 This module centralizes hardcoded values, magic numbers, and configuration
 to improve maintainability and consistency across the backend.

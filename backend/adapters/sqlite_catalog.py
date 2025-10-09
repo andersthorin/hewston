@@ -1,7 +1,13 @@
+"""SQLite-backed implementation of CatalogPort for local/dev usage.
+
+Provides minimal schema bootstrap and lightweight migrations suitable for tests.
+"""
+
 from __future__ import annotations
 
 import os
 import sqlite3
+from contextlib import suppress
 from datetime import UTC
 from typing import Any
 
@@ -44,7 +50,8 @@ CREATE TABLE IF NOT EXISTS backtests (
 );
 
 CREATE TABLE IF NOT EXISTS backtest_metrics (
-    backtest_id TEXT PRIMARY KEY REFERENCES backtests(backtest_id) ON UPDATE CASCADE ON DELETE CASCADE,
+    backtest_id TEXT PRIMARY KEY REFERENCES backtests(backtest_id)
+        ON UPDATE CASCADE ON DELETE CASCADE,
     total_return REAL,
     max_drawdown REAL,
     computed_at TEXT NOT NULL
@@ -55,7 +62,13 @@ CREATE TABLE IF NOT EXISTS backtest_metrics (
 
 
 class SqliteCatalog(CatalogPort):
+    """SQLite-backed catalog for storing backtests, datasets, and metrics."""
     def __init__(self, db_path: str | None = None) -> None:
+        """Initialize the catalog, creating directories and schema when needed.
+
+        When db_path is ":memory:", a shared connection is used so schema persists
+        across operations within the process.
+        """
         resolved = db_path or os.getenv("HEWSTON_CATALOG_PATH", "data/catalog.db")
         self.db_path = resolved
         self._conn: sqlite3.Connection | None = None
@@ -86,22 +99,17 @@ class SqliteCatalog(CatalogPort):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         # Enable FK, WAL and set a reasonable busy timeout to reduce lock contention
-        try:
+        with suppress(Exception):
             conn.execute("PRAGMA foreign_keys=ON;")
-        except Exception:
-            pass
-        try:
+        with suppress(Exception):
             conn.execute("PRAGMA journal_mode=WAL;")
-        except Exception:
-            pass
-        try:
+        with suppress(Exception):
             conn.execute("PRAGMA busy_timeout=2000;")  # 2 seconds
-        except Exception:
-            pass
         return conn
 
     def _bootstrap_if_missing(self) -> None:
         """Create DB from official DDL if missing; fallback to minimal DDL.
+
         Does nothing if the file already exists to avoid schema divergence.
         """
         # Check BEFORE calling _connect() which creates the file
@@ -122,6 +130,7 @@ class SqliteCatalog(CatalogPort):
 
     def _migrate_schema(self) -> None:
         """Best-effort lightweight migration to ensure required columns/tables exist.
+
         Safe for dev/local testing. Adds missing columns with relaxed nullability.
         """
         with self._connect() as conn:
@@ -172,7 +181,8 @@ class SqliteCatalog(CatalogPort):
             # backtest_metrics: minimal table for metrics upsert
             conn.execute(
                 "CREATE TABLE IF NOT EXISTS backtest_metrics (\n"
-                "  backtest_id TEXT PRIMARY KEY REFERENCES backtests(backtest_id) ON UPDATE CASCADE ON DELETE CASCADE,\n"
+                "  backtest_id TEXT PRIMARY KEY REFERENCES backtests(backtest_id) "
+                "ON UPDATE CASCADE ON DELETE CASCADE,\n"
                 "  total_return REAL,\n"
                 "  max_drawdown REAL,\n"
                 "  computed_at TEXT NOT NULL\n"
@@ -186,6 +196,7 @@ class SqliteCatalog(CatalogPort):
             conn.executescript(DDL)
 
     def get_backtest(self, run_id: str) -> dict[str, Any] | None:
+        """Fetch a single backtest by ID; returns None if not found."""
         import json as _json
 
         with self._connect() as conn:
@@ -241,6 +252,7 @@ class SqliteCatalog(CatalogPort):
         offset: int = 0,
         order: str = "-created_at",
     ) -> tuple[list[BacktestSummary], int]:
+        """List backtests and total count with optional filters and pagination."""
         clauses = []
         params: list = []
         if symbol:
@@ -262,7 +274,11 @@ class SqliteCatalog(CatalogPort):
 
         with self._connect() as conn:
             total = conn.execute(
-                f"SELECT COUNT(1) AS c FROM backtests b LEFT JOIN datasets d ON d.dataset_id = b.dataset_id {where}",
+                (
+                    "SELECT COUNT(1) AS c FROM backtests b LEFT JOIN datasets d "
+                    "ON d.dataset_id = b.dataset_id "
+                    f"{where}"
+                ),
                 params,
             ).fetchone()["c"]
             q = (
@@ -279,7 +295,8 @@ class SqliteCatalog(CatalogPort):
                     strategy_id=r["strategy_id"],
                     status=r["status"],
                     symbol=r["symbol"],
-                    # run_from/run_to intentionally left None here to avoid cross-run bleed from dataset bounds
+                    # run_from/run_to intentionally left None here to avoid cross-run bleed
+                    # from dataset bounds
                     run_from=None,
                     run_to=None,
                     duration_ms=r["duration_ms"],
@@ -289,6 +306,7 @@ class SqliteCatalog(CatalogPort):
             return items, total
 
     def get_dataset(self, dataset_id: str) -> Dataset | None:
+        """Fetch a dataset by ID; returns None if not found."""
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM datasets WHERE dataset_id = ?", (dataset_id,)
@@ -304,6 +322,7 @@ class SqliteCatalog(CatalogPort):
 
     # Stubs
     def upsert_dataset(self, dataset: dict[str, Any]) -> None:
+        """Insert or update a dataset record (idempotent by dataset_id)."""
         import json as _json
 
         rec = dict(dataset)
@@ -371,11 +390,14 @@ class SqliteCatalog(CatalogPort):
         input_hash: str | None,
         idempotency_key: str | None,
     ) -> str:
+        """Insert a new backtest row and return run_id."""
         with self._connect() as conn:
             conn.execute(
                 (
-                    "INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed, "
-                    "code_hash, created_at, status, run_manifest_path, input_hash, idempotency_key) "
+                    "INSERT INTO backtests ("
+                    "backtest_id, dataset_id, strategy_id, params_json, seed, "
+                    "slippage_fees_json, speed, code_hash, created_at, status, "
+                    "run_manifest_path, input_hash, idempotency_key) "
                     "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
                 ),
                 (
@@ -407,6 +429,7 @@ class SqliteCatalog(CatalogPort):
         orders_path: str | None = None,
         fills_path: str | None = None,
     ) -> None:
+        """Update backtest status and optional artifact paths/fields."""
         sets = ["status = ?"]
         params: list = [status]
         if duration_ms is not None:
@@ -429,6 +452,7 @@ class SqliteCatalog(CatalogPort):
             conn.execute(f"UPDATE backtests SET {', '.join(sets)} WHERE backtest_id = ?", params)
 
     def upsert_backtest_metrics(self, run_id: str, metrics: dict[str, Any]) -> None:
+        """Insert or update metrics (maps win_rate -> hit_rate for schema)."""
         from datetime import datetime
 
         computed_at = datetime.now(UTC).isoformat()
@@ -440,17 +464,21 @@ class SqliteCatalog(CatalogPort):
 
         with self._connect() as conn:
             conn.execute(
-                "INSERT INTO backtest_metrics (backtest_id, total_return, max_drawdown, hit_rate, computed_at) "
-                "VALUES (?, ?, ?, ?, ?) "
-                "ON CONFLICT(backtest_id) DO UPDATE SET "
-                "total_return=excluded.total_return, "
-                "max_drawdown=excluded.max_drawdown, "
-                "hit_rate=excluded.hit_rate, "
-                "computed_at=excluded.computed_at",
+                (
+                    "INSERT INTO backtest_metrics (backtest_id, total_return, max_drawdown, "
+                    "hit_rate, computed_at) "
+                    "VALUES (?, ?, ?, ?, ?) "
+                    "ON CONFLICT(backtest_id) DO UPDATE SET "
+                    "total_return=excluded.total_return, "
+                    "max_drawdown=excluded.max_drawdown, "
+                    "hit_rate=excluded.hit_rate, "
+                    "computed_at=excluded.computed_at"
+                ),
                 (run_id, total_return, max_drawdown, hit_rate, computed_at),
             )
 
     def find_backtest_by_input_hash(self, input_hash: str) -> dict[str, Any] | None:
+        """Find backtest by input hash; returns {'run_id': ...} or None."""
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT backtest_id FROM backtests WHERE input_hash = ?", (input_hash,)
@@ -460,6 +488,7 @@ class SqliteCatalog(CatalogPort):
             return {"run_id": row["backtest_id"]}
 
     def find_backtest_by_idempotency_key(self, idem: str) -> dict[str, Any] | None:
+        """Find backtest by idempotency key; returns {'run_id': ...} or None."""
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT backtest_id FROM backtests WHERE idempotency_key = ?", (idem,)

@@ -1,3 +1,5 @@
+"""Lightweight domain types for streaming and control messages."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -6,6 +8,8 @@ from typing import Any
 
 @dataclass
 class StreamFrame:
+    """Frame sent during playback streaming."""
+
     t: str  # "frame"
     ts: str  # ISO-8601 UTC string
     ohlc: dict[str, Any] | None
@@ -17,6 +21,8 @@ class StreamFrame:
 
 
 class Control:
+    """Control message types for playback commands."""
+
     PLAY = "play"
     PAUSE = "pause"
     SEEK = "seek"

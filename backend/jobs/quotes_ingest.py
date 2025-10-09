@@ -1,5 +1,4 @@
-"""
-TBBO DBN -> canonical QuoteTicks parquet (partitioned)
+"""TBBO DBN -> canonical QuoteTicks parquet (partitioned).
 
 Partitions:
   data/warehouse/quotes/venue=XNAS/symbol={SYM}/date=YYYY-MM-DD/quotes.parquet
@@ -26,6 +25,10 @@ except Exception:  # pragma: no cover
     DBNStore = None  # type: ignore
 
 
+
+# Filename token length for YYYYMMDD
+DATE_TOKEN_LEN = 8
+
 def _warehouse_base() -> Path:
     return Path("data/warehouse/quotes").resolve()
 
@@ -50,8 +53,9 @@ def ingest_tbbo_dbn_to_parquet(
         instrument_id: numeric instrument ID to filter
         symbol: symbol string (e.g., AAPL)
         venue: venue string (default XNAS)
+
     Returns:
-        Path to written parquet file
+        Path to written parquet file.
     """
     if DBNStore is None:
         raise ImportError("databento is required to ingest TBBO DBN files")
@@ -97,7 +101,7 @@ def ingest_tbbo_dbn_to_parquet(
     # Derive partition key from filename if possible (expects ...YYYYMMDD...)
     date_str: str | None = None
     for tok in str(dbn_file).split("/")[-1].split(".")[0].split("-"):
-        if tok.isdigit() and len(tok) == 8:
+        if tok.isdigit() and len(tok) == DATE_TOKEN_LEN:
             date_str = f"{tok[0:4]}-{tok[4:6]}-{tok[6:8]}"
             break
     if not date_str:
@@ -114,6 +118,7 @@ def ingest_tbbo_dbn_to_parquet(
 def ingest_many(
     dbn_files: Iterable[Path], instrument_id: int, symbol: str, venue: str = "XNAS"
 ) -> list[Path]:
+    """Ingest multiple DBN files; continue on errors and return written parquet paths."""
     written: list[Path] = []
     for f in dbn_files:
         try:

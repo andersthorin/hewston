@@ -1,3 +1,4 @@
+"""Streaming helpers to compute metrics frames during playback and finalize on DONE."""
 from __future__ import annotations
 
 import asyncio
@@ -6,9 +7,7 @@ import logging
 import math
 import time
 from collections.abc import AsyncGenerator
-from datetime import UTC
-
-from datetime import datetime as _dt
+from datetime import UTC, datetime as _dt
 from pathlib import Path
 
 import pandas as pd
@@ -27,8 +26,8 @@ def _get_catalog() -> CatalogPort:
     import importlib
 
     module = importlib.import_module("backend.adapters.sqlite_catalog")
-    SqliteCatalog = getattr(module, "SqliteCatalog")
-    return SqliteCatalog()  # type: ignore[return-value]
+    sqlite_catalog_cls = module.SqliteCatalog
+    return sqlite_catalog_cls()  # type: ignore[return-value]
 
 
 def _resolve_artifacts(run_id: str) -> tuple[dict[str, str], str | None]:

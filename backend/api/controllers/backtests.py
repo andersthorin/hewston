@@ -1,3 +1,8 @@
+"""HTTP controllers delegating to backend services for backtests.
+
+Thin wrappers that preserve response shapes and keep routing simple.
+"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -26,6 +31,7 @@ def list_backtests(
     order: str | None = None,
 ) -> dict[str, Any]:
     """List backtests via application service.
+
     Preserves original response shape.
     """
     return _list_backtests_service(
@@ -46,6 +52,7 @@ def get_backtest(run_id: str) -> dict[str, Any] | None:
 
 def create_backtest(body: dict, idempotency_key: str | None) -> tuple[dict, int]:
     """Create a backtest via application service.
+
     Returns (payload, status_code).
     """
     return _create_backtest_service(body, idempotency_key)

@@ -1,3 +1,5 @@
+"""Data ingestion helpers (stubbed Databento writes for tests and local dev)."""
+
 from __future__ import annotations
 
 import os
@@ -27,13 +29,13 @@ def _atomic_write(path: Path, data: bytes) -> None:
 def ingest_databento(
     symbol: str, year: int, *, products: list[str] | None = None, force: bool = False
 ) -> dict[str, int]:
-    """
-    Stubbed Databento ingestion that simulates downloads by writing non-empty files.
-    - Respects HEWSTON_DATA_DIR for repo-relative placement (default: data)
-    - Requires DATABENTO_API_KEY to be set; fails fast otherwise
-    - Idempotent: skips if file exists and size>0 unless force=True
+    """Simulate Databento ingestion by writing non-empty files.
 
-    Returns a mapping of product->size_bytes.
+    Respects HEWSTON_DATA_DIR (default: data); requires DATABENTO_API_KEY;
+    idempotent unless force is True.
+
+    Returns:
+      dict[str, int]: Mapping product -> size_bytes.
     """
     api_key = os.environ.get("DATABENTO_API_KEY")
     if not api_key:

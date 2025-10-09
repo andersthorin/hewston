@@ -1,31 +1,33 @@
+"""Service layer for backtests: catalog access and orchestration."""
 from __future__ import annotations
 
-import os
-from typing import Any
 import hashlib
 import json
 import multiprocessing
+import os
 from datetime import UTC
-
+from typing import Any
 
 from backend.ports.catalog import CatalogPort
 
 
 def get_catalog() -> CatalogPort:
     """Resolve catalog location without static dependency on adapters.
+
     Uses importlib to load SqliteCatalog dynamically to keep services decoupled.
     - If HEWSTON_CATALOG_PATH is set, use that
-    - If running under pytest (PYTEST_CURRENT_TEST) without explicit path, return a fresh in-memory DB per call
-    - Otherwise, use default persistent path
+    - If running under pytest (PYTEST_CURRENT_TEST) without explicit path,
+      return a fresh in-memory DB per call
+    - Otherwise, use default persistent path.
     """
     import importlib
 
     path = os.getenv("HEWSTON_CATALOG_PATH")
     module = importlib.import_module("backend.adapters.sqlite_catalog")
-    SqliteCatalog = getattr(module, "SqliteCatalog")
+    sqlite_catalog_cls = module.SqliteCatalog
     if not path and os.getenv("PYTEST_CURRENT_TEST"):
-        return SqliteCatalog(":memory:")  # type: ignore[return-value]
-    return SqliteCatalog(path)  # type: ignore[return-value]
+        return sqlite_catalog_cls(":memory:")  # type: ignore[return-value]
+    return sqlite_catalog_cls(path)  # type: ignore[return-value]
 
 
 def list_backtests_service(

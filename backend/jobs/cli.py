@@ -1,3 +1,5 @@
+"""CLI for data ingest and backtest helpers (Typer if available, else argparse)."""
+
 from __future__ import annotations
 
 import sys
@@ -24,32 +26,56 @@ def _run_data(symbol: str, year: int, force: bool) -> int:
         return 2
 
 
+
 if typer is not None:
     app = typer.Typer(no_args_is_help=True, add_completion=False)
 
+    # Define Option singletons to avoid B008 in default args
+    OPT_SYMBOL_DATA = typer.Option(..., "--symbol", help="Ticker symbol, e.g., AAPL")
+    OPT_YEAR_DATA = typer.Option(..., "--year", help="Year, e.g., 2023")
+    OPT_FORCE_DATA = typer.Option(False, "--force/--no-force", help="Re-download even if present")
+
+    OPT_SYMBOL_OPT = typer.Option(None, "--symbol")
+    OPT_YEAR_OPT = typer.Option(None, "--year")
+    OPT_DATASET_ID = typer.Option(None, "--dataset-id")
+    OPT_RUN_ID = typer.Option(None, "--run-id")
+    OPT_STRATEGY_ID = typer.Option("sma_crossover", "--strategy-id")
+    OPT_PARAM = typer.Option([], "--param")  # e.g., --param fast=20 --param slow=50
+    OPT_SEED = typer.Option(42, "--seed")
+    OPT_SPEED = typer.Option(60, "--speed")
+    OPT_FORCE_OPT = typer.Option(False, "--force/--no-force")
+    OPT_FROM = typer.Option(None, "--from", help="unused in stub")
+    OPT_TO = typer.Option(None, "--to", help="unused in stub")
+
+    OPT_KEEP_LATEST = typer.Option(100, "--keep-latest")
+    OPT_MAX_AGE = typer.Option(None, "--max-age")
+    OPT_APPLY = typer.Option(False, "--apply")
+
     @app.command(name="data")
     def data_cmd(
-        symbol: str = typer.Option(..., "--symbol", help="Ticker symbol, e.g., AAPL"),
-        year: int = typer.Option(..., "--year", help="Year, e.g., 2023"),
-        force: bool = typer.Option(False, "--force/--no-force", help="Re-download even if present"),
+        symbol: str = OPT_SYMBOL_DATA,
+        year: int = OPT_YEAR_DATA,
+        force: bool = OPT_FORCE_DATA,
     ) -> None:
+        """Ingest Databento data (stub) and exit with appropriate code."""
         code = _run_data(symbol, year, force)
         raise typer.Exit(code)
 
     @app.command(name="backtest")
     def backtest_cmd(
-        symbol: str = typer.Option(None, "--symbol"),
-        year: int = typer.Option(None, "--year"),
-        dataset_id: str = typer.Option(None, "--dataset-id"),
-        run_id: str = typer.Option(None, "--run-id"),
-        strategy_id: str = typer.Option("sma_crossover", "--strategy-id"),
-        param: list[str] = typer.Option([], "--param"),  # e.g., --param fast=20 --param slow=50
-        seed: int = typer.Option(42, "--seed"),
-        speed: int = typer.Option(60, "--speed"),
-        force: bool = typer.Option(False, "--force/--no-force"),
-        from_date: str = typer.Option(None, "--from", help="unused in stub"),
-        to_date: str = typer.Option(None, "--to", help="unused in stub"),
+        symbol: str = OPT_SYMBOL_OPT,
+        year: int = OPT_YEAR_OPT,
+        dataset_id: str = OPT_DATASET_ID,
+        run_id: str = OPT_RUN_ID,
+        strategy_id: str = OPT_STRATEGY_ID,
+        param: list[str] = OPT_PARAM,  # e.g., --param fast=20 --param slow=50
+        seed: int = OPT_SEED,
+        speed: int = OPT_SPEED,
+        force: bool = OPT_FORCE_OPT,
+        from_date: str = OPT_FROM,
+        to_date: str = OPT_TO,
     ) -> None:
+        """Create and run a backtest, persisting artifacts; prints run_id and duration."""
         # Require dataset_id explicitly (no implicit dataset creation)
         if not dataset_id:
             print("[backtest] ERROR: provide --dataset-id (implicit dataset creation removed)")
@@ -77,10 +103,11 @@ if typer is not None:
 
     @app.command(name="retention")
     def retention_cmd(
-        keep_latest: int = typer.Option(100, "--keep-latest"),
-        max_age_days: int = typer.Option(None, "--max-age"),
-        apply: bool = typer.Option(False, "--apply"),
+        keep_latest: int = OPT_KEEP_LATEST,
+        max_age_days: int = OPT_MAX_AGE,
+        apply: bool = OPT_APPLY,
     ) -> None:
+        """Apply retention policy; optionally delete when --apply is set."""
         from backend.jobs.retention import retention_main
 
         code = retention_main(keep_latest=keep_latest, max_age_days=max_age_days, apply=apply)
@@ -88,9 +115,12 @@ if typer is not None:
 
 
 def main_argv(argv: list[str] | None = None) -> int:
+    """Entry point used by `python -m backend.jobs.cli` and tests."""
     argv = list(sys.argv[1:] if argv is None else argv)
     if typer is not None:
         # Delegate to Typer if present
+
+
         try:
             # Build a Typer app on the fly to parse argv
 
@@ -101,6 +131,8 @@ def main_argv(argv: list[str] | None = None) -> int:
             return 0
         except Exception:
             pass
+
+
     # Fallback: argparse minimal parser
     import argparse
 
@@ -114,7 +146,6 @@ def main_argv(argv: list[str] | None = None) -> int:
     ns = parser.parse_args(argv)
     if ns.cmd == "data":
         return _run_data(ns.symbol, ns.year, ns.force)
-    return 1
     return 1
 
 

@@ -1,5 +1,7 @@
+"""Backtest execution job: runs Nautilus and persists canonical artifacts."""
 from __future__ import annotations
 
+from contextlib import suppress
 import json
 import logging
 import time
@@ -17,6 +19,9 @@ from backend.utils.metrics import compute_cumulative_metrics
 from backend.utils.paths import ensure_dir, get_backtests_dir
 
 # Configure logging for backtest execution
+# Minimum items required in a series entry like [ts, value]
+MIN_SERIES_LEN = 2
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -123,7 +128,7 @@ def _execute_and_persist_backtest(
     end_pos_qty_fills = _compute_end_pos_qty_fills(result.get("fills", []) or [])
 
     # Annualization factor (P)
-    annualization_P = _compute_annualization_P(bar_interval_minutes)
+    annualization_p = _compute_annualization_p(bar_interval_minutes)
 
     nautilus_stats, sr_val = _extract_nautilus_stats_and_sharpe(result)
 
@@ -131,7 +136,7 @@ def _execute_and_persist_backtest(
         "stats": {"raw": nautilus_stats},
         "series": compact_series,
         "bar_interval_minutes": bar_interval_minutes,
-        "annualization_P": annualization_P,
+        "annualization_P": annualization_p,
         "end_pos_qty_fills": float(end_pos_qty_fills),
     }
     if sr_val is not None:
@@ -185,12 +190,18 @@ def _compact_metrics_series(metrics_series: list[tuple[str, dict]]) -> list:
         if not compact_series or compact_series[-1][0] != last_ts:
             last_m = metrics_series[-1][1]
             compact_series.append(
-                [last_ts, {"realized_pnl": last_m.get("realized_pnl"), "win_rate": last_m.get("win_rate")}]
+                [
+                    last_ts,
+                    {
+                        "realized_pnl": last_m.get("realized_pnl"),
+                        "win_rate": last_m.get("win_rate"),
+                    },
+                ]
             )
     return compact_series
 
 
-def _compute_annualization_P(bar_interval_minutes: int) -> float:
+def _compute_annualization_p(bar_interval_minutes: int) -> float:
     try:
         minutes_per_session = 390
         sessions_per_year = 252
@@ -295,7 +306,9 @@ def _read_nautilus_realized_series(result: dict[str, Any]) -> list[tuple[str, fl
     try:
         rp = ((result.get("nautilus") or {}).get("series") or {}).get("realized_pnl") or []
         return [
-            (str(a[0]), float(a[1])) for a in rp if isinstance(a, (list, tuple)) and len(a) >= 2
+            (str(a[0]), float(a[1]))
+            for a in rp
+            if isinstance(a, list | tuple) and len(a) >= MIN_SERIES_LEN
         ]
     except Exception:
         return []
@@ -409,7 +422,8 @@ def _validate_equity_against_total_return(
     tol = max(1e-6, 0.001 * abs(expected_final))  # 0.1% relative tolerance
     if abs(last_val - expected_final) > tol:
         raise RuntimeError(
-            f"Canonical equity failed validation: expected_final={expected_final:.6f}, last={last_val}"
+            "Canonical equity failed validation: "
+            f"expected_final={expected_final:.6f}, last={last_val}"
         )
 
 
@@ -435,10 +449,19 @@ def run_backtest_and_persist(
     from_date: str | None = None,
     to_date: str | None = None,
 ) -> dict:
+    """Run a Nautilus backtest and persist artifacts under backtests/<run_id>.
+
+    Returns the final manifest dict.
+    """
     logger = logging.getLogger("backtest.job")
     params = params or {}
     slippage_fees = slippage_fees or {}
     cat = get_catalog()
+
+    """Run a Nautilus backtest and persist artifacts under backtests/<run_id>.
+
+    Returns the final manifest dict.
+    """
 
     logger.info(
         f"Starting backtest: dataset={dataset_id}, strategy={strategy_id}, "
@@ -535,10 +558,8 @@ def run_backtest_and_persist(
             "status": "ERROR",
             "error": error_payload,
         }
-        try:
+        with suppress(Exception):
             manifest_path.write_text(json.dumps(manifest, indent=2))
-        except Exception:
-            pass
 
         # Update DB row to ERROR; do not set artifact paths
         cat.set_backtest_status(

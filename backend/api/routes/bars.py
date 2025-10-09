@@ -1,3 +1,5 @@
+"""Bars API routes for daily, hourly, and minute OHLCV from warehouse."""
+
 from __future__ import annotations
 
 import os
@@ -36,13 +38,18 @@ def _parse_iso_date_range(from_date: str | None, to_date: str | None) -> tuple[d
         ts_to = datetime.fromisoformat((to_date or "2100-01-01") + "T23:59:59+00:00")
         return ts_from, ts_to
     except Exception as e:
-        raise HTTPException(status_code=400, detail="Invalid from/to format; expected YYYY-MM-DD") from e
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid from/to format; expected YYYY-MM-DD",
+        ) from e
 
 
 def _list_dates_1h(base: Path) -> list[str]:
     if not base.exists():
         return []
-    return sorted([p.name.split("=")[1] for p in base.glob("date=*") if p.is_dir() and "=" in p.name])
+    return sorted(
+        [p.name.split("=")[1] for p in base.glob("date=*") if p.is_dir() and "=" in p.name]
+    )
 
 
 def _paths_1h_for_range(base: Path, ts_from: datetime, ts_to: datetime) -> list[str]:
@@ -64,6 +71,10 @@ async def get_daily(
     from_date: str | None = Query(None, alias="from"),
     to_date: str | None = Query(None, alias="to"),
 ):
+    """Return daily OHLCV derived from pre-aggregated 1-hour warehouse bars.
+
+    Bounds by available dates if from/to are omitted.
+    """
     # Build list of warehouse paths (prefer 1h pre-aggregated)
     ts_from, ts_to = _parse_iso_date_range(from_date, to_date)
 
@@ -75,7 +86,10 @@ async def get_daily(
         if not ds:
             raise HTTPException(
                 status_code=404,
-                detail=f"No 1-hour warehouse data available for {symbol}. Run warehouse backfill first.",
+                detail=(
+                    f"No 1-hour warehouse data available for {symbol}. "
+                    f"Run warehouse backfill first."
+                ),
             )
         ts_from = datetime.fromisoformat(ds[0] + "T00:00:00+00:00")
         ts_to = datetime.fromisoformat(ds[-1] + "T23:59:59+00:00")
@@ -86,7 +100,10 @@ async def get_daily(
         _to = to_date or ts_to.date().isoformat()
         raise HTTPException(
             status_code=404,
-            detail=f"No 1-hour warehouse data available for {symbol} in date range {_from} to {_to}. Run warehouse backfill first.",
+            detail=(
+                f"No 1-hour warehouse data available for {symbol} in date range {_from} to {_to}. "
+                "Run warehouse backfill first."
+            ),
         )
 
     q = pl.scan_parquet(paths_1h).filter(
@@ -132,7 +149,12 @@ async def get_minute(
     to_date: str = Query(..., alias="to"),
     rth_only: bool = True,
 ):
-    # New warehouse paths: data/warehouse/bars/mid_1min/venue=XNAS/symbol={symbol}/date=YYYY-MM-DD/bars.parquet
+    """Return minute OHLCV from warehouse parquet within a date range.
+
+    When rth_only is true, only regular trading hours rows are returned.
+    """
+    # New warehouse paths:
+    # data/warehouse/bars/mid_1min/venue=XNAS/symbol={symbol}/date=YYYY-MM-DD/bars.parquet
     try:
         ts_from = datetime.fromisoformat(from_date + "T00:00:00+00:00")
         ts_to = datetime.fromisoformat(to_date + "T23:59:59+00:00")
@@ -161,7 +183,11 @@ async def get_minute(
     if not paths:
         raise HTTPException(
             status_code=404,
-            detail=f"No 1-minute warehouse data available for {symbol} in date range {from_date} to {to_date}. Run warehouse backfill first.",
+            detail=(
+                f"No 1-minute warehouse data available for {symbol} in date range "
+                f"{from_date} to {to_date}. "
+                "Run warehouse backfill first."
+            ),
         )
 
     q = pl.scan_parquet(paths).filter(
@@ -188,6 +214,10 @@ async def get_minute_decimated(
     target: int = 10000,
     rth_only: bool = True,
 ):
+    """Return minute OHLCV down-sampled to approximately `target` points.
+
+    Uses stride-based bucketing without reading the full dataset into memory.
+    """
     # New warehouse paths for minute bars
     try:
         ts_from = datetime.fromisoformat(from_date + "T00:00:00+00:00")
@@ -217,7 +247,10 @@ async def get_minute_decimated(
     if not paths:
         raise HTTPException(
             status_code=404,
-            detail=f"No 1-minute warehouse data available for {symbol} in date range {from_date} to {to_date}. Run warehouse backfill first.",
+            detail=(
+                f"No 1-minute warehouse data available for {symbol} in date range {from_date} "
+                f"to {to_date}. Run warehouse backfill first."
+            ),
         )
 
     # Build base query with filters
@@ -271,12 +304,11 @@ async def get_hour(
     to_date: str = Query(..., alias="to"),
     rth_only: bool = True,
 ):
-    """
-    Runtime aggregation of 1-hour OHLCV from 1-minute parquet aligned to RTH buckets.
-    Buckets: start 13:30Z, then +1h steps (13:30→14:30, ... 19:30→20:00).
+    """Return 1-hour OHLCV aggregated from 1-minute parquet aligned to RTH.
+
+    Buckets start 13:30Z with +1h steps (13:30→14:30, ... 19:30→20:00).
     Bucket time (t) is the bucket START in UTC.
     """
-
     # Use pre-aggregated 1h parquet from warehouse if available
     try:
         ts_from = datetime.fromisoformat(from_date + "T00:00:00+00:00")
@@ -300,7 +332,10 @@ async def get_hour(
         _to = to_date
         raise HTTPException(
             status_code=404,
-            detail=f"No 1-hour warehouse data available for {symbol} in date range {_from} to {_to}. Run warehouse backfill first.",
+            detail=(
+                f"No 1-hour warehouse data available for {symbol} in date range {_from} "
+                f"to {_to}. Run warehouse backfill first."
+            ),
         )
 
     qh = pl.scan_parquet(paths).filter(
