@@ -1,8 +1,7 @@
-"""
-Test metrics extraction from Nautilus engine state.
-"""
+"""Test metrics extraction from Nautilus engine state."""
 
 import pytest
+
 from backend.adapters.nautilus import NautilusBacktestRunner
 
 

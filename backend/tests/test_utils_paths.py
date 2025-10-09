@@ -1,18 +1,15 @@
-"""
-Tests for backend/utils/paths.py utility functions.
-"""
+"""Tests for backend/utils/paths.py utility functions."""
 
 import os
 from pathlib import Path
 from unittest.mock import patch
 
-
 from backend.utils.paths import (
+    ensure_dir,
+    get_backtests_dir,
     get_base_data_dir,
     get_catalog_path,
     get_raw_databento_dir,
-    get_backtests_dir,
-    ensure_dir,
 )
 
 

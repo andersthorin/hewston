@@ -1,5 +1,4 @@
-"""
-WebSocket Models
+"""WebSocket models.
 
 Pydantic models for WebSocket communication and message handling.
 """

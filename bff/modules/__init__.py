@@ -1,1 +1,1 @@
-
+"""BFF modules package."""

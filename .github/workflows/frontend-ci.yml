@@ -35,11 +35,8 @@ jobs:
       - name: Type check (TypeScript)
         run: npm run type-check
 
-      - name: Lint (components/containers/views)
+      - name: Lint (src)
         run: npm run lint
-
-      - name: Lint (services/hooks/utils/store)
-        run: npm run lint:services
 
       - name: Build
         run: npm run build

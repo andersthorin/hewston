@@ -1,3 +1,5 @@
+"""Backtest HTTP and WebSocket routes."""
+
 from __future__ import annotations
 
 import asyncio
@@ -5,26 +7,24 @@ import contextlib
 import json
 import logging
 from datetime import datetime as _dt
-from typing import Any
+from typing import Annotated, Any
 
 import pandas as pd
-from fastapi import (
-    APIRouter,
-    Header,
-    Query,
-    Request,
-    WebSocket,
-    WebSocketDisconnect,
-    status,
-)
+from fastapi import APIRouter, Depends, Header, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, Field
 
-from backend.constants import DEFAULT_FPS
 from backend.api.controllers.backtests import (
     create_backtest as create_backtest_ctrl,
+)
+from backend.api.controllers.backtests import (
     get_backtest as get_backtest_ctrl,
+)
+from backend.api.controllers.backtests import (
     list_backtests as list_backtests_ctrl,
 )
+from backend.constants import DEFAULT_FPS
+from backend.domain.queries import BacktestListQuery
 
 
 def _json_default(o):
@@ -55,6 +55,10 @@ async def create_backtest(
     request: Request,
     idempotency_key: str | None = Header(None, alias="Idempotency-Key"),
 ):
+    """Create a backtest via controller.
+
+    Returns JSON with created resource or error payload.
+    """
     raw = b""
     try:
         raw = await request.body()
@@ -72,12 +76,12 @@ async def create_backtest(
                 "error": str(e),
             },
         )
-        try:
+        with contextlib.suppress(Exception):
             logger.error(
-                f"create_backtest.body raw={raw[:200]!r} content_type={request.headers.get('content-type')}"
+                "create_backtest.body raw=%r content_type=%s",
+                raw[:200],
+                request.headers.get("content-type"),
             )
-        except Exception:
-            pass
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"error": {"code": "BAD_REQUEST", "message": "invalid JSON"}},
@@ -86,47 +90,51 @@ async def create_backtest(
     # Delegate to module controller (pilot exemplar)
 
     payload, code = create_backtest_ctrl(body if isinstance(body, dict) else {}, idempotency_key)
-    if 200 <= code < 300:
+    if status.HTTP_200_OK <= code < status.HTTP_300_MULTIPLE_CHOICES:
         return JSONResponse(status_code=code, content=payload)
     # Error branch
     return JSONResponse(status_code=code, content=payload)
 
 
+class BacktestListParams(BaseModel):
+    """Query params model for /backtests listing.
+
+    Using a single model with Depends to reduce PLR0913 violations in route
+    signatures while preserving FastAPI's parsing and docs.
+    """
+
+    symbol: str | None = None
+    strategy_id: str | None = None
+    run_from: str | None = Field(None, alias="run_from")
+    run_to: str | None = Field(None, alias="run_to")
+
+    limit: int = 20
+    offset: int = 0
+    order: str | None = None
+
+
 @router.get("/backtests")
-async def list_backtests(
-    limit: int = 20,
-    offset: int = 0,
-    symbol: str | None = None,
-    strategy_id: str | None = None,
-    run_from: str | None = Query(None, alias="run_from"),
-    run_to: str | None = Query(None, alias="run_to"),
-    order: str | None = None,
-):
+async def list_backtests(q: Annotated[BacktestListParams, Depends()]):
+    """List backtests with optional filters and pagination."""
     logger.info(
         "list_backtests",
-        extra={
-            "symbol": symbol,
-            "strategy_id": strategy_id,
-            "run_from": run_from,
-            "run_to": run_to,
-            "limit": limit,
-            "offset": offset,
-            "order": order,
-        },
+        extra={**q.model_dump(by_alias=True)},
     )
-    return list_backtests_ctrl(
-        symbol=symbol,
-        strategy_id=strategy_id,
-        from_date=run_from,
-        to_date=run_to,
-        limit=limit,
-        offset=offset,
-        order=order,
+    q_dto = BacktestListQuery(
+        symbol=q.symbol,
+        strategy_id=q.strategy_id,
+        from_date=q.run_from,
+        to_date=q.run_to,
+        limit=q.limit,
+        offset=q.offset,
+        order=q.order or "-created_at",
     )
+    return list_backtests_ctrl(q_dto)
 
 
 @router.get("/backtests/{run_id}")
 async def get_backtest(run_id: str):
+    """Get a single backtest by ID."""
     data = get_backtest_ctrl(run_id)
     if not data:
         return JSONResponse(
@@ -139,6 +147,7 @@ async def get_backtest(run_id: str):
 @router.get("/backtests/{run_id}/metrics")
 async def get_backtest_metrics(run_id: str):
     """Return metrics.json for a run.
+
     Shape: a flat JSON object with numeric fields (arbitrary keys allowed).
     """
     run = get_backtest_ctrl(run_id)
@@ -177,18 +186,19 @@ async def get_backtest_metrics(run_id: str):
             )
         with open(metrics_path) as f:
             data = json.load(f)
-        return JSONResponse(status_code=200, content=data)
+        return JSONResponse(status_code=status.HTTP_200_OK, content=data)
     except Exception as e:
         logger.exception("get_metrics.error", extra={"run_id": run_id, "error": str(e)[:200]})
         return JSONResponse(
-            status_code=500,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"error": {"code": "INTERNAL", "message": "failed to load metrics"}},
         )
 
 
 @router.get("/backtests/{run_id}/equity")
 async def get_backtest_equity(run_id: str):
-    """Return equity curve as list of points: { equity: [{timestamp, equity, drawdown?}] }.
+    """Return equity curve under { equity: [{timestamp, equity, drawdown?}] }.
+
     Parquet schema expected: columns ['ts_utc', 'value'] where ts_utc is datetime-like.
     """
     run = get_backtest_ctrl(run_id)
@@ -241,17 +251,15 @@ async def get_backtest_equity(run_id: str):
                 iso = str(ts)
             pt = {"timestamp": iso, "equity": float(r.get("value", 0.0))}
             if "drawdown" in r and r.get("drawdown") is not None:
-                try:
+                with contextlib.suppress(Exception):
                     pt["drawdown"] = float(r.get("drawdown"))
-                except Exception:
-                    pass
             points.append(pt)
 
-        return JSONResponse(status_code=200, content={"equity": points})
+        return JSONResponse(status_code=status.HTTP_200_OK, content={"equity": points})
     except Exception as e:
         logger.exception("get_equity.error", extra={"run_id": run_id, "error": str(e)[:200]})
         return JSONResponse(
-            status_code=500,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             content={"error": {"code": "INTERNAL", "message": "failed to load equity"}},
         )
 
@@ -259,8 +267,9 @@ async def get_backtest_equity(run_id: str):
 @router.get("/backtests/{run_id}/orders")
 async def get_backtest_orders(run_id: str):
     """Return orders as list under { orders: [...] }.
-    Parquet schema suggested in docs: ts_utc, side, qty, price, order_id, type, time_in_force, symbol?
-    Response maps to aggregator-friendly shape.
+
+    Parquet schema suggested in docs: ts_utc, side, qty, price, order_id,
+    type, time_in_force, symbol? Response maps to aggregator-friendly shape.
     """
     run = get_backtest_ctrl(run_id)
     if not run:
@@ -345,10 +354,8 @@ class _BacktestWSHandler:
         self.player_task: asyncio.Task | None = None
 
     async def _send_err(self, code: str, msg: str) -> None:
-        try:
+        with contextlib.suppress(Exception):
             await self.ws.send_text(json.dumps({"t": "err", "code": code, "msg": msg}))
-        except Exception:
-            pass
 
     def _frame_payload(self, fr) -> dict:
         return {
@@ -377,7 +384,11 @@ class _BacktestWSHandler:
             try:
                 logger.info("ws.stream_start", extra={"run_id": self.run_id})
                 async for fr in produce_frames(
-                    run_id=self.run_id, fps=DEFAULT_FPS, speed=1.0, realtime=True, cadence="1h"
+                    run_id=self.run_id,
+                    speed=1.0,
+                    realtime=True,
+                    cadence="1h",
+                    options={"fps": DEFAULT_FPS},
                 ):
                     await self.ws.send_text(_json_dumps(self._frame_payload(fr)))
                     self.frames_sent += 1
@@ -409,11 +420,10 @@ class _BacktestWSHandler:
             await self.ws.send_text(json.dumps(payload))
             if cmd == "play":
                 await self._start_player()
-            elif cmd == "pause":
-                if self.player_task and not self.player_task.done():
-                    self.player_task.cancel()
-                    with contextlib.suppress(BaseException):
-                        await self.player_task
+            elif cmd == "pause" and self.player_task and not self.player_task.done():
+                self.player_task.cancel()
+                with contextlib.suppress(BaseException):
+                    await self.player_task
             return
         await self._send_err("VALIDATION", "unsupported message")
 
@@ -462,15 +472,14 @@ async def _heartbeat_task(ws: WebSocket) -> None:
 
 @router.websocket("/backtests/{run_id}/ws")
 async def backtests_ws_echo(websocket: WebSocket, run_id: str) -> None:
-    """
-    WS endpoint with heartbeat, ctrl echo, and optional frame streaming when available.
-    """
+    """WS endpoint with heartbeat, ctrl echo, and optional frame streaming."""
     handler = _BacktestWSHandler(websocket, run_id)
     await handler.run()
 
 
 @router.get("/backtests/{run_id}/stream")
 async def stream_backtest(run_id: str, speed: float = 1.0):
+    """Server-sent events stream of backtest frames (for debugging/dev)."""
     from backend.services.streamer import produce_frames
 
     async def gen():
@@ -478,7 +487,11 @@ async def stream_backtest(run_id: str, speed: float = 1.0):
         last_dropped = 0
         try:
             async for fr in produce_frames(
-                run_id=run_id, fps=DEFAULT_FPS, speed=float(speed), realtime=True, cadence="1h"
+                run_id=run_id,
+                speed=float(speed),
+                realtime=True,
+                cadence="1h",
+                options={"fps": DEFAULT_FPS},
             ):
                 payload = {
                     "t": fr.t,
@@ -499,7 +512,7 @@ async def stream_backtest(run_id: str, speed: float = 1.0):
             err = {"code": "STREAM_ERROR", "msg": str(e)[:200]}
             yield f"event: error\ndata: {_json_dumps(err)}\n\n"
         finally:
-            try:
+            with contextlib.suppress(Exception):
                 logger.info(
                     "sse.end",
                     extra={
@@ -508,8 +521,6 @@ async def stream_backtest(run_id: str, speed: float = 1.0):
                         "frames_dropped": last_dropped,
                     },
                 )
-            except Exception:
-                pass
 
     headers = {"Cache-Control": "no-cache", "Connection": "keep-alive"}
     return StreamingResponse(gen(), media_type="text/event-stream", headers=headers)

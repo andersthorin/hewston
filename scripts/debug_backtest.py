@@ -44,12 +44,14 @@ print()
 
 try:
     result = run_backtest_and_persist(
-        dataset_id="googl_oct_2024",
-        strategy_id="sma_crossover",
-        params={"instrument_id": "GOOGL.XNAS", "fast": 20, "slow": 50},
-        from_date="2024-10-01",
-        to_date="2024-10-10",
-        seed=42,
+        req={
+            "dataset_id": "googl_oct_2024",
+            "strategy_id": "sma_crossover",
+            "params": {"instrument_id": "GOOGL.XNAS", "fast": 20, "slow": 50},
+            "from_date": "2024-10-01",
+            "to_date": "2024-10-10",
+            "seed": 42,
+        }
     )
 
     print()

@@ -1,5 +1,4 @@
-"""
-BFF FastAPI Application
+"""BFF FastAPI Application.
 
 Main application factory for the Backend-for-Frontend service.
 Follows the pattern established in backend/app/main.py with BFF-specific enhancements.
@@ -7,13 +6,12 @@ Follows the pattern established in backend/app/main.py with BFF-specific enhance
 
 import logging
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from uuid import uuid4
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from bff.app.logging_setup import configure_logging
 from bff.api.backtests import router as backtests_router
 from bff.api.chart_data import router as chart_data_router
 from bff.api.health import router as health_router
@@ -27,13 +25,12 @@ from bff.app.config import (
     LOG_LEVEL,
 )
 from bff.app.dependencies import cleanup_dependencies
+from bff.app.logging_setup import configure_logging
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """
-    Application lifespan manager for startup and shutdown events.
-    """
+    """Application lifespan manager for startup and shutdown events."""
     # Startup
     logger = logging.getLogger("bff.startup")
     logger.info("BFF service starting up", extra={"service": "hewston-bff"})
@@ -46,8 +43,7 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    """
-    Create and configure the BFF FastAPI application.
+    """Create and configure the BFF FastAPI application.
 
     Returns:
         FastAPI: Configured application instance
@@ -77,8 +73,8 @@ def create_app() -> FastAPI:
 
     @app.middleware("http")
     async def request_logger(request: Request, call_next):
-        """
-        Request logging middleware following backend patterns.
+        """Request logging middleware following backend patterns.
+
         Adds correlation ID and timing information.
         """
         req_id = uuid4().hex
@@ -91,7 +87,7 @@ def create_app() -> FastAPI:
 
         dur_ms = int((time.perf_counter() - start) * 1000)
 
-        try:
+        with suppress(Exception):
             logger.info(
                 "http.access",
                 extra={
@@ -103,9 +99,6 @@ def create_app() -> FastAPI:
                     "service": "bff",
                 },
             )
-        except Exception:
-            # Don't let logging errors break the request
-            pass
 
         # Add correlation ID to response headers for debugging
         response.headers["X-Correlation-ID"] = req_id
@@ -120,17 +113,15 @@ def create_app() -> FastAPI:
     app.include_router(proxy_router, prefix="/api/v1")
 
     # Reset per-app backend client to avoid cross-test contamination from config reloads
-    try:
+    with suppress(Exception):
         from bff.app import dependencies as _deps
 
         _deps._backend_client = None
         _deps._backend_client_loop_id = None
         _deps._backend_client_base_url = None
-    except Exception:
-        pass
 
     # Debug: log registered routes on startup to verify routing
-    try:
+    with suppress(Exception):
         for r in app.routes:
             methods = getattr(r, "methods", None)
             path = getattr(r, "path", None)
@@ -142,8 +133,6 @@ def create_app() -> FastAPI:
                         "methods": sorted(list(methods)) if methods else "WEBSOCKET/OTHER",
                     },
                 )
-    except Exception:
-        pass
 
     app.include_router(websocket_router, prefix="/api/v1")
 

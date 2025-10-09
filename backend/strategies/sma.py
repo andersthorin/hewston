@@ -1,3 +1,8 @@
+"""Simple SMA crossover strategies (Nautilus-backed or placeholder).
+
+Exposes minimal artifacts (orders, fills, equity) consumed by the app.
+"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -34,11 +39,19 @@ try:  # pragma: no cover - exercised in integration
             instrument_id: str,
             fast: int = 20,
             slow: int = 50,
-            qty: int = 1,
-            rth_only: bool = False,
-            eod_flat: bool = False,
-            **_: Any,
+            **kwargs: Any,
         ) -> None:
+            """Initialize SMA crossover strategy.
+
+            Args:
+              instrument_id: Instrument like "AAPL.XNAS".
+              fast: Short SMA period.
+              slow: Long SMA period.
+              qty: Fixed order quantity per signal.
+              rth_only: If True, ignore pre/post-market bars.
+              eod_flat: If True, flatten at end of RTH.
+              **kwargs: Additional options; currently supports `qty`, `rth_only`, and `eod_flat`.
+            """
             super().__init__()
             if fast >= slow:
                 fast, slow = 20, 50
@@ -46,9 +59,10 @@ try:  # pragma: no cover - exercised in integration
             self.instrument_id = InstrumentId.from_str(instrument_id)
             self.fast_period = int(fast)
             self.slow_period = int(slow)
-            self.qty = int(qty)
-            self.rth_only = bool(rth_only)
-            self.eod_flat = bool(eod_flat)
+            # Extract known options from kwargs (backward-compatible)
+            self.qty = int(kwargs.get("qty", 1))
+            self.rth_only = bool(kwargs.get("rth_only", False))
+            self.eod_flat = bool(kwargs.get("eod_flat", False))
 
             # Runtime state for artifact mapping (MVP, independent of engine internals)
             self._bar_type: BarType | None = None
@@ -63,10 +77,12 @@ try:  # pragma: no cover - exercised in integration
             self._oid_seq: int = 0
 
         def on_load(self) -> None:  # noqa: D401
+            """Hook called when strategy is loaded."""
             # Defer subscriptions to on_start per Nautilus guidance
             pass
 
         def on_start(self) -> None:  # noqa: D401
+            """Hook called when the strategy starts; subscribe and init indicators."""
             # Subscribe to 1m MID bars aggregated INTERNALLY from QuoteTicks
             spec = BarSpecification.from_timedelta(timedelta(minutes=1), PriceType.MID)
             self._bar_type = BarType(self.instrument_id, spec, AggregationSource.INTERNAL)
@@ -80,49 +96,32 @@ try:  # pragma: no cover - exercised in integration
             # Subscribe to bars (let client be inferred from instrument venue)
             self.subscribe_bars(self._bar_type)
 
-        def on_bar(self, bar) -> None:
-            # Only handle our instrument/BarType
-            if self._bar_type is None or bar.bar_type != self._bar_type:
-                return
-
-            # Extract timestamp and localize to NY for RTH/EOD logic
-
-            try:
+        def _get_tz_ny(self):
+            try:  # pragma: no cover
                 from zoneinfo import ZoneInfo
 
-                tz_ny = ZoneInfo("America/New_York")
+                return ZoneInfo("America/New_York")
             except Exception:
-                tz_ny = None
+                return None
 
-            px = (
-                float(bar.close.as_double())
-                if hasattr(bar.close, "as_double")
-                else float(bar.close)
-            )
-            ts = getattr(bar, "ts_event", None) or getattr(bar, "ts_init", None)
+        def _in_rth_window(self, ts, tz_ny, rth_only: bool) -> tuple[bool, int | None]:
+            if not rth_only or tz_ny is None or ts is None:
+                return True, None
+            try:
+                local = ts.astimezone(tz_ny)
+                mins = local.hour * 60 + local.minute
+                return ((mins >= 9 * 60 + 30) and (mins < 16 * 60)), mins
+            except Exception:
+                return True, None
 
-            # RTH filter: 09:30 <= time < 16:00 NY
-            in_rth = True
-            mins = None
-            if self.rth_only and tz_ny and ts is not None:
-                try:
-                    local = ts.astimezone(tz_ny)
-                    mins = local.hour * 60 + local.minute
-                    in_rth = (mins >= 9 * 60 + 30) and (mins < 16 * 60)
-                except Exception:
-                    in_rth = True
-
-            # Track canonical equity using Nautilus Portfolio APIs (no made-up math):
-            # equity = balance_total(USD) + unrealized_pnls(venue)[USD]
+        def _compute_equity_snapshot(self) -> float:
             import logging
 
             logger = logging.getLogger("strategy.equity")
-
             try:
                 portfolio = self.portfolio
                 venue = self.instrument_id.venue
                 account = portfolio.account(venue)
-
                 from nautilus_trader.model.currencies import USD
 
                 bal_money = account.balance_total(USD)
@@ -131,7 +130,6 @@ try:  # pragma: no cover - exercised in integration
                     if hasattr(bal_money, "as_double")
                     else float(bal_money)
                 )
-
                 upnls = portfolio.unrealized_pnls(venue)
                 upnl_money = upnls.get(USD)
                 upnl_val = (
@@ -139,48 +137,67 @@ try:  # pragma: no cover - exercised in integration
                     if (upnl_money is not None and hasattr(upnl_money, "as_double"))
                     else float(upnl_money or 0.0)
                 )
-
                 equity_val = bal_val + upnl_val
                 logger.debug(
                     f"Equity snapshot: cash={bal_val:.2f}, upnl={upnl_val:.2f}, eq={equity_val:.2f}"
                 )
-            except Exception as e:
+                return float(equity_val)
+            except Exception as e:  # pragma: no cover
                 logger.error(
-                    f"❌ CRITICAL: Failed to obtain canonical equity (balance_total + unrealized_pnls): {type(e).__name__}: {e}"
+                    "❌ CRITICAL: Failed to obtain canonical equity "
+                    "(balance_total + unrealized_pnls): "
+                    f"{type(e).__name__}: {e}"
                 )
                 raise RuntimeError(f"Canonical equity unavailable from Nautilus: {e}") from e
 
-            self.equity.append({"ts_utc": ts, "value": equity_val})
-
-            if not in_rth:
-                # Optionally flatten if outside RTH, but we rely on EOD flatten at 15:59
-                return
-
+        def _maybe_signal(self, px: float, ts) -> None:
             if (
                 not self._fast
                 or not self._slow
                 or not self._fast.initialized
                 or not self._slow.initialized
             ):
-                # Not enough history yet for signals
-                # But allow EOD flatten safeguard below if needed
-                pass
-            else:
-                f = float(self._fast.value)
-                s = float(self._slow.value)
+                return
+            f = float(self._fast.value)
+            s = float(self._slow.value)
+            if not self._in_position and f > s:
+                self._place(OrderSide.BUY, px, ts)
+            elif self._in_position and f < s:
+                self._place(OrderSide.SELL, px, ts)
 
-                # Generate naive crossover signals
-                if not self._in_position and f > s:
-                    self._place(OrderSide.BUY, px, ts)
-                elif self._in_position and f < s:
-                    self._place(OrderSide.SELL, px, ts)
-
-            # End-of-day flatten at 15:59 NY
+        def _maybe_eod_flat(self, px: float, ts, mins: int | None) -> None:
             if self.eod_flat and self._in_position and mins is not None and mins == (15 * 60 + 59):
                 self._place(OrderSide.SELL, px, ts)
 
+        def on_bar(self, bar) -> None:
+            """Handle an incoming bar for this instrument and update signals."""
+            # Only handle our instrument/BarType
+            if self._bar_type is None or bar.bar_type != self._bar_type:
+                return
+
+            tz_ny = self._get_tz_ny()
+
+            px = (
+                float(bar.close.as_double())
+                if hasattr(bar.close, "as_double")
+                else float(bar.close)
+            )
+            ts = getattr(bar, "ts_event", None) or getattr(bar, "ts_init", None)
+
+            in_rth, mins = self._in_rth_window(ts, tz_ny, self.rth_only)
+
+            equity_val = self._compute_equity_snapshot()
+            self.equity.append({"ts_utc": ts, "value": equity_val})
+
+            if not in_rth:
+                return
+
+            self._maybe_signal(px, ts)
+            self._maybe_eod_flat(px, ts, mins)
+
         # Generic event handler to catch ALL events for debugging
         def on_event(self, event) -> None:  # pragma: no cover
+            """Handle a generic engine event (debug logging only)."""
             import logging
 
             logger = logging.getLogger("strategy.events")
@@ -196,6 +213,7 @@ try:  # pragma: no cover - exercised in integration
 
         # Keep artifacts in sync when fills occur (best-effort; details may vary by engine)
         def on_order_filled(self, event) -> None:  # pragma: no cover
+            """Handle order fill events and update local artifacts."""
             import logging
 
             logger = logging.getLogger("strategy.fills")
@@ -244,7 +262,8 @@ try:  # pragma: no cover - exercised in integration
                 self.fills.append(fill_data)
 
                 logger.info(
-                    f"✅ FILL RECORDED: {fill_data['side']} {qty} @ ${px:.2f}, total_fills={len(self.fills)}"
+                    f"✅ FILL RECORDED: {fill_data['side']} {qty} @ ${px:.2f}, "
+                    f"total_fills={len(self.fills)}"
                 )
 
             except Exception as e:
@@ -280,6 +299,7 @@ try:  # pragma: no cover - exercised in integration
                 "type": "MKT",
                 "time_in_force": "GTC",
             }
+
             self.orders.append(order_data)
 
             logger.info(
@@ -296,10 +316,19 @@ except Exception:  # pragma: no cover - fallback placeholder when Nautilus not i
         """Placeholder which only stores parameters when Nautilus is not available."""
 
         def __init__(self, fast: int = 20, slow: int = 50, **_: Any) -> None:
+            """Initialize placeholder parameters when Nautilus is unavailable.
+
+            Args:
+              fast: Short SMA period.
+              slow: Long SMA period.
+            """
+            """Return debug representation."""
+
             if fast >= slow:
                 fast, slow = 20, 50
             self.fast = int(fast)
             self.slow = int(slow)
 
         def __repr__(self) -> str:
+            """Return debug representation."""
             return f"SMAStrategy(fast={self.fast}, slow={self.slow})"

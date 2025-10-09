@@ -1,3 +1,5 @@
+"""Streamer fallback metrics tests (when metrics.json missing)."""
+
 from pathlib import Path
 
 import polars as pl
@@ -5,9 +7,12 @@ import pytest
 
 from backend.services import streamer as streamer_mod
 
+FRAMES_EXPECTED = 3
+
 
 @pytest.mark.asyncio
 async def test_streamer_fallback_metrics_when_no_artifact(tmp_path: Path, monkeypatch):
+    """Ensure streamer computes metrics if artifact is missing."""
     # Prepare equity with simple growth
     eq_df = pl.DataFrame(
         {
@@ -36,8 +41,9 @@ async def test_streamer_fallback_metrics_when_no_artifact(tmp_path: Path, monkey
     async for fr in streamer_mod.produce_frames(run_id="X", realtime=False, cadence="1m"):
         frames.append(fr)
 
-    assert len(frames) == 3
-    # Fallback should still provide total_return and drawdown and sharpe (possibly null if too few points)
+    assert len(frames) == FRAMES_EXPECTED
+    # Fallback should still provide total_return and drawdown and sharpe
+    # (possibly null if too few points)
     assert frames[-1].metrics is not None
     assert "total_return" in frames[-1].metrics
     assert frames[-1].metrics["total_return"] is not None

@@ -1,3 +1,5 @@
+"""Streamer uses precomputed metrics when available (happy path)."""
+
 import json
 from pathlib import Path
 
@@ -6,9 +8,15 @@ import pytest
 
 from backend.services import streamer as streamer_mod
 
+EPS_12 = 1e-12
+RET_1PCT = 0.01
+PNL_5 = 5.0
+FRAMES_EXPECTED = 2
+
 
 @pytest.mark.asyncio
 async def test_streamer_uses_precomputed_metrics(tmp_path: Path, monkeypatch):
+    """Precomputed metrics in metrics.json should drive frame metrics."""
     # Prepare fake artifacts
     eq_path = tmp_path / "equity.parquet"
     ord_path = tmp_path / "orders.parquet"
@@ -69,11 +77,11 @@ async def test_streamer_uses_precomputed_metrics(tmp_path: Path, monkeypatch):
     async for fr in streamer_mod.produce_frames(run_id="X", realtime=False, cadence="1m"):
         frames.append(fr)
 
-    assert len(frames) == 2
+    assert len(frames) == FRAMES_EXPECTED
     # First frame uses first metrics object
     assert frames[0].metrics["total_return"] == 0.0
     assert frames[0].metrics["return"] is None
     # Second frame uses second metrics object
-    assert pytest.approx(frames[1].metrics["return"], rel=1e-12) == 0.01
-    assert frames[1].metrics["realized_pnl"] == 5.0
+    assert pytest.approx(frames[1].metrics["return"], rel=EPS_12) == RET_1PCT
+    assert frames[1].metrics["realized_pnl"] == PNL_5
     assert frames[1].metrics["win_rate"] == 1.0

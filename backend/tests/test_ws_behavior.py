@@ -1,10 +1,13 @@
+"""WebSocket behavior tests for heartbeat and validation errors."""
+
 from fastapi.testclient import TestClient
 
-from backend.app.main import app
 import backend.api.routes.backtests as wsmod
+from backend.app.main import app
 
 
 def test_ws_heartbeat_hb_event_monkeypatched_interval():
+    """Heartbeat emits hb event at a faster monkeypatched interval."""
     # Speed up heartbeat for tests
     wsmod.HEARTBEAT_SECONDS = 0.05
     client = TestClient(app)
@@ -15,6 +18,7 @@ def test_ws_heartbeat_hb_event_monkeypatched_interval():
 
 
 def test_ws_err_on_invalid_messages():
+    """Invalid messages produce err responses with VALIDATION code."""
     client = TestClient(app)
     with client.websocket_connect("/api/v1/backtests/test/ws") as ws:
         # Unsupported message type

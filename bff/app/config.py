@@ -1,5 +1,4 @@
-"""
-BFF Configuration Management
+"""BFF Configuration Management.
 
 Centralizes configuration values for the BFF service, following the pattern
 established in backend/constants.py while providing BFF-specific settings.

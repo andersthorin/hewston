@@ -1,1 +1,1 @@
-# BFF API Module
+"""BFF API subpackage."""

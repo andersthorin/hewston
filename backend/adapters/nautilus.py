@@ -1,14 +1,33 @@
+"""Nautilus Trader adapter that executes real engine runs and surfaces canonical metrics.
+
+No stubs or fallbacks; all data and metrics come from Nautilus outputs.
+"""
+
 from __future__ import annotations
 
+import math
+from contextlib import suppress
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-import math
+import pandas as pd  # type: ignore
+
+
+@dataclass(slots=True)
+class RunSpec:
+    """Parameter object for Nautilus backtest runs."""
+
+    dataset_id: str
+    strategy_id: str
+    params: dict[str, Any]
+    seed: int
+    from_date: str | None = None
+    to_date: str | None = None
 
 
 def _compute_date_list(from_date: str | None, to_date: str | None) -> list[str]:
     """Return list of YYYY-MM-DD strings inclusive; default to one RTH day when unspecified."""
-    import pandas as pd  # type: ignore
-
     if from_date and to_date:
         return (
             pd.date_range(pd.to_datetime(from_date), pd.to_datetime(to_date), freq="1D")
@@ -21,8 +40,6 @@ def _compute_date_list(from_date: str | None, to_date: str | None) -> list[str]:
 
 def _load_quotes_dataframe(venue: str, symbol: str, dates: list[str]):
     """Load and normalize warehouse QuoteTicks parquet for given (venue, symbol, dates)."""
-    from pathlib import Path
-    import pandas as pd  # type: ignore
 
     def _qpath(date_str: str) -> Path:
         return (
@@ -60,6 +77,7 @@ def _load_quotes_dataframe(venue: str, symbol: str, dates: list[str]):
 
 def _setup_engine_and_instrument(venue: str, instrument_id: str):
     """Initialize Nautilus engine, configure client routing, add venue and instrument.
+
     Returns (engine, instrument, client_id_or_none).
     """
     # Import lazily to preserve original error semantics when Nautilus is missing
@@ -178,7 +196,7 @@ def _collect_analyzer_data(engine: Any) -> tuple[dict[str, Any], dict[str, list]
 
 
 def _wrangle_quote_ticks(instr, pdf):
-    """Convert normalized quotes DataFrame into Nautilus QuoteTick objects for a given instrument."""
+    """Convert quotes DataFrame into Nautilus QuoteTick objects."""
     from nautilus_trader.persistence.wranglers import QuoteTickDataWrangler  # type: ignore
 
     wrangler = QuoteTickDataWrangler(instr)
@@ -227,33 +245,18 @@ class NautilusBacktestRunner:
     def run(
         self,
         *,
-        dataset_id: str,
-        strategy_id: str,
-        params: dict[str, Any],
-        seed: int,
-        from_date: str | None = None,
-        to_date: str | None = None,
+        spec: RunSpec,
     ) -> dict[str, Any]:
-        return self._run_real(
-            dataset_id=dataset_id,
-            strategy_id=strategy_id,
-            params=params,
-            seed=seed,
-            from_date=from_date,
-            to_date=to_date,
-        )
+        """Execute a backtest via the real Nautilus engine and return artifacts."""
+        return self._run_real(spec=spec)
 
     def _run_real(
         self,
         *,
-        dataset_id: str,
-        strategy_id: str,
-        params: dict[str, Any],
-        seed: int,
-        from_date: str | None,
-        to_date: str | None,
+        spec: RunSpec,
     ) -> dict[str, Any]:
         """Real engine execution path using nautilus-trader.
+
         Raises ImportError if nautilus-trader is not installed.
         """
         # Ensure Nautilus dependency is available (fail fast)
@@ -262,16 +265,16 @@ class NautilusBacktestRunner:
         # Load QuoteTicks from warehouse and feed to Nautilus (Approach A: INTERNAL MID)
         # - Instrument: default to AAPL.XNAS unless provided via params
 
-        instrument_id = str(params.get("instrument_id", "AAPL.XNAS"))
+        instrument_id = str(spec.params.get("instrument_id", "AAPL.XNAS"))
 
         # Resolve venue/symbol and date range, then load quotes
         symbol = instrument_id.split(".")[0]
         venue = instrument_id.split(".")[1] if "." in instrument_id else "XNAS"
-        dates = _compute_date_list(from_date, to_date)
+        dates = _compute_date_list(spec.from_date, spec.to_date)
         pdf = _load_quotes_dataframe(venue, symbol, dates)
 
         # Build strategy
-        strategy = _prepare_strategy(strategy_id, params, instrument_id)
+        strategy = _prepare_strategy(spec.strategy_id, spec.params, instrument_id)
 
         # Engine wiring (Nautilus 1.219.0 API)
         engine, instr, client_id = _setup_engine_and_instrument(venue, instrument_id)
@@ -321,6 +324,7 @@ class NautilusBacktestRunner:
 
     def _get_account_values(self, engine: Any) -> tuple[float, float, float]:
         """Return (bal_val, upnl_val, ending_equity) from Nautilus engine portfolio.
+
         Lazily imports USD to avoid module import cost when unused.
         """
         from nautilus_trader.model.currencies import USD  # type: ignore
@@ -423,15 +427,19 @@ class NautilusBacktestRunner:
         try:
             metrics.update(self._metrics_from_portfolio(engine, starting_balance))
             logger.info(
-                f"Extracted metrics: start=${starting_balance:.2f}, cash_end=${metrics['ending_balance']:.2f}, "
-                f"upnl=${metrics['unrealized_pnl']:.2f}, equity_end=${metrics['ending_equity']:.2f}, return={metrics['total_return']:.4f}"
+                f"Extracted metrics: start=${starting_balance:.2f}, "
+                f"cash_end=${metrics['ending_balance']:.2f}, "
+                f"upnl=${metrics['unrealized_pnl']:.2f}, "
+                f"equity_end=${metrics['ending_equity']:.2f}, "
+                f"return={metrics['total_return']:.4f}"
             )
         except AttributeError:
             logger.error("❌ CRITICAL: Portfolio API unavailable for metrics extraction")
             metrics.update(self._metrics_from_equity_snapshot(equity, starting_balance))
         except Exception as e:
             logger.error(
-                f"❌ CRITICAL: Unexpected error extracting Nautilus metrics: {type(e).__name__}: {e}"
+                "❌ CRITICAL: Unexpected error extracting Nautilus metrics: "
+                f"{type(e).__name__}: {e}"
             )
             import traceback
 
@@ -445,10 +453,8 @@ class NautilusBacktestRunner:
         metrics["win_rate"] = self._calculate_win_rate(fills)
 
         # Capture end-of-run position quantity for the instrument (diagnostics)
-        try:
+        with suppress(Exception):
             metrics["end_position_qty"] = float(self._end_position_qty(engine))
-        except Exception:
-            pass
 
         logger.info(
             f"Final metrics: total_return={metrics['total_return']:.4f}, "
@@ -478,8 +484,7 @@ class NautilusBacktestRunner:
 
             if peak and peak > 0:
                 dd = (v - peak) / peak  # <= 0
-                if dd < min_drawdown:
-                    min_drawdown = dd
+                min_drawdown = min(dd, min_drawdown)
 
         return float(min_drawdown)
 

@@ -1,14 +1,11 @@
-"""
-Tests for backend/utils/git.py utility functions.
-"""
+"""Tests for backend/utils/git.py utility functions."""
 
 import subprocess
-from unittest.mock import patch, MagicMock
-
+from unittest.mock import MagicMock, patch
 
 from backend.utils.git import (
-    get_git_commit_hash,
     get_git_branch,
+    get_git_commit_hash,
     is_git_repo,
 )
 

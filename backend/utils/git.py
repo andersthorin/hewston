@@ -1,5 +1,4 @@
-"""
-Git utilities for version control operations.
+"""Git utilities for version control operations.
 
 This module centralizes git-related operations to avoid duplication
 across the backend codebase.
@@ -9,8 +8,7 @@ import subprocess
 
 
 def get_git_commit_hash() -> str | None:
-    """
-    Get the current git commit hash.
+    """Get the current git commit hash.
 
     Returns:
         The current commit hash, or None if git is not available.
@@ -30,8 +28,7 @@ def get_git_commit_hash() -> str | None:
 
 
 def get_git_branch() -> str | None:
-    """
-    Get the current git branch name.
+    """Get the current git branch name.
 
     Returns:
         The current branch name, or None if git is not available.

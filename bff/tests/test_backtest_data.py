@@ -1,15 +1,30 @@
-"""
-Run Data Tests
+"""Backtest data tests.
 
-Tests for the run data aggregation functionality following the acceptance criteria
-from Story 8.4 and the QA checklist.
+Tests for the run data aggregation functionality following the acceptance
+criteria from Story 8.4 and the QA checklist.
 """
 
 import json
+from http import HTTPStatus
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
+
+EXPECTED_TOTAL_RETURN = 15.5
+EXPECTED_SHARPE_RATIO = 1.2
+EXPECTED_TOTAL_TRADES = 10
+EXPECTED_MAX_DRAWDOWN = -5.3
+EXPECTED_WIN_RATE = 65.0
+EXPECTED_WINNING_TRADES = 7
+EXPECTED_LOSING_TRADES = 3
+EQUITY_LEN = 2
+EQUITY_VALUE_START = 100000.0
+EQUITY_VALUE_END = 115500.0
+ORDER_QTY_100 = 100
+BACKEND_CALLS_4 = 4
+BACKEND_CALLS_2 = 2
+EQUITY_POINTS_2 = 2
 
 
 class TestBacktestDataEndpoint:
@@ -62,10 +77,10 @@ class TestBacktestDataEndpoint:
 
         # Mock backend responses
         responses = [
-            mock_backend_response(200, run_details),
-            mock_backend_response(200, metrics_data),
-            mock_backend_response(200, equity_data),
-            mock_backend_response(200, orders_data),
+            mock_backend_response(HTTPStatus.OK, run_details),
+            mock_backend_response(HTTPStatus.OK, metrics_data),
+            mock_backend_response(HTTPStatus.OK, equity_data),
+            mock_backend_response(HTTPStatus.OK, orders_data),
         ]
         mock_backend_client.request.side_effect = responses
 
@@ -73,7 +88,7 @@ class TestBacktestDataEndpoint:
         response = test_client.get("/api/v1/backtests/test-run-123/complete")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
 
         # Verify run details
@@ -83,29 +98,29 @@ class TestBacktestDataEndpoint:
         assert data["run"]["symbol"] == "AAPL"
 
         # Verify metrics
-        assert data["metrics"]["total_return"] == 15.5
-        assert data["metrics"]["sharpe_ratio"] == 1.2
-        assert data["metrics"]["total_trades"] == 10
+        assert data["metrics"]["total_return"] == EXPECTED_TOTAL_RETURN
+        assert data["metrics"]["sharpe_ratio"] == EXPECTED_SHARPE_RATIO
+        assert data["metrics"]["total_trades"] == EXPECTED_TOTAL_TRADES
 
         # Verify equity curve
-        assert len(data["equity"]) == 2
-        assert data["equity"][0]["value"] == 100000.0
-        assert data["equity"][1]["value"] == 115500.0
+        assert len(data["equity"]) == EQUITY_LEN
+        assert data["equity"][0]["value"] == EQUITY_VALUE_START
+        assert data["equity"][1]["value"] == EQUITY_VALUE_END
 
         # Verify orders
         assert len(data["orders"]) == 1
         assert data["orders"][0]["order_id"] == "order-1"
         assert data["orders"][0]["side"] == "BUY"
-        assert data["orders"][0]["quantity"] == 100
+        assert data["orders"][0]["quantity"] == ORDER_QTY_100
 
         # Verify metadata
         metadata = data["metadata"]
-        assert metadata["backend_calls"] == 4
+        assert metadata["backend_calls"] == BACKEND_CALLS_4
         assert metadata["partial_data"] is False
         assert metadata["cache_hit"] is False
         assert "load_time_ms" in metadata
         assert metadata["orders_count"] == 1
-        assert metadata["equity_points"] == 2
+        assert metadata["equity_points"] == EQUITY_POINTS_2
 
     def test_complete_run_data_partial_failure(
         self, test_client: TestClient, mock_backend_client, mock_backend_response
@@ -124,10 +139,10 @@ class TestBacktestDataEndpoint:
         orders_data = {"orders": []}
 
         responses = [
-            mock_backend_response(200, run_details),
-            mock_backend_response(500),  # Metrics fail
-            mock_backend_response(200, equity_data),
-            mock_backend_response(200, orders_data),
+            mock_backend_response(HTTPStatus.OK, run_details),
+            mock_backend_response(HTTPStatus.INTERNAL_SERVER_ERROR),  # Metrics fail
+            mock_backend_response(HTTPStatus.OK, equity_data),
+            mock_backend_response(HTTPStatus.OK, orders_data),
         ]
         mock_backend_client.request.side_effect = responses
 
@@ -135,7 +150,7 @@ class TestBacktestDataEndpoint:
         response = test_client.get("/api/v1/backtests/test-run-123/complete")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
 
         # Verify run details still present
@@ -165,7 +180,7 @@ class TestBacktestDataEndpoint:
         response = test_client.get("/api/v1/backtests/nonexistent-run/complete")
 
         # Assert
-        assert response.status_code == 404
+        assert response.status_code == HTTPStatus.NOT_FOUND
         assert "not found" in response.json()["detail"]
 
     def test_complete_run_data_selective_inclusion(
@@ -184,8 +199,8 @@ class TestBacktestDataEndpoint:
 
         # Only run details and metrics should be called
         responses = [
-            mock_backend_response(200, run_details),
-            mock_backend_response(200, metrics_data),
+            mock_backend_response(HTTPStatus.OK, run_details),
+            mock_backend_response(HTTPStatus.OK, metrics_data),
         ]
         mock_backend_client.request.side_effect = responses
 
@@ -196,17 +211,17 @@ class TestBacktestDataEndpoint:
         )
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
 
         assert data["run"]["run_id"] == "test-run-123"
-        assert data["metrics"]["total_return"] == 15.5
+        assert data["metrics"]["total_return"] == EXPECTED_TOTAL_RETURN
         assert data["equity"] is None
         assert data["orders"] is None
 
         # Verify only 2 backend calls were made
         metadata = data["metadata"]
-        assert metadata["backend_calls"] == 2
+        assert metadata["backend_calls"] == BACKEND_CALLS_2
 
     def test_run_status_endpoint(
         self, test_client: TestClient, mock_backend_client, mock_backend_response
@@ -222,14 +237,14 @@ class TestBacktestDataEndpoint:
             "started_at": "2024-01-01T00:01:00Z",
         }
 
-        mock_response = mock_backend_response(200, run_details)
+        mock_response = mock_backend_response(HTTPStatus.OK, run_details)
         mock_backend_client.request.return_value = mock_response
 
         # Act
         response = test_client.get("/api/v1/backtests/test-run-123/status")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
 
         assert data["run_id"] == "test-run-123"
@@ -259,7 +274,7 @@ class TestBacktestDataAggregation:
         # Create simple mock responses without delays for testing
         def create_mock_response(data):
             mock_resp = MagicMock()
-            mock_resp.status_code = 200
+            mock_resp.status_code = HTTPStatus.OK
             mock_resp.content = json.dumps(data).encode()
             mock_resp.body = json.dumps(data).encode()  # Add body attribute
             return mock_resp
@@ -283,8 +298,8 @@ class TestBacktestDataAggregation:
 
         # Assert
         assert result.run.run_id == "test"
-        assert result.metadata.backend_calls == 4
-        assert mock_backend_client.proxy_request.call_count == 4
+        assert result.metadata.backend_calls == BACKEND_CALLS_4
+        assert mock_backend_client.proxy_request.call_count == BACKEND_CALLS_4
 
     def test_data_transformation(self):
         """Test backend data transformation to frontend format."""
@@ -331,13 +346,13 @@ class TestBacktestDataAggregation:
         metrics = aggregator._transform_metrics(backend_data, "test-correlation")
 
         # Assert
-        assert metrics.total_return == 15.5
-        assert metrics.sharpe_ratio == 1.2
-        assert metrics.max_drawdown == -5.3
-        assert metrics.win_rate == 65.0
-        assert metrics.total_trades == 10
-        assert metrics.winning_trades == 7
-        assert metrics.losing_trades == 3
+        assert metrics.total_return == EXPECTED_TOTAL_RETURN
+        assert metrics.sharpe_ratio == EXPECTED_SHARPE_RATIO
+        assert metrics.max_drawdown == EXPECTED_MAX_DRAWDOWN
+        assert metrics.win_rate == EXPECTED_WIN_RATE
+        assert metrics.total_trades == EXPECTED_TOTAL_TRADES
+        assert metrics.winning_trades == EXPECTED_WINNING_TRADES
+        assert metrics.losing_trades == EXPECTED_LOSING_TRADES
 
 
 class TestBacktestDataCaching:
@@ -376,12 +391,12 @@ class TestBacktestDataCaching:
             "symbol": "AAPL",
         }
 
-        mock_response = mock_backend_response(200, run_details)
+        mock_response = mock_backend_response(HTTPStatus.OK, run_details)
         mock_backend_client.request.return_value = mock_response
 
         # Act
         response = test_client.get("/api/v1/backtests/completed-run/complete")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         # The caching logic is tested implicitly through the endpoint behavior

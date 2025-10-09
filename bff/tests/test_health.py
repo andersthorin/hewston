@@ -1,13 +1,15 @@
-"""
-BFF Health Endpoint Tests
+"""BFF Health Endpoint Tests.
 
 Tests for the health check functionality following the acceptance criteria
 from Story 8.1 and the QA checklist.
 """
 
+from http import HTTPStatus
 from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
+
+CORRELATION_ID_HEX_LEN = 32
 
 
 class TestHealthEndpoint:
@@ -17,7 +19,7 @@ class TestHealthEndpoint:
         """Test successful health check with all dependencies healthy."""
         # Arrange
         mock_response = MagicMock()
-        mock_response.status_code = 200
+        mock_response.status_code = HTTPStatus.OK
         mock_response.json.return_value = {"status": "ok"}
         mock_backend_client.get.return_value = mock_response
 
@@ -25,7 +27,7 @@ class TestHealthEndpoint:
         response = test_client.get("/api/v1/health")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
 
         assert data["status"] == "ok"
@@ -48,7 +50,7 @@ class TestHealthEndpoint:
         response = test_client.get("/api/v1/health")
 
         # Assert
-        assert response.status_code == 200  # Health endpoint should still respond
+        assert response.status_code == HTTPStatus.OK  # Health endpoint should still respond
         data = response.json()
 
         assert data["status"] == "degraded"  # Overall status degraded
@@ -58,14 +60,14 @@ class TestHealthEndpoint:
         """Test health check when backend returns non-200 status."""
         # Arrange
         mock_response = MagicMock()
-        mock_response.status_code = 500
+        mock_response.status_code = HTTPStatus.INTERNAL_SERVER_ERROR
         mock_backend_client.get.return_value = mock_response
 
         # Act
         response = test_client.get("/api/v1/health")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
 
         assert data["status"] == "degraded"
@@ -75,14 +77,14 @@ class TestHealthEndpoint:
         """Test readiness check when backend is healthy."""
         # Arrange
         mock_response = MagicMock()
-        mock_response.status_code = 200
+        mock_response.status_code = HTTPStatus.OK
         mock_backend_client.get.return_value = mock_response
 
         # Act
         response = test_client.get("/api/v1/health/ready")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert data["status"] == "ready"
 
@@ -95,7 +97,7 @@ class TestHealthEndpoint:
         response = test_client.get("/api/v1/health/ready")
 
         # Assert
-        assert response.status_code == 503
+        assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
         data = response.json()
         assert "Service not ready" in data["detail"]
 
@@ -105,7 +107,7 @@ class TestHealthEndpoint:
         response = test_client.get("/api/v1/health/live")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
         assert data["status"] == "alive"
 
@@ -115,7 +117,7 @@ class TestHealthEndpoint:
         response = test_client.get("/api/v1/health")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
 
         # Verify required fields
@@ -144,9 +146,10 @@ class TestHealthEndpoint:
         response = test_client.get("/api/v1/health")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         assert "X-Correlation-ID" in response.headers
-        assert len(response.headers["X-Correlation-ID"]) == 32  # UUID hex length
+        # UUID hex length
+        assert len(response.headers["X-Correlation-ID"]) == CORRELATION_ID_HEX_LEN
 
 
 class TestHealthIntegration:
@@ -158,7 +161,7 @@ class TestHealthIntegration:
         response = test_client.get("/api/v1/health")
 
         # Assert
-        assert response.status_code == 200
+        assert response.status_code == HTTPStatus.OK
         data = response.json()
 
         # Redis should not be in dependencies when disabled
@@ -172,7 +175,7 @@ class TestHealthIntegration:
 
         # Assert - all should succeed
         for response in responses:
-            assert response.status_code == 200
+            assert response.status_code == HTTPStatus.OK
             data = response.json()
             assert data["service"] == "hewston-bff"
             assert "timestamp" in data

@@ -1,5 +1,4 @@
-"""
-BFF Test Configuration
+"""BFF test configuration.
 
 Provides test fixtures and configuration for BFF service testing.
 """

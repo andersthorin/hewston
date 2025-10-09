@@ -14,6 +14,14 @@ DATABENTO_API_KEY ?= test-key
 HEWSTON_CATALOG_PATH ?= data/catalog.db
 HEWSTON_DATA_DIR ?= data
 
+
+# Security scanning config
+BANDIT_EXCLUDES := backend/tests,bff/tests
+
+# Quiet summary commands for CI appends
+BANDIT_SUMMARY_CMD = if [ -x .venv/bin/bandit ]; then .venv/bin/bandit -q -r backend bff -x $(BANDIT_EXCLUDES) -f json -o bandit-report.json --exit-zero; else bandit -q -r backend bff -x $(BANDIT_EXCLUDES) -f json -o bandit-report.json --exit-zero; fi; if [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=python3; fi; $$PY -c 'import json,sys; d=json.load(open("bandit-report.json")); c={"LOW":0,"MEDIUM":0,"HIGH":0}; [c.__setitem__(i.get("issue_severity","LOW"), c.get(i.get("issue_severity","LOW"),0)+1) for i in d.get("results", [])]; print("High: {} Medium: {} Low: {} (see bandit-report.json)".format(c["HIGH"], c["MEDIUM"], c["LOW"])); sys.exit(1 if c["HIGH"]>0 else 0)'
+PIP_AUDIT_CMD = if [ -x .venv/bin/pip-audit ]; then PA=.venv/bin/pip-audit; else PA=pip-audit; fi; $$PA --progress-spinner=off -f json -o pip-audit-report.json >/dev/null 2>&1 || true; if [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=python3; fi; $$PY scripts/pip_audit_summary.py
+
 # Defaults (override on CLI: make data SYMBOL=AAPL YEAR=2023)
 # These match the baseline values in docs/prd/features/00-baselines.md
 SYMBOL ?= AAPL
@@ -39,6 +47,40 @@ START ?=
 END ?=
 VENUE ?= XNAS
 WORKERS ?= 4
+
+# Use bash for better pipefail behavior in quiet runner
+SHELL := /bin/bash
+
+# Quiet runner macro: prints a green check on success; on failure prints red cross.
+# Behavior:
+#  - On success: if 5th arg == 'append', append a concise single-line summary from stdout
+#  - On failure with third arg == 'warn': prints Fail and, if 5th arg == 'append', appends summary (no log dump)
+#  - On failure otherwise: prints Fail and exits (compact if 4th arg == 'compact', else dump logs)
+# Args: (1)=label, (2)=command, (3)=[warn]|, (4)=[compact]|, (5)=[append]|
+define RUN_QUIET
+	@printf "%-40s" "$(1)"; \
+	logfile=$$(mktemp); \
+	set -o pipefail; \
+	( $(2) ) >$$logfile 2>&1; status=$$?; \
+	one_line=$$(tr '\n' ' ' < $$logfile | sed -e 's/[[:space:]]\+/ /g' -e 's/[[:space:]]$$//'); \
+	if [ $$status -eq 0 ]; then \
+		printf " \033[32m\342\234\223 Pass\033[0m"; \
+		if [ "$(5)" = "append" ] && [ -n "$$one_line" ]; then printf " — %s" "$$one_line"; fi; \
+		printf "\n"; \
+	else \
+		if [ "$(3)" = "warn" ]; then \
+			printf " \033[31m\342\234\227 Fail\033[0m"; \
+			if [ "$(5)" = "append" ] && [ -n "$$one_line" ]; then printf " — %s" "$$one_line"; fi; \
+			printf "\n"; \
+		else \
+			printf " \033[31m\342\234\227 Fail\033[0m"; \
+			if [ "$(4)" = "compact" ]; then printf ""; else echo "\n----- $(1) output -----"; cat $$logfile; fi; \
+			rm -f $$logfile; exit $$status; \
+		fi; \
+	fi; \
+	rm -f $$logfile
+endef
+
 
 # -------- Meta --------
 .PHONY: help
@@ -265,18 +307,30 @@ ci-architecture:
 
 .PHONY: ci
 ci:
-	@echo "[ci] Using pinned toolchain — run: make setup && make dev-install (once)" && \
-	$(MAKE) ci-versions && \
-	echo "[ci] Ruff (lint)" && ( if [ -x .venv/bin/ruff ]; then .venv/bin/ruff check backend bff; else ruff check backend bff; fi ) && \
-	echo "[ci] Black (format check)" && ( if [ -x .venv/bin/black ]; then .venv/bin/black --check backend bff; else black --check backend bff; fi ) && \
-	echo "[ci] MyPy (type check)" && ( if [ -x .venv/bin/mypy ]; then .venv/bin/mypy backend bff; else mypy backend bff; fi ) && \
-	echo "[ci] Import Linter (architecture)" && ( if [ -x .venv/bin/lint-imports ]; then .venv/bin/lint-imports --config linter.ini; else lint-imports --config linter.ini; fi ) && \
-	echo "[ci] PyTest (backend)" && ( if [ -x .venv/bin/pytest ]; then PYTHONPATH=. .venv/bin/pytest -q backend/tests --cov=backend --cov-report=term-missing; else PYTHONPATH=. pytest -q backend/tests --cov=backend --cov-report=term-missing; fi ) && \
-	echo "[ci] PyTest (bff)" && ( if [ -x .venv/bin/pytest ]; then PYTHONPATH=. .venv/bin/pytest -q bff/tests --cov=bff --cov-report=term-missing; else PYTHONPATH=. pytest -q bff/tests --cov=bff --cov-report=term-missing; fi ) && \
-	echo "[ci] Bandit (security)" && ( if [ -x .venv/bin/bandit ]; then .venv/bin/bandit -q -r backend bff; else bandit -q -r backend bff; fi ) || true && \
-	echo "[ci] pip-audit (dependencies)" && ( if [ -x .venv/bin/pip-audit ]; then .venv/bin/pip-audit --progress-spinner=off; else pip-audit --progress-spinner=off; fi ) || true && \
-	echo "[ci] Frontend: Prettier check" && cd $(FRONTEND_DIR) && { export NVM_DIR="$$HOME/.nvm"; [ -s "$$NVM_DIR/nvm.sh" ] && . "$$NVM_DIR/nvm.sh" && nvm use 22 >/dev/null 2>&1 || true; } && $(NPM) run prettier:check && \
-	echo "[ci] Frontend: ESLint (components/containers/views)" && $(NPM) run lint && \
-	echo "[ci] Frontend: ESLint (services/hooks/utils/store)" && $(NPM) run lint:services && \
-	echo "[ci] Frontend: Type check" && $(NPM) run type-check && \
-	echo "[ci] Frontend: Vitest (run once)" && $(NPM) test -s -- --run
+	@echo "[ci] Using pinned toolchain — run: make setup && make dev-install (once)"
+	$(call RUN_QUIET,Tool versions, $(MAKE) ci-versions)
+	$(call RUN_QUIET,Ruff (lint), if [ -x .venv/bin/ruff ]; then .venv/bin/ruff check backend bff -q; else ruff check backend bff -q; fi)
+	$(call RUN_QUIET,Black (format check), if [ -x .venv/bin/black ]; then .venv/bin/black --check backend bff; else black --check backend bff; fi)
+	$(call RUN_QUIET,MyPy (type check), if [ -x .venv/bin/mypy ]; then .venv/bin/mypy backend bff; else mypy backend bff; fi)
+	$(call RUN_QUIET,Import Linter (architecture), if [ -x .venv/bin/lint-imports ]; then .venv/bin/lint-imports --config linter.ini; else lint-imports --config linter.ini; fi)
+	$(call RUN_QUIET,PyTest (backend), if [ -x .venv/bin/pytest ]; then PYTHONPATH=. .venv/bin/pytest -q backend/tests --cov=backend --cov-report=term; else PYTHONPATH=. pytest -q backend/tests --cov=backend --cov-report=term; fi)
+	$(call RUN_QUIET,PyTest (bff), if [ -x .venv/bin/pytest ]; then PYTHONPATH=. .venv/bin/pytest -q bff/tests --cov=bff --cov-report=term; else PYTHONPATH=. pytest -q bff/tests --cov=bff --cov-report=term; fi)
+	@ printf "%-40s" "Bandit (scan)"; \
+	if [ -x .venv/bin/bandit ]; then .venv/bin/bandit -q -r backend bff -x $(BANDIT_EXCLUDES) -f json -o bandit-report.json --exit-zero; else bandit -q -r backend bff -x $(BANDIT_EXCLUDES) -f json -o bandit-report.json --exit-zero; fi; \
+	if [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=python3; fi; \
+	msg=$$($$PY -c 'import json,sys; d=json.load(open("bandit-report.json")); c={"LOW":0,"MEDIUM":0,"HIGH":0}; [c.__setitem__(i.get("issue_severity","LOW"), c.get(i.get("issue_severity","LOW"),0)+1) for i in d.get("results", [])]; print("High: {}, Medium: {}, Low: {} (see bandit-report.json)".format(c["HIGH"], c["MEDIUM"], c["LOW"])); sys.exit(1 if c["HIGH"]>0 else 0)'); st=$$?; \
+	if [ $$st -eq 0 ]; then printf " \033[32m\342\234\223 Pass\033[0m — %s\n" "$$msg"; else printf " \033[31m\342\234\227 Fail\033[0m — %s\n" "$$msg"; exit $$st; fi
+	@ printf "%-40s" "Pip Audit"; \
+	if [ -x .venv/bin/pip-audit ]; then PA=.venv/bin/pip-audit; else PA=pip-audit; fi; \
+	$$PA --progress-spinner=off -f json -o pip-audit-report.json >/dev/null 2>&1 || true; \
+	if [ -x .venv/bin/python ]; then PY=.venv/bin/python; else PY=python3; fi; \
+	msg=$$($$PY scripts/pip_audit_summary.py); st=$$?; \
+	if [ $$st -eq 0 ]; then \
+		printf " \033[32m\342\234\223 Pass\033[0m — %s\n" "$$msg"; \
+	else \
+		printf " \033[33m\342\232\240 Warning\033[0m — %s\n" "$$msg"; \
+	fi
+	$(call RUN_QUIET,Frontend: Prettier check, cd $(FRONTEND_DIR) && { export NVM_DIR="$$HOME/.nvm"; [ -s "$$NVM_DIR/nvm.sh" ] && . "$$NVM_DIR/nvm.sh" && nvm use 22 >/dev/null 2>&1 || true; } && $(NPM) run prettier:check)
+	$(call RUN_QUIET,Frontend: ESLint (src), cd $(FRONTEND_DIR) && $(NPM) run lint)
+	$(call RUN_QUIET,Frontend: Type check, cd $(FRONTEND_DIR) && $(NPM) run type-check)
+	$(call RUN_QUIET,Frontend: Vitest (run once), cd $(FRONTEND_DIR) && $(NPM) test -s -- --run)

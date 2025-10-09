@@ -1,5 +1,4 @@
-"""
-WebSocket API
+"""WebSocket API.
 
 Provides WebSocket endpoints for real-time communication with backend services.
 Handles run streaming, connection management, and message routing.
@@ -24,8 +23,7 @@ connection_manager = WebSocketConnectionManager()
 async def websocket_backtest_stream(
     websocket: WebSocket, backtest_id: str = Path(..., description="Backtest identifier to stream")
 ):
-    """
-    WebSocket endpoint for real-time backtest updates (canonical).
+    """WebSocket endpoint for real-time backtest updates (canonical).
 
     Provides bidirectional communication for backtest status, metrics,
     and order updates. Automatically subscribes to the specified backtest.
@@ -141,8 +139,7 @@ async def websocket_backtest_stream(
 
 @router.websocket("/stream")
 async def websocket_general_stream(websocket: WebSocket):
-    """
-    General WebSocket endpoint for multi-run streaming.
+    """General WebSocket endpoint for multi-run streaming.
 
     Allows clients to subscribe/unsubscribe to multiple runs
     dynamically through message-based control.
@@ -231,8 +228,7 @@ async def websocket_general_stream(websocket: WebSocket):
 
 @router.get("/websocket/stats")
 async def get_websocket_stats():
-    """
-    Get WebSocket connection statistics.
+    """Get WebSocket connection statistics.
 
     Returns information about active connections, subscriptions,
     and backend connections for monitoring purposes.
@@ -253,8 +249,7 @@ async def get_websocket_stats():
 # Health check endpoint for WebSocket service
 @router.get("/websocket/health")
 async def websocket_health():
-    """
-    WebSocket service health check.
+    """WebSocket service health check.
 
     Returns the health status of the WebSocket service
     and connection manager.

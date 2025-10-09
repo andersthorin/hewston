@@ -1,8 +1,15 @@
+"""Tests for equity precompute helpers (streamer precomputation)."""
+
 import math
+
 from backend.services.streamer import _precompute_metrics_from_equity
+
+EPS_12 = 1e-12
+EPS_6 = 1e-6
 
 
 def test_precompute_metrics_basic_series():
+    """Validate total_return, drawdown monotonicity, and sharpe shape."""
     rows = [
         {"ts_utc": "2024-01-01T00:00:00Z", "value": 100.0},
         {"ts_utc": "2024-01-01T00:01:00Z", "value": 110.0},
@@ -16,9 +23,12 @@ def test_precompute_metrics_basic_series():
     shp = m["sharpe_so_far"]
 
     # total return so far
-    assert trs[0] is not None and abs(trs[0] - 0.0) < 1e-12
-    assert trs[1] is not None and abs(trs[1] - 0.10) < 1e-6
-    assert trs[-1] is not None and abs(trs[-1] - 0.20) < 1e-6  # 120/100 - 1
+    assert trs[0] is not None
+    assert abs(trs[0] - 0.0) < EPS_12
+    assert trs[1] is not None
+    assert abs(trs[1] - 0.10) < EPS_6
+    assert trs[-1] is not None
+    assert abs(trs[-1] - 0.20) < EPS_6  # 120/100 - 1
 
     # drawdown is non-decreasing and within [0,1]
     prev = 0.0
@@ -26,7 +36,7 @@ def test_precompute_metrics_basic_series():
         if v is None:
             continue
         assert 0.0 <= v <= 1.0
-        assert v + 1e-12 >= prev
+        assert v + EPS_12 >= prev
         prev = v
 
     # sharpe first element is None; later can be None or finite number
@@ -36,6 +46,7 @@ def test_precompute_metrics_basic_series():
 
 
 def test_precompute_handles_zeros_and_nans():
+    """Precompute should handle zeros and nans without crashing."""
     rows = [
         {"ts_utc": "2024-01-01T00:00:00Z", "value": 0.0},
         {"ts_utc": "2024-01-01T00:01:00Z", "value": 0.0},
@@ -44,7 +55,8 @@ def test_precompute_handles_zeros_and_nans():
     m = _precompute_metrics_from_equity(rows)
     # total return undefined when base is zero
     assert m["total_return_so_far"][0] is None
-    # mdd should be defined (peak tracking), stays at 0 for flat zeros, then becomes 0 when peak rises
+    # mdd should be defined (peak tracking) and stays at 0 for flat zeros,
+    # then becomes 0 when the peak rises
     assert m["max_drawdown_so_far"][0] in (None, 0.0)
     # sharpe may be None when insufficient or zero variance
     assert m["sharpe_so_far"][1] is None

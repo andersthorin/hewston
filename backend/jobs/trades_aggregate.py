@@ -1,5 +1,4 @@
-"""
-Trades DBN -> per-minute and per-hour aggregates
+"""Trades DBN -> per-minute and per-hour aggregates.
 
 Partitions:
   data/warehouse/trades_agg/1min/venue=XNAS/symbol={SYM}/date=YYYY-MM-DD/agg.parquet
@@ -23,6 +22,9 @@ try:
     from databento import DBNStore  # type: ignore
 except Exception:
     DBNStore = None  # type: ignore
+
+
+DATE_TOKEN_LEN = 8  # YYYYMMDD
 
 
 def _base() -> Path:
@@ -68,6 +70,7 @@ def _bucket(df: pd.DataFrame, freq: str) -> pd.DataFrame:
 def aggregate_trades_dbn_to_parquet(
     dbn_file: Path, instrument_id: int, symbol: str, venue: str = "XNAS"
 ) -> tuple[Path, Path]:
+    """Aggregate a single trades DBN file to 1min and 1h parquet for a symbol/date."""
     if DBNStore is None:
         raise ImportError("databento is required to aggregate trades DBN files")
     store = DBNStore.from_file(str(dbn_file))
@@ -83,7 +86,7 @@ def aggregate_trades_dbn_to_parquet(
     # Date partition key
     date_str: str | None = None
     for tok in str(dbn_file).split("/")[-1].split(".")[0].split("-"):
-        if tok.isdigit() and len(tok) == 8:
+        if tok.isdigit() and len(tok) == DATE_TOKEN_LEN:
             date_str = f"{tok[0:4]}-{tok[4:6]}-{tok[6:8]}"
             break
     if not date_str:
@@ -104,6 +107,7 @@ def aggregate_trades_dbn_to_parquet(
 def aggregate_many(
     dbn_files: Iterable[Path], instrument_id: int, symbol: str, venue: str = "XNAS"
 ) -> list[tuple[Path, Path]]:
+    """Aggregate many trades DBN files; continue on errors and return written paths."""
     written: list[tuple[Path, Path]] = []
     for f in dbn_files:
         try:

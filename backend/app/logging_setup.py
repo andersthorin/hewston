@@ -1,3 +1,5 @@
+"""Structured logging configuration for backend using structlog and stdlib bridge."""
+
 from __future__ import annotations
 
 import json

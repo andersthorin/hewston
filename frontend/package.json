@@ -6,8 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint src/components src/containers src/views",
-    "lint:services": "eslint src/services src/hooks src/utils src/store",
+    "lint": "eslint src",
+    "lint:services": "eslint src",
     "test": "vitest",
     "preview": "vite preview",
     "type-check": "tsc --noEmit",

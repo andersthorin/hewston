@@ -1,60 +1,67 @@
+"""Service layer for backtests: catalog access and orchestration."""
+
 from __future__ import annotations
 
-import os
-from typing import Any
 import hashlib
 import json
 import multiprocessing
+import os
 from datetime import UTC
+from typing import Any
 
-
+from backend.domain.queries import BacktestListQuery
 from backend.ports.catalog import CatalogPort
 
 
 def get_catalog() -> CatalogPort:
     """Resolve catalog location without static dependency on adapters.
+
     Uses importlib to load SqliteCatalog dynamically to keep services decoupled.
     - If HEWSTON_CATALOG_PATH is set, use that
-    - If running under pytest (PYTEST_CURRENT_TEST) without explicit path, return a fresh in-memory DB per call
-    - Otherwise, use default persistent path
+    - If running under pytest (PYTEST_CURRENT_TEST) without explicit path,
+      return a fresh in-memory DB per call
+    - Otherwise, use default persistent path.
     """
     import importlib
 
     path = os.getenv("HEWSTON_CATALOG_PATH")
     module = importlib.import_module("backend.adapters.sqlite_catalog")
-    SqliteCatalog = getattr(module, "SqliteCatalog")
+    sqlite_catalog_cls = module.SqliteCatalog
     if not path and os.getenv("PYTEST_CURRENT_TEST"):
-        return SqliteCatalog(":memory:")  # type: ignore[return-value]
-    return SqliteCatalog(path)  # type: ignore[return-value]
+        return sqlite_catalog_cls(":memory:")  # type: ignore[return-value]
+    return sqlite_catalog_cls(path)  # type: ignore[return-value]
 
 
-def list_backtests_service(
-    *,
-    symbol: str | None = None,
-    strategy_id: str | None = None,
-    from_date: str | None = None,
-    to_date: str | None = None,
-    limit: int = 20,
-    offset: int = 0,
-    order: str | None = None,
-) -> dict[str, Any]:
+def list_backtests_service(q: BacktestListQuery) -> dict[str, Any]:
+    """List backtests with optional filters and pagination.
+
+    Args:
+      q: Backtest list query parameters.
+
+    Returns:
+      dict: {items, total, limit, offset}.
+    """
     # Sanitize inputs per story
-    limit = max(1, min(int(limit), 500))
-    offset = max(0, int(offset))
+    limit = max(1, min(int(q.limit), 500))
+    offset = max(0, int(q.offset))
     allowed_orders = {"created_at", "-created_at"}
-    order = order if order in allowed_orders else "-created_at"
+    order = q.order if q.order in allowed_orders else "-created_at"
+
+    from backend.domain.queries import BacktestListQuery
+
+    q_norm = BacktestListQuery(
+        symbol=q.symbol,
+        strategy_id=q.strategy_id,
+        from_date=q.from_date,
+        to_date=q.to_date,
+        limit=limit,
+        offset=offset,
+        order=order,
+    )
 
     catalog = get_catalog()
     try:
-        items, total = catalog.list_backtests(
-            symbol=symbol,
-            strategy_id=strategy_id,
-            from_date=from_date,
-            to_date=to_date,
-            limit=limit,
-            offset=offset,
-            order=order,
-        )
+        items, total = catalog.list_backtests(q_norm)
     except Exception:
         # If catalog not initialized yet, return empty defaults
         return {"items": [], "total": 0, "limit": limit, "offset": offset}
@@ -88,6 +95,14 @@ def list_backtests_service(
 
 
 def get_backtest_service(run_id: str) -> dict | None:
+    """Get a single backtest row enriched with run_from/run_to when available.
+
+    Args:
+      run_id: Backtest identifier.
+
+    Returns:
+      dict | None: The backtest record, or None if not found.
+    """
     catalog = get_catalog()
     try:
         run = catalog.get_backtest(run_id)
@@ -96,6 +111,7 @@ def get_backtest_service(run_id: str) -> dict | None:
     if not run:
         return None
     # Enrich with run_from/run_to from run-manifest.json when available
+
     try:
         mp = (run.get("artifacts") or {}).get("run_manifest_path") or (
             run.get("manifest") or {}
@@ -138,79 +154,30 @@ def _parse_iso8601(s: str) -> bool:
         return False
 
 
-def _write_minimal_manifest(
-    *,
-    manifest_path: str,
-    run_id: str,
-    dataset_id: str,
-    strategy_id: str,
-    params: dict,
-    seed: int,
-    slippage_fees: dict,
-    speed: int,
-    run_from: str | None,
-    run_to: str | None,
-    created_at: str,
-) -> None:
+def _write_minimal_manifest(*, manifest_path: str, manifest: dict) -> None:
     """Best-effort write of a minimal manifest; safe to fail silently."""
     try:
         from pathlib import Path as _Path
+
         from backend.utils.paths import ensure_dir as _ensure
         from backend.utils.paths import get_backtests_dir
 
-        _ensure(get_backtests_dir(run_id))
-        minimal_manifest = {
-            "run_id": run_id,
-            "dataset_id": dataset_id,
-            "strategy_id": strategy_id,
-            "params": params,
-            "seed": seed,
-            "slippage_fees": slippage_fees,
-            "speed": speed,
-            "run_from": run_from,
-            "run_to": run_to,
-            "code_hash": "unknown",
-            "created_at": created_at,
-            "tz": "America/New_York",
-        }
-        _Path(manifest_path).write_text(json.dumps(minimal_manifest, indent=2))
+        _ensure(get_backtests_dir(manifest.get("run_id")))
+        _Path(manifest_path).write_text(json.dumps(manifest, indent=2))
     except Exception:
         # Runner will overwrite with full manifest later
         pass
 
 
-def _enqueue_run_background(
-    *,
-    dataset_id: str,
-    strategy_id: str,
-    params: dict,
-    seed: int,
-    speed: int,
-    slippage_fees: dict,
-    run_id: str,
-    run_from: str | None,
-    run_to: str | None,
-) -> None:
+def _enqueue_run_background(*, job_args: dict) -> None:
     """Start background process to run backtest; non-blocking."""
     # Dynamically import job to avoid static dependency on jobs/adapters
     import importlib
 
     run_job_mod = importlib.import_module("backend.jobs.run_backtest")
-    run_backtest_and_persist = getattr(run_job_mod, "run_backtest_and_persist")
-
     p = multiprocessing.Process(
-        target=run_backtest_and_persist,
-        kwargs={
-            "dataset_id": dataset_id,
-            "strategy_id": strategy_id,
-            "params": params,
-            "seed": seed,
-            "speed": speed,
-            "slippage_fees": slippage_fees,
-            "run_id": run_id,
-            "from_date": run_from,
-            "to_date": run_to,
-        },
+        target=run_job_mod.run_backtest_and_persist,
+        kwargs={"req": job_args},
         daemon=True,
     )
     p.start()
@@ -302,50 +269,56 @@ def _check_idempotency_catalog(
 def _persist_queued_run_and_manifest(
     catalog,
     *,
-    run_id: str,
-    dataset_id: str,
-    strategy_id: str,
-    params: dict,
-    seed: int,
-    slippage_fees: dict,
-    speed: int,
-    created_at: str,
-    manifest_path: str,
-    input_hash: str,
-    idempotency_key: str | None,
+    creation: dict,
 ) -> tuple[str, bool]:
     try:
+        run_id = creation["run_id"]
+        dataset_id = creation["dataset_id"]
+        strategy_id = creation["strategy_id"]
+        params = creation["params"]
+        seed = creation["seed"]
+        slippage_fees = creation["slippage_fees"]
+        speed = creation["speed"]
+        created_at = creation["created_at"]
+        manifest_path = creation["manifest_path"]
+        input_hash = creation["input_hash"]
+        idempotency_key = creation.get("idempotency_key")
+
         catalog.create_backtest(
-            run_id=run_id,
-            dataset_id=dataset_id,
-            strategy_id=strategy_id,
-            params_json=json.dumps(params, sort_keys=True),
-            seed=seed,
-            slippage_fees_json=json.dumps(slippage_fees, sort_keys=True),
-            speed=speed,
-            code_hash="unknown",
-            created_at=created_at,
-            status="QUEUED",
-            run_manifest_path=manifest_path,
-            input_hash=input_hash,
-            idempotency_key=idempotency_key,
+            row={
+                "run_id": run_id,
+                "dataset_id": dataset_id,
+                "strategy_id": strategy_id,
+                "params_json": json.dumps(params, sort_keys=True),
+                "seed": seed,
+                "slippage_fees_json": json.dumps(slippage_fees, sort_keys=True),
+                "speed": speed,
+                "code_hash": "unknown",
+                "created_at": created_at,
+                "status": "QUEUED",
+                "run_manifest_path": manifest_path,
+                "input_hash": input_hash,
+                "idempotency_key": idempotency_key,
+            }
         )
-        _write_minimal_manifest(
-            manifest_path=manifest_path,
-            run_id=run_id,
-            dataset_id=dataset_id,
-            strategy_id=strategy_id,
-            params=params,
-            seed=seed,
-            slippage_fees=slippage_fees,
-            speed=speed,
-            run_from=None,
-            run_to=None,
-            created_at=created_at,
-        )
+        minimal_manifest = {
+            "run_id": run_id,
+            "dataset_id": dataset_id,
+            "strategy_id": strategy_id,
+            "params": params,
+            "seed": seed,
+            "slippage_fees": slippage_fees,
+            "speed": speed,
+            "run_from": None,
+            "run_to": None,
+            "code_hash": "unknown",
+            "created_at": created_at,
+            "tz": "America/New_York",
+        }
+        _write_minimal_manifest(manifest_path=manifest_path, manifest=minimal_manifest)
         return run_id, False
     except Exception:
-        existing = catalog.find_backtest_by_input_hash(input_hash)
+        existing = catalog.find_backtest_by_input_hash(creation["input_hash"])  # type: ignore[index]
         if existing:
             return existing["run_id"], True
         raise
@@ -363,6 +336,17 @@ def _canonical_inputs_hash(payload: dict) -> str:
 
 
 def create_backtest_service(body: dict, idempotency_key: str | None) -> tuple[dict, int]:
+    """Create a backtest row, write a minimal manifest, and enqueue the runner.
+
+    Applies idempotency by header key and canonical input hash.
+
+    Args:
+      body: JSON payload from request.
+      idempotency_key: Optional idempotency header value.
+
+    Returns:
+      tuple[dict, int]: (payload, HTTP status code).
+    """
     strategy_id = body.get("strategy_id")
     params = body.get("params", {})
     seed = int(body.get("seed", 42))
@@ -407,54 +391,62 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> tuple[di
     if mem_key in _IDEMP_CACHE:
         return {"run_id": _IDEMP_CACHE[mem_key], "status": "EXISTS"}, 200
 
+    payload: dict | None = None
+    status_code: int | None = None
+
     # Catalog idempotency (header, then hash)
     existing = _check_idempotency_catalog(catalog, input_hash, idempotency_key)
     if existing:
         _update_idemp_cache(mem_key, mem_idemp_key, existing["run_id"])  # type: ignore[arg-type]
-        return {"run_id": existing["run_id"], "status": "EXISTS"}, 200
+        payload = {"run_id": existing["run_id"], "status": "EXISTS"}
+        status_code = 200
 
-    # Create QUEUED row + manifest
-    from uuid import uuid4
-    from datetime import datetime
+    if payload is None:
+        # Create QUEUED row + manifest
+        from datetime import datetime
+        from uuid import uuid4
 
-    run_id = uuid4().hex
-    created_at = datetime.now(UTC).isoformat()
-    from backend.utils.paths import get_backtests_dir
+        run_id = uuid4().hex
+        created_at = datetime.now(UTC).isoformat()
+        from backend.utils.paths import get_backtests_dir
 
-    manifest_path = str((get_backtests_dir(run_id) / "run-manifest.json").resolve())
+        manifest_path = str((get_backtests_dir(run_id) / "run-manifest.json").resolve())
 
-    new_run_id, existed = _persist_queued_run_and_manifest(
-        catalog,
-        run_id=run_id,
-        dataset_id=dataset_id,  # type: ignore[arg-type]
-        strategy_id=strategy_id,  # type: ignore[arg-type]
-        params=params,
-        seed=seed,
-        slippage_fees=slippage_fees,
-        speed=speed,
-        created_at=created_at,
-        manifest_path=manifest_path,
-        input_hash=input_hash,
-        idempotency_key=idempotency_key,
-    )
-    if existed:
-        _update_idemp_cache(mem_key, mem_idemp_key, new_run_id)
-        return {"run_id": new_run_id, "status": "EXISTS"}, 200
+        creation = {
+            "run_id": run_id,
+            "dataset_id": dataset_id,  # type: ignore[arg-type]
+            "strategy_id": strategy_id,  # type: ignore[arg-type]
+            "params": params,
+            "seed": seed,
+            "slippage_fees": slippage_fees,
+            "speed": speed,
+            "created_at": created_at,
+            "manifest_path": manifest_path,
+            "input_hash": input_hash,
+            "idempotency_key": idempotency_key,
+        }
+        new_run_id, existed = _persist_queued_run_and_manifest(catalog, creation=creation)
+        if existed:
+            _update_idemp_cache(mem_key, mem_idemp_key, new_run_id)
+            payload = {"run_id": new_run_id, "status": "EXISTS"}
+            status_code = 200
+        else:
+            # Store in-memory idempotency keys for subsequent identical requests
+            _update_idemp_cache(mem_key, mem_idemp_key, new_run_id)
+            # Launch background process (non-blocking) to run and persist
+            job_args = {
+                "dataset_id": dataset_id,  # type: ignore[arg-type]
+                "strategy_id": strategy_id,  # type: ignore[arg-type]
+                "params": params,
+                "seed": seed,
+                "speed": speed,
+                "slippage_fees": slippage_fees,
+                "run_id": new_run_id,
+                "from_date": run_from,
+                "to_date": run_to,
+            }
+            _enqueue_run_background(job_args=job_args)
+            payload = {"run_id": new_run_id, "status": "QUEUED"}
+            status_code = 202
 
-    # Store in-memory idempotency keys for subsequent identical requests
-    _update_idemp_cache(mem_key, mem_idemp_key, new_run_id)
-
-    # Launch background process (non-blocking) to run and persist
-    _enqueue_run_background(
-        dataset_id=dataset_id,  # type: ignore[arg-type]
-        strategy_id=strategy_id,  # type: ignore[arg-type]
-        params=params,
-        seed=seed,
-        speed=speed,
-        slippage_fees=slippage_fees,
-        run_id=new_run_id,
-        run_from=run_from,
-        run_to=run_to,
-    )
-
-    return {"run_id": new_run_id, "status": "QUEUED"}, 202
+    return payload, status_code  # type: ignore[return-value]

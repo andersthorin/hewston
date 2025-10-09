@@ -1,7 +1,6 @@
 # ruff: noqa: B008
 
-"""
-BFF Health Check Endpoint
+"""BFF Health Check Endpoint.
 
 Enhanced health check that validates BFF service status and dependencies.
 Follows the pattern from backend/api/routes/health.py with additional checks.
@@ -9,6 +8,7 @@ Follows the pattern from backend/api/routes/health.py with additional checks.
 
 import logging
 from datetime import UTC, datetime
+from http import HTTPStatus
 from typing import Any
 
 import httpx
@@ -42,8 +42,7 @@ class DependencyCheck:
 
     @staticmethod
     async def check_backend_api(client: httpx.AsyncClient) -> str:
-        """
-        Check backend API health.
+        """Check backend API health.
 
         Args:
             client: HTTP client for backend communication
@@ -53,7 +52,7 @@ class DependencyCheck:
         """
         try:
             response = await client.get("/healthz", timeout=5.0)
-            if response.status_code == 200:
+            if response.status_code == HTTPStatus.OK:
                 return "ok"
             else:
                 return "degraded"
@@ -63,8 +62,7 @@ class DependencyCheck:
 
     @staticmethod
     async def check_redis(redis_client) -> str:
-        """
-        Check Redis connection.
+        """Check Redis connection.
 
         Args:
             redis_client: Redis client instance
@@ -88,8 +86,7 @@ async def health_check(
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
     redis_client=Depends(get_redis_client),
 ) -> HealthStatus:
-    """
-    Comprehensive health check for BFF service.
+    """Comprehensive health check for BFF service.
 
     Validates:
     - BFF service status
@@ -111,9 +108,7 @@ async def health_check(
         backend_status = await DependencyCheck.check_backend_api(backend_client)
         dependency_status["backend_api"] = backend_status
 
-        if backend_status == "down":
-            overall_status = "degraded"
-        elif backend_status == "degraded" and overall_status == "ok":
+        if backend_status in {"down", "degraded"}:
             overall_status = "degraded"
 
     # Check Redis
@@ -149,8 +144,7 @@ async def health_check(
 async def readiness_check(
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
 ) -> dict[str, str]:
-    """
-    Kubernetes-style readiness check.
+    """Kubernetes-style readiness check.
 
     Returns 200 if service is ready to accept traffic, 503 otherwise.
     """
@@ -158,15 +152,17 @@ async def readiness_check(
     backend_status = await DependencyCheck.check_backend_api(backend_client)
 
     if backend_status == "down":
-        raise HTTPException(status_code=503, detail="Service not ready - backend API unavailable")
+        raise HTTPException(
+            status_code=HTTPStatus.SERVICE_UNAVAILABLE,
+            detail="Service not ready - backend API unavailable",
+        )
 
     return {"status": "ready"}
 
 
 @router.get("/health/live")
 async def liveness_check() -> dict[str, str]:
-    """
-    Kubernetes-style liveness check.
+    """Kubernetes-style liveness check.
 
     Returns 200 if service is alive, 503 if it should be restarted.
     """

@@ -1,3 +1,5 @@
+"""FastAPI application entrypoint and middleware wiring."""
+
 import logging
 import time
 from uuid import uuid4
@@ -13,6 +15,7 @@ from backend.constants import API_TITLE, API_VERSION, CORS_ORIGINS
 
 
 def create_app() -> FastAPI:
+    """Create and configure the FastAPI app with routes and middleware."""
     configure_logging()
     app = FastAPI(title=API_TITLE, version=API_VERSION)
 
@@ -33,7 +36,9 @@ def create_app() -> FastAPI:
         start = time.perf_counter()
         response = await call_next(request)
         dur_ms = int((time.perf_counter() - start) * 1000)
-        try:
+        import contextlib
+
+        with contextlib.suppress(Exception):
             logger.info(
                 "http.access",
                 extra={
@@ -44,8 +49,6 @@ def create_app() -> FastAPI:
                     "latency_ms": dur_ms,
                 },
             )
-        except Exception:
-            pass
         return response
 
     # REST routes (canonical prefix)

@@ -1,5 +1,4 @@
-"""
-BFF Integration Tests
+"""BFF Integration Tests.
 
 Integration tests that verify BFF service works correctly with real dependencies.
 These tests require the backend service to be running.
@@ -7,6 +6,7 @@ These tests require the backend service to be running.
 
 import asyncio
 import os
+from http import HTTPStatus
 from unittest.mock import patch
 
 import httpx
@@ -14,6 +14,10 @@ import pytest
 
 from bff.app.config import BACKEND_BASE_URL
 from bff.app.main import create_app
+
+CORRELATION_ID_HEX_LEN = 32
+CONCURRENT_REQUESTS = 10
+EXPECTED_BFF_DEFAULT_PORT = 8001
 
 
 class TestBFFIntegration:
@@ -26,7 +30,7 @@ class TestBFFIntegration:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(f"{BACKEND_BASE_URL}/healthz", timeout=5.0)
-                if response.status_code != 200:
+                if response.status_code != HTTPStatus.OK:
                     pytest.skip("Backend service not available")
         except Exception:
             pytest.skip("Backend service not available")
@@ -37,7 +41,7 @@ class TestBFFIntegration:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/v1/health")
 
-            assert response.status_code == 200
+            assert response.status_code == HTTPStatus.OK
             data = response.json()
 
             assert data["status"] in ["ok", "degraded"]
@@ -52,7 +56,7 @@ class TestBFFIntegration:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(f"{BACKEND_BASE_URL}/healthz", timeout=5.0)
-                if response.status_code != 200:
+                if response.status_code != HTTPStatus.OK:
                     pytest.skip("Backend service not available")
         except Exception:
             pytest.skip("Backend service not available")
@@ -63,7 +67,7 @@ class TestBFFIntegration:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/v1/health/ready")
 
-            assert response.status_code == 200
+            assert response.status_code == HTTPStatus.OK
             data = response.json()
             assert data["status"] == "ready"
 
@@ -91,11 +95,11 @@ class TestBFFIntegration:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             response = await client.get("/api/v1/health/live")
 
-            assert response.status_code == 200
+            assert response.status_code == HTTPStatus.OK
             assert "X-Correlation-ID" in response.headers
 
             correlation_id = response.headers["X-Correlation-ID"]
-            assert len(correlation_id) == 32  # UUID hex length
+            assert len(correlation_id) == CORRELATION_ID_HEX_LEN  # UUID hex length
             assert correlation_id.isalnum()  # Should be alphanumeric
 
     @pytest.mark.asyncio
@@ -105,19 +109,19 @@ class TestBFFIntegration:
 
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            # Make 10 concurrent requests
-            tasks = [client.get("/api/v1/health/live") for _ in range(10)]
+            # Make concurrent requests
+            tasks = [client.get("/api/v1/health/live") for _ in range(CONCURRENT_REQUESTS)]
 
             responses = await asyncio.gather(*tasks)
 
             # All requests should succeed
             for response in responses:
-                assert response.status_code == 200
+                assert response.status_code == HTTPStatus.OK
                 assert "X-Correlation-ID" in response.headers
 
             # All correlation IDs should be unique
             correlation_ids = [r.headers["X-Correlation-ID"] for r in responses]
-            assert len(set(correlation_ids)) == 10  # All unique
+            assert len(set(correlation_ids)) == CONCURRENT_REQUESTS  # All unique
 
 
 class TestBFFConfiguration:
@@ -132,7 +136,7 @@ class TestBFFConfiguration:
             BFF_DEFAULT_PORT,
         )
 
-        assert BFF_DEFAULT_PORT == 8001
+        assert BFF_DEFAULT_PORT == EXPECTED_BFF_DEFAULT_PORT
         assert BFF_API_TITLE == "Hewston BFF API"
         assert BFF_API_VERSION == "0.1.0"
         assert BACKEND_BASE_URL == "http://127.0.0.1:8000"  # Default
@@ -179,7 +183,7 @@ class TestBFFProxyIntegration:
         try:
             async with httpx.AsyncClient() as client:
                 response = await client.get(f"{BACKEND_BASE_URL}/healthz", timeout=5.0)
-                if response.status_code != 200:
+                if response.status_code != HTTPStatus.OK:
                     pytest.skip("Backend service not available")
         except Exception:
             pytest.skip("Backend service not available")
@@ -190,12 +194,15 @@ class TestBFFProxyIntegration:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             # Test backtests list endpoint
             response = await client.get("/api/v1/backtests")
-            assert response.status_code == 200
+            assert response.status_code == HTTPStatus.OK
             assert "X-Correlation-ID" in response.headers
 
             # Test bars endpoint (should handle 404 gracefully if no data)
             response = await client.get("/api/v1/bars/daily?symbol=AAPL")
-            assert response.status_code in [200, 404]  # Either data exists or not
+            assert response.status_code in [
+                HTTPStatus.OK,
+                HTTPStatus.NOT_FOUND,
+            ]  # Either data exists or not
             assert "X-Correlation-ID" in response.headers
 
 
@@ -214,7 +221,7 @@ class TestBFFErrorHandling:
                 # Health check should still respond but show degraded status
                 response = await client.get("/api/v1/health")
 
-                assert response.status_code == 200
+                assert response.status_code == HTTPStatus.OK
                 data = response.json()
 
                 assert data["status"] == "degraded"
@@ -222,11 +229,11 @@ class TestBFFErrorHandling:
 
                 # Readiness check should fail
                 response = await client.get("/api/v1/health/ready")
-                assert response.status_code == 503
+                assert response.status_code == HTTPStatus.SERVICE_UNAVAILABLE
 
                 # Proxy endpoints should return 502 when backend unavailable
                 response = await client.get("/api/v1/backtests")
-                assert response.status_code == 502
+                assert response.status_code == HTTPStatus.BAD_GATEWAY
                 data = response.json()
                 assert data["error"]["code"] == "BACKEND_UNAVAILABLE"
 
@@ -239,8 +246,8 @@ class TestBFFErrorHandling:
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             # Test non-existent endpoint
             response = await client.get("/api/v1/nonexistent")
-            assert response.status_code == 404
+            assert response.status_code == HTTPStatus.NOT_FOUND
 
             # Test invalid method
             response = await client.post("/api/v1/health/live")
-            assert response.status_code == 405
+            assert response.status_code == HTTPStatus.METHOD_NOT_ALLOWED

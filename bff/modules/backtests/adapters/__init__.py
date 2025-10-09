@@ -1,1 +1,1 @@
-
+"""Adapters for backtests domain."""

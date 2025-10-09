@@ -1,11 +1,11 @@
-"""
-Shared test utilities for backend test suites.
-Moved from top-level tests/utils.py to reduce duplication
-and keep all backend test code under backend/.
+"""Shared test utilities for backend test suites.
+
+Moved from top-level tests/utils.py to reduce duplication and keep all backend
+test code under backend/.
 """
 
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 def setup_test_environment(
@@ -13,8 +13,8 @@ def setup_test_environment(
     monkeypatch: Any,
     *,
     api_key: str = "test-key",
-    additional_env: Optional[Dict[str, str]] = None,
-) -> Dict[str, str]:
+    additional_env: dict[str, str] | None = None,
+) -> dict[str, str]:
     """Set up common test environment variables.
 
     Returns a dict of environment variables applied.
@@ -34,7 +34,7 @@ def setup_test_environment(
     return env_vars
 
 
-def create_test_data_structure(base_path: Path) -> Dict[str, Path]:
+def create_test_data_structure(base_path: Path) -> dict[str, Path]:
     """Create a standard test data directory structure."""
     paths = {
         "raw_databento": base_path / "raw" / "databento",
