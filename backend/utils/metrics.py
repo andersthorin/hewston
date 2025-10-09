@@ -98,8 +98,7 @@ def compute_cumulative_metrics(
     minutes_per_session: int = 390,
     sessions_per_year: int = 252,
 ) -> list[tuple[str, dict[str, float | None]]]:
-    """
-    Compute cumulative-to-date metrics aligned to equity timestamps.
+    """Compute cumulative-to-date metrics aligned to equity timestamps.
 
     Inputs:
       - equity_rows: list of {"ts": ISO, "value": float}

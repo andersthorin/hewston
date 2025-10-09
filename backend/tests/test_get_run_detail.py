@@ -1,21 +1,32 @@
+"""Backtest detail REST shape tests with seeded SQLite catalog."""
+
 import os
-import tempfile
 import sqlite3
+import tempfile
+from http import HTTPStatus
+
 from fastapi.testclient import TestClient
 
-from backend.app.main import app
-from backend.adapters.sqlite_catalog import SqliteCatalog
 import backend.services.backtests as svc
+from backend.adapters.sqlite_catalog import SqliteCatalog
+from backend.app.main import app
+
+EXPECTED_SEED = 42
+EXPECTED_SPEED = 60
+EXPECTED_DURATION_MS = 1234
 
 
 def seed_one_run(db_path: str):
+    """Seed minimal dataset and backtest rows into a sqlite catalog."""
     SqliteCatalog(db_path)
     with sqlite3.connect(db_path) as conn:
         conn.execute("PRAGMA foreign_keys=ON;")
         conn.execute(
             """
-            INSERT INTO datasets (dataset_id, symbol, from_date, to_date, products_json, calendar_version, tz,
-                                  raw_dbn_json, bars_parquet_json, bars_manifest_path, generated_at, size_bytes, status)
+            INSERT INTO datasets (dataset_id, symbol, from_date, to_date, products_json,
+                                  calendar_version, tz,
+                                  raw_dbn_json, bars_parquet_json,
+                                  bars_manifest_path, generated_at, size_bytes, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -36,8 +47,11 @@ def seed_one_run(db_path: str):
         )
         conn.execute(
             """
-            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
-                                  code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
+            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json,
+                                  seed, slippage_fees_json, speed,
+                                  code_hash, created_at, status, duration_ms,
+                                  metrics_path, equity_path,
+                                  orders_path,
                                   fills_path, run_manifest_path)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -63,6 +77,7 @@ def seed_one_run(db_path: str):
 
 
 def test_get_run_detail_shape(monkeypatch):
+    """Validate detail shape contains core fields and artifacts."""
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = os.path.join(tmpdir, "catalog.db")
         seed_one_run(db_path)
@@ -70,7 +85,7 @@ def test_get_run_detail_shape(monkeypatch):
 
         client = TestClient(app)
         r = client.get("/api/v1/backtests/r100")
-        assert r.status_code == 200
+        assert r.status_code == HTTPStatus.OK
         j = r.json()
         # Core fields
         assert j["run_id"] == "r100"
@@ -78,9 +93,9 @@ def test_get_run_detail_shape(monkeypatch):
         assert j["strategy_id"] == "sma_crossover"
         assert j["status"] == "DONE"
         assert j["code_hash"] == "abcd"
-        assert j["seed"] == 42
-        assert j["speed"] == 60
-        assert j["duration_ms"] == 1234
+        assert j["seed"] == EXPECTED_SEED
+        assert j["speed"] == EXPECTED_SPEED
+        assert j["duration_ms"] == EXPECTED_DURATION_MS
         assert isinstance(j["params"], dict)
         assert isinstance(j["slippage_fees"], dict)
         # Artifacts object

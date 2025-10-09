@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from backend.app.main import app
 import backend.api.routes.backtests as wsmod
+from backend.app.main import app
 
 
 def test_ws_heartbeat_hb_event_monkeypatched_interval():

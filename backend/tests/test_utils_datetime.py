@@ -1,16 +1,14 @@
-"""
-Tests for backend/utils/datetime.py utility functions.
-"""
+"""Tests for backend/utils/datetime.py utility functions."""
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 
 import pandas as pd
 import pytest
 
 from backend.utils.datetime import (
-    utc_now,
-    normalize_timestamp,
     format_iso_timestamp,
+    normalize_timestamp,
+    utc_now,
 )
 
 
@@ -22,13 +20,13 @@ class TestDatetimeUtilities:
         result = utc_now()
 
         assert isinstance(result, datetime)
-        assert result.tzinfo == timezone.utc
+        assert result.tzinfo == UTC
 
     def test_utc_now_is_current_time(self):
         """Test utc_now returns approximately current time."""
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         result = utc_now()
-        after = datetime.now(timezone.utc)
+        after = datetime.now(UTC)
 
         # Should be within a reasonable time window (1 second)
         assert before <= result <= after
@@ -36,7 +34,7 @@ class TestDatetimeUtilities:
 
     def test_normalize_timestamp_with_datetime(self):
         """Test normalize_timestamp with datetime object."""
-        dt = datetime(2023, 1, 15, 10, 30, 45, tzinfo=timezone.utc)
+        dt = datetime(2023, 1, 15, 10, 30, 45, tzinfo=UTC)
 
         epoch_seconds, iso_string = normalize_timestamp(dt)
 
@@ -80,7 +78,7 @@ class TestDatetimeUtilities:
         assert isinstance(iso_string, str)
         assert epoch_seconds == epoch
         # Check ISO string is correct
-        expected_dt = datetime.fromtimestamp(epoch, tz=timezone.utc)
+        expected_dt = datetime.fromtimestamp(epoch, tz=UTC)
         assert iso_string == expected_dt.isoformat()
 
     def test_normalize_timestamp_with_epoch_float(self):
@@ -93,7 +91,7 @@ class TestDatetimeUtilities:
         assert isinstance(iso_string, str)
         assert epoch_seconds == int(epoch)  # Should truncate to integer
         # Check ISO string includes microseconds
-        expected_dt = datetime.fromtimestamp(epoch, tz=timezone.utc)
+        expected_dt = datetime.fromtimestamp(epoch, tz=UTC)
         assert iso_string == expected_dt.isoformat()
 
     def test_normalize_timestamp_edge_cases(self):
@@ -108,7 +106,7 @@ class TestDatetimeUtilities:
 
     def test_format_iso_timestamp_with_datetime(self):
         """Test format_iso_timestamp with datetime object."""
-        dt = datetime(2023, 1, 15, 10, 30, 45, 123456, tzinfo=timezone.utc)
+        dt = datetime(2023, 1, 15, 10, 30, 45, 123456, tzinfo=UTC)
 
         result = format_iso_timestamp(dt)
 
@@ -143,12 +141,12 @@ class TestDatetimeUtilities:
         result = format_iso_timestamp(epoch)
 
         assert isinstance(result, str)
-        expected_dt = datetime.fromtimestamp(epoch, tz=timezone.utc)
+        expected_dt = datetime.fromtimestamp(epoch, tz=UTC)
         assert result == expected_dt.isoformat()
 
     def test_timestamp_consistency(self):
         """Test that normalize and format functions are consistent."""
-        original_dt = datetime(2023, 1, 15, 10, 30, 45, tzinfo=timezone.utc)
+        original_dt = datetime(2023, 1, 15, 10, 30, 45, tzinfo=UTC)
 
         # Normalize then format should give same result as direct format
         epoch, iso_from_normalize = normalize_timestamp(original_dt)
@@ -179,7 +177,7 @@ class TestDatetimeUtilities:
 
     def test_microsecond_precision(self):
         """Test that microsecond precision is preserved where possible."""
-        dt_with_microseconds = datetime(2023, 1, 15, 10, 30, 45, 123456, tzinfo=timezone.utc)
+        dt_with_microseconds = datetime(2023, 1, 15, 10, 30, 45, 123456, tzinfo=UTC)
 
         epoch, iso = normalize_timestamp(dt_with_microseconds)
         formatted = format_iso_timestamp(dt_with_microseconds)

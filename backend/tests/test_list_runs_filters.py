@@ -1,15 +1,23 @@
+"""List backtests filters and ordering tests."""
+
 import os
-import tempfile
 import sqlite3
+import tempfile
+from http import HTTPStatus
 
 from fastapi.testclient import TestClient
 
-from backend.app.main import app
-from backend.adapters.sqlite_catalog import SqliteCatalog
 import backend.services.backtests as svc
+from backend.adapters.sqlite_catalog import SqliteCatalog
+from backend.app.main import app
+
+LIMIT_MAX = 500
+MIN_EXPECTED_TOTAL = 2
+
 
 
 def seed_sample_db(db_path: str):
+    """Seed sample datasets and backtests across two symbols."""
     SqliteCatalog(db_path)
     with sqlite3.connect(db_path) as conn:
         # Ensure foreign keys
@@ -17,8 +25,10 @@ def seed_sample_db(db_path: str):
         # Insert datasets
         conn.execute(
             """
-            INSERT INTO datasets (dataset_id, symbol, from_date, to_date, products_json, calendar_version, tz,
-                                  raw_dbn_json, bars_parquet_json, bars_manifest_path, generated_at, size_bytes, status)
+            INSERT INTO datasets (dataset_id, symbol, from_date, to_date, products_json,
+                                  calendar_version, tz,
+                                  raw_dbn_json, bars_parquet_json,
+                                  bars_manifest_path, generated_at, size_bytes, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -39,8 +49,10 @@ def seed_sample_db(db_path: str):
         )
         conn.execute(
             """
-            INSERT INTO datasets (dataset_id, symbol, from_date, to_date, products_json, calendar_version, tz,
-                                  raw_dbn_json, bars_parquet_json, bars_manifest_path, generated_at, size_bytes, status)
+            INSERT INTO datasets (dataset_id, symbol, from_date, to_date, products_json,
+                                  calendar_version, tz,
+                                  raw_dbn_json, bars_parquet_json,
+                                  bars_manifest_path, generated_at, size_bytes, status)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
@@ -72,8 +84,11 @@ def seed_sample_db(db_path: str):
         # Insert runs (canonical backtests)
         conn.execute(
             """
-            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
-                                  code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
+            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json,
+                                  seed, slippage_fees_json, speed,
+                                  code_hash, created_at, status, duration_ms,
+                                  metrics_path, equity_path,
+                                  orders_path,
                                   fills_path, run_manifest_path)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -98,8 +113,11 @@ def seed_sample_db(db_path: str):
         )
         conn.execute(
             """
-            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
-                                  code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
+            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json,
+                                  seed, slippage_fees_json, speed,
+                                  code_hash, created_at, status, duration_ms,
+                                  metrics_path, equity_path,
+                                  orders_path,
                                   fills_path, run_manifest_path)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -124,8 +142,11 @@ def seed_sample_db(db_path: str):
         )
         conn.execute(
             """
-            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json, seed, slippage_fees_json, speed,
-                                  code_hash, created_at, status, duration_ms, metrics_path, equity_path, orders_path,
+            INSERT INTO backtests (backtest_id, dataset_id, strategy_id, params_json,
+                                  seed, slippage_fees_json, speed,
+                                  code_hash, created_at, status, duration_ms,
+                                  metrics_path, equity_path,
+                                  orders_path,
                                   fills_path, run_manifest_path)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -151,6 +172,7 @@ def seed_sample_db(db_path: str):
 
 
 def test_list_runs_filters_and_order(monkeypatch):
+    """Verify filters, ordering, and limit clamping for list endpoint."""
     with tempfile.TemporaryDirectory() as tmpdir:
         db_path = os.path.join(tmpdir, "catalog.db")
         seed_sample_db(db_path)
@@ -161,16 +183,17 @@ def test_list_runs_filters_and_order(monkeypatch):
 
         # Default order: -created_at (DESC)
         r = client.get("/api/v1/backtests", params={"symbol": "AAPL"})
-        assert r.status_code == 200
+        assert r.status_code == HTTPStatus.OK
         j = r.json()
         assert [it["run_id"] for it in j["items"]] == ["r2", "r1"]
-        assert j["total"] >= 2
+        assert j["total"] >= MIN_EXPECTED_TOTAL
         # List items should expose authoritative manifest window
-        assert "run_from" in j["items"][0] and "run_to" in j["items"][0]
+        assert "run_from" in j["items"][0]
+        assert "run_to" in j["items"][0]
 
         # ASC order
         r2 = client.get("/api/v1/backtests", params={"symbol": "AAPL", "order": "created_at"})
-        assert r2.status_code == 200
+        assert r2.status_code == HTTPStatus.OK
         j2 = r2.json()
         assert [it["run_id"] for it in j2["items"]] == ["r1", "r2"]
 
@@ -188,4 +211,4 @@ def test_list_runs_filters_and_order(monkeypatch):
         # Clamp limit to 500
         r5 = client.get("/api/v1/backtests", params={"limit": 1000})
         j5 = r5.json()
-        assert j5["limit"] == 500
+        assert j5["limit"] == LIMIT_MAX

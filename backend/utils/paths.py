@@ -1,5 +1,4 @@
-"""
-Path utilities for consistent file and directory handling.
+"""Path utilities for consistent file and directory handling.
 
 This module centralizes path construction logic to avoid duplication
 across the backend codebase.

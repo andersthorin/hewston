@@ -1,10 +1,13 @@
+"""Ingestion idempotency tests (stubbed ingest job)."""
+
 from pathlib import Path
 
-import backend.jobs.ingest as ingest
-from backend.tests_support.utils import setup_test_environment, get_test_symbol_year
+from backend.jobs import ingest
+from backend.tests_support.utils import get_test_symbol_year, setup_test_environment
 
 
 def test_ingest_idempotent_and_force(tmp_path, monkeypatch):
+    """Verify ingest idempotency and force flag behavior."""
     # Set up test environment
     setup_test_environment(tmp_path, monkeypatch)
 
@@ -16,10 +19,12 @@ def test_ingest_idempotent_and_force(tmp_path, monkeypatch):
     base = Path(tmp_path) / f"raw/databento/{symbol}/{year}"
     f_trades = base / "TRADES.dbn.zst"
     f_tbbo = base / "TBBO.dbn.zst"
-    assert f_trades.exists() and f_tbbo.exists()
+    assert f_trades.exists()
+    assert f_tbbo.exists()
     s_trades_1 = f_trades.stat().st_size
     s_tbbo_1 = f_tbbo.stat().st_size
-    assert s_trades_1 > 0 and s_tbbo_1 > 0
+    assert s_trades_1 > 0
+    assert s_tbbo_1 > 0
 
     # Second run without force should skip and keep sizes
     sizes2 = ingest.ingest_databento("AAPL", 2023, force=False)

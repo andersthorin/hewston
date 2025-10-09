@@ -2,7 +2,7 @@ import sqlite3
 from pathlib import Path
 
 from backend.adapters.sqlite_catalog import SqliteCatalog
-from backend.jobs.retention import select_candidates, apply_deletions, retention_main
+from backend.jobs.retention import apply_deletions, retention_main, select_candidates
 
 
 def _insert_run(db_path: Path, run_id: str, created_at: str) -> None:
