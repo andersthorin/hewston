@@ -447,8 +447,17 @@ function RunPlayerContainer({
 
   // Chart is now driven by streaming frames (see subscribe effect above) to keep it in sync with the scrubber.
   useEffect(() => {
-    // When switching view mode, reset series so subsequent frame-driven updates render with correct time type
+    // When switching view mode, fully reset playback cursors and series state
+    // so subsequent frame-driven updates render with correct time type and encoding
+    dayKeysRef.current = null
+    dayIdxRef.current = 0
+    hourIdxRef.current = 0
+    if (hourTickerRef.current) {
+      clearInterval(hourTickerRef.current)
+      hourTickerRef.current = null
+    }
     ohlcRef.current?.reset([])
+    seededRef.current = false
   }, [viewMode])
 
   const formatTime = (t: Time, locale?: string) => {

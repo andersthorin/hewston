@@ -11,6 +11,11 @@ export const BacktestSummarySchema = z.object({
   run_from: z.string().optional().nullable(),
   run_to: z.string().optional().nullable(),
   duration_ms: z.number().optional().nullable(),
+  // Optional metrics enriched by BFF for terminal runs
+  total_return: z.number().optional().nullable(),
+  max_drawdown: z.number().optional().nullable(),
+  sharpe_ratio: z.number().optional().nullable(),
+  win_rate: z.number().optional().nullable(),
 })
 export type BacktestSummary = z.infer<typeof BacktestSummarySchema>
 

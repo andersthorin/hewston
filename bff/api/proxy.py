@@ -34,71 +34,8 @@ async def get_backend_proxy_client(
 # Backtests API Proxy Routes
 
 
-@router.get("/backtests")
-async def proxy_list_backtests(
-    request: Request,
-    backend_client: BackendClient = Depends(get_backend_proxy_client),
-    correlation_id: str = Depends(get_correlation_id),
-    # Query parameters matching backend API
-    limit: int = 20,
-    offset: int = 0,
-    symbol: str | None = None,
-    strategy_id: str | None = None,
-    from_date: str | None = Query(None, alias="from"),
-    to_date: str | None = Query(None, alias="to"),
-    order: str | None = None,
-):
-    """
-    Proxy GET /backtests to backend.
-
-    Lists backtest runs with the same filtering and pagination as the backend.
-    """
-    # Prepare query parameters
-    params = {
-        "limit": limit,
-        "offset": offset,
-    }
-
-    # Add optional parameters
-    if symbol:
-        params["symbol"] = symbol
-    if strategy_id:
-        params["strategy_id"] = strategy_id
-    if from_date:
-        params["from"] = from_date
-    if to_date:
-        params["to"] = to_date
-    if order:
-        params["order"] = order
-
-    # Forward request to backend
-    return await backend_client.proxy_request(
-        method="GET",
-        path="/backtests",
-        headers=dict(request.headers),
-        params=params,
-        correlation_id=correlation_id,
-    )
-
-
-@router.get("/backtests/{run_id}")
-async def proxy_get_backtest(
-    run_id: str,
-    request: Request,
-    backend_client: BackendClient = Depends(get_backend_proxy_client),
-    correlation_id: str = Depends(get_correlation_id),
-):
-    """
-    Proxy GET /backtests/{run_id} to backend.
-
-    Gets a specific backtest run details.
-    """
-    return await backend_client.proxy_request(
-        method="GET",
-        path=f"/backtests/{run_id}",
-        headers=dict(request.headers),
-        correlation_id=correlation_id,
-    )
+# Backtests routes are owned by bff.api.backtests.
+# Intentionally no proxy for /backtests here to avoid shadowing enriched handlers.
 
 
 # Bars API Proxy Routes

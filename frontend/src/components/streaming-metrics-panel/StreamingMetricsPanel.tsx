@@ -28,8 +28,8 @@ export default function StreamingMetricsPanel({ finalMetrics }: { finalMetrics?:
     win_rate: m?.win_rate ?? undefined,
     realized_pnl: m?.realized_pnl ?? undefined,
   }
-  // Prefer streaming values while playing; we'll force Sharpe to final on the last frame below
-  let mapped = finalMetrics ? { ...finalMetrics, ...mappedStream } : mappedStream
+  // While playing, prefer streaming values; when at end, prefer final Nautilus metrics for exactness
+  let mapped = mappedStream
 
   const eq = frame?.equity
   const currentIndex = usePlaybackSelector(selectors.currentFrameIndex)
@@ -56,9 +56,19 @@ export default function StreamingMetricsPanel({ finalMetrics }: { finalMetrics?:
           ? [{ ts: (ts as string) || new Date().toISOString(), value: endValue }]
           : null
 
-  // On the final frame, force Sharpe to the canonical Nautilus value if available
-  if (atEnd && finalMetrics && typeof finalMetrics.sharpe_ratio === 'number') {
-    mapped = { ...mapped, sharpe_ratio: finalMetrics.sharpe_ratio }
+  // On the final frame, override all key metrics with canonical Nautilus values when available
+  if (atEnd && finalMetrics) {
+    const overrides: Record<string, number | null | undefined> = {}
+    if (typeof finalMetrics.total_return === 'number')
+      overrides.total_return = finalMetrics.total_return
+    if (typeof finalMetrics.max_drawdown === 'number')
+      overrides.max_drawdown = finalMetrics.max_drawdown
+    if (typeof finalMetrics.sharpe_ratio === 'number')
+      overrides.sharpe_ratio = finalMetrics.sharpe_ratio
+    if (typeof finalMetrics.win_rate === 'number') overrides.win_rate = finalMetrics.win_rate
+    if (typeof finalMetrics.realized_pnl === 'number')
+      overrides.realized_pnl = finalMetrics.realized_pnl
+    mapped = { ...mapped, ...overrides }
   }
 
   // Debug: log only when values change; cap to first 20 lines

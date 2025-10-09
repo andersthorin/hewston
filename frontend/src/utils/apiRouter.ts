@@ -60,7 +60,13 @@ class APIClientRouter {
     timeout: number,
   ): Promise<T> => {
     const baseUrl = this.extractBaseUrl(evaluation.endpointUrl)
-    const fullUrl = this.buildFullUrl(baseUrl, endpoint, evaluation.source)
+    const method = ((requestOptions.method || 'GET') as string).toUpperCase() as
+      | 'GET'
+      | 'POST'
+      | 'PUT'
+      | 'DELETE'
+      | 'PATCH'
+    const fullUrl = this.buildFullUrl(baseUrl, endpoint, evaluation.source, method)
 
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), timeout)
@@ -88,13 +94,18 @@ class APIClientRouter {
   /**
    * Build full URL based on endpoint and source.
    */
-  buildFullUrl = (baseUrl: string, endpoint: string, source: 'bff' | 'backend'): string => {
+  buildFullUrl = (
+    baseUrl: string,
+    endpoint: string,
+    source: 'bff' | 'backend',
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+  ): string => {
     // Remove leading slash from endpoint if present
     const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
 
     if (source === 'bff') {
       // BFF endpoints may need path transformation
-      return this.transformBffEndpoint(baseUrl, cleanEndpoint)
+      return this.transformBffEndpoint(baseUrl, cleanEndpoint, method)
     } else {
       // Backend endpoints use direct path
       return `${baseUrl}/${cleanEndpoint}`
@@ -104,7 +115,11 @@ class APIClientRouter {
   /**
    * Transform endpoint for BFF routing.
    */
-  transformBffEndpoint = (baseUrl: string, endpoint: string): string => {
+  transformBffEndpoint = (
+    baseUrl: string,
+    endpoint: string,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
+  ): string => {
     // Map frontend endpoints to canonical BFF endpoints
     if (endpoint.startsWith('chart-data')) {
       // Preserve any tail (e.g. ?query)
@@ -116,10 +131,19 @@ class APIClientRouter {
     if (endpoint.startsWith('bars')) {
       return `${baseUrl}/api/v1/chart-data`
     } else if (endpoint.startsWith('backtests')) {
-      // Handle list routes preserving query string
+      // Handle list/create routes preserving query string
       if (endpoint === 'backtests' || endpoint.startsWith('backtests?')) {
         const tail = endpoint.slice('backtests'.length) // includes leading '?' if present
-        return `${baseUrl}/api/v1/backtests${tail}`
+        if (method === 'GET') {
+          // Route GET list calls to canonical endpoint
+          return `${baseUrl}/api/v1/backtests${tail}`
+        } else if (method === 'POST') {
+          // Create backtest
+          return `${baseUrl}/api/v1/backtests${tail}`
+        } else {
+          // Other methods default to canonical endpoint
+          return `${baseUrl}/api/v1/backtests${tail}`
+        }
       }
       // Transform backtests/{id}[/*] to canonical BFF endpoints
       const match = endpoint.match(/^backtests\/([^/?]+)(?:\/(.+))?$/)
@@ -138,7 +162,7 @@ class APIClientRouter {
           return `${baseUrl}/api/v1/backtests/${id}/${subpath}`
         }
       }
-      // Fallback: list
+      // Fallback: default to canonical list for safety
       return `${baseUrl}/api/v1/backtests`
     }
 
@@ -186,10 +210,9 @@ class APIClientRouter {
     endpointGroup: EndpointGroup,
     isFallback = false,
   ): void => {
-    if (
-      featureFlagService.getConfiguration().bffEnabled ||
-      import.meta.env.VITE_FEATURE_FLAG_DEBUG
-    ) {
+    const cfg = featureFlagService.getConfiguration?.()
+    const bffEnabled = !!(cfg && (cfg as any).bffEnabled)
+    if (bffEnabled || import.meta.env.VITE_FEATURE_FLAG_DEBUG) {
       const prefix = isFallback ? '🔄 FALLBACK' : '🎯 ROUTING'
       console.log(`${prefix} [${endpointGroup}] ${endpoint} → ${target.toUpperCase()}`)
     }

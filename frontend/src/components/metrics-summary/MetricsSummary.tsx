@@ -16,7 +16,7 @@ export type MetricsSummaryProps = {
 function formatPercent(v: number | null | undefined): string {
   if (v === null || v === undefined || Number.isNaN(v)) return '—'
   try {
-    return `${(v * 100).toFixed(1)}%`
+    return `${(v * 100).toFixed(2)}%`
   } catch {
     return '—'
   }

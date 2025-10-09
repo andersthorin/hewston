@@ -88,7 +88,6 @@ function createPlaybackStore(): PlaybackStore {
 
       if (debugCount < 20) {
         try {
-          // eslint-disable-next-line no-console
           console.debug('[playback._setFrame]', {
             idx: nextIdx,
             ts: state.currentSimTime,

@@ -76,7 +76,13 @@ export function useWebSocketHealth(backtestId: string) {
   useEffect(() => {
     let frameCount = 0
 
-    const unsubscribe = playback.subscribe((frame) => {
+    const sub = playback?.subscribe
+    if (typeof sub !== 'function') {
+      // In tests some mocks may not provide subscribe; fail-soft but observable via metrics staying at 0
+      return () => {}
+    }
+
+    const unsubscribe = sub((frame: any) => {
       frameCount++
       const now = Date.now()
 
@@ -91,7 +97,7 @@ export function useWebSocketHealth(backtestId: string) {
       setPerformanceMetrics((prev) => ({
         ...prev,
         totalFrames: frameCount,
-        droppedFrames: frame.dropped || 0,
+        droppedFrames: frame?.dropped || 0,
         uptime: connectionStartTime ? now - connectionStartTime : 0,
       }))
     })
@@ -114,7 +120,7 @@ export function useWebSocketHealth(backtestId: string) {
 
   // Monitor connection status
   useEffect(() => {
-    const health = playback.getConnectionHealth?.()
+    const health = playback?.getConnectionHealth?.()
 
     setConnectionStatus((prev) => ({
       ...prev,
@@ -160,7 +166,7 @@ export function useWebSocketHealth(backtestId: string) {
 
   // Get detailed health report
   const getHealthReport = useCallback(() => {
-    const health = playback.getConnectionHealth?.()
+    const health = playback?.getConnectionHealth?.()
     return {
       connection: connectionStatus,
       performance: performanceMetrics,

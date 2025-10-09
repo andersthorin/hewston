@@ -267,7 +267,7 @@ class SqliteCatalog(CatalogPort):
             ).fetchone()["c"]
             q = (
                 "SELECT b.backtest_id AS run_id, b.created_at, b.strategy_id, b.status, "
-                "d.symbol AS symbol, d.from_date AS from_date, d.to_date AS to_date, b.duration_ms AS duration_ms "
+                "d.symbol AS symbol, b.duration_ms AS duration_ms "
                 f"FROM backtests b LEFT JOIN datasets d ON d.dataset_id = b.dataset_id {where} "
                 f"ORDER BY b.created_at {order_dir} LIMIT ? OFFSET ?"
             )
@@ -279,9 +279,9 @@ class SqliteCatalog(CatalogPort):
                     strategy_id=r["strategy_id"],
                     status=r["status"],
                     symbol=r["symbol"],
-                    # Map database field names to model field names
-                    run_from=r["from_date"],
-                    run_to=r["to_date"],
+                    # run_from/run_to intentionally left None here to avoid cross-run bleed from dataset bounds
+                    run_from=None,
+                    run_to=None,
                     duration_ms=r["duration_ms"],
                 )
                 for r in rows

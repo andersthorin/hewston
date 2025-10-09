@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { render, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
+import { render, cleanup, fireEvent, screen, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import playbackStore from '../store/playbackClock'
 import { PlaybackControls } from '../components/playback-controls'
@@ -56,11 +56,13 @@ vi.mock('../hooks/useChartData', () => ({
 }))
 
 describe.skip('E11 integration: RunPlayerContainer + PlaybackClock + Scrubber', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     cleanup()
     // seed a reasonable range so scrubber % calc is defined
     // @ts-ignore test shaping
-    playbackStore._setRange({ start: '2024-01-01T00:00:00Z', end: '2024-01-01T02:00:00Z' })
+    await act(async () => {
+      playbackStore._setRange({ start: '2024-01-01T00:00:00Z', end: '2024-01-01T02:00:00Z' })
+    })
   })
 
   it('keeps store.playing in sync with controls and updates currentSimTime on frames; scrubber seeks', async () => {
@@ -145,10 +147,12 @@ describe.skip('E11 integration: RunPlayerContainer + PlaybackClock + Scrubber', 
   }
 
   describe('E11 integration (stubbed): PlaybackClock + Scrubber', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       cleanup()
       // @ts-ignore test shaping
-      playbackStore._setRange({ start: '2024-01-01T00:00:00Z', end: '2024-01-01T02:00:00Z' })
+      await act(async () => {
+        playbackStore._setRange({ start: '2024-01-01T00:00:00Z', end: '2024-01-01T02:00:00Z' })
+      })
     })
     it('wires play/pause/seek and updates current time on frames', async () => {
       const qc = new QueryClient()
@@ -163,13 +167,15 @@ describe.skip('E11 integration: RunPlayerContainer + PlaybackClock + Scrubber', 
       fireEvent.click(pauseBtn)
       expect(playbackStore.getState().playing).toBe(false)
       const ts1 = '2024-01-01T00:30:00Z'
-      emit2({
-        t: 'frame',
-        ts: ts1,
-        dropped: 0,
-        ohlc: null,
-        orders: [],
-        equity: { ts: ts1, value: 100 },
+      await act(async () => {
+        emit2({
+          t: 'frame',
+          ts: ts1,
+          dropped: 0,
+          ohlc: null,
+          orders: [],
+          equity: { ts: ts1, value: 100 },
+        })
       })
       expect(playbackStore.getState().currentSimTime).toBe(ts1)
       const slider = screen.getByRole('slider')

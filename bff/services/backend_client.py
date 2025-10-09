@@ -190,7 +190,8 @@ class BackendClient:
 
             for key, value in headers.items():
                 if key.lower() in headers_to_forward:
-                    backend_headers[key] = value
+                    # Normalize forwarded header keys to lowercase for consistency/tests
+                    backend_headers[key.lower()] = value
 
         # Add BFF identification
         backend_headers["X-Forwarded-By"] = "hewston-bff"
