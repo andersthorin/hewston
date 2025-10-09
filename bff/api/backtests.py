@@ -2,24 +2,21 @@
 # fmt: off
 
 
-"""
-Backtests API
-
-Provides unified backtest data aggregation endpoints that combine multiple
-backend calls into optimized responses for frontend consumption.
-"""
+"""Backtests API endpoints for the BFF. Provides unified aggregation for frontend."""
 
 import asyncio
 import logging
 import time
+from contextlib import suppress
+from http import HTTPStatus
 from typing import Any
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 from fastapi.responses import JSONResponse
 
-from bff.app.dependencies import get_backend_client, get_redis_client
 from bff.app.config import MAX_CONCURRENT_BACKEND_REQUESTS
+from bff.app.dependencies import get_backend_client, get_redis_client
 from bff.models.backtest_data import BacktestDataRequest
 from bff.services.backend_client import create_backend_client
 from bff.services.backtest_aggregator import BacktestDataAggregator
@@ -29,8 +26,9 @@ router = APIRouter()
 # simple in-memory cache for metrics enrichment (backtest_id -> (expires_epoch_ms, data))
 _METRICS_CACHE: dict[str, tuple[int, dict[str, Any]]] = {}
 _METRICS_TTL_SECONDS = 120
-# cache requested run window from create calls (backtest_id -> (expires_epoch_ms, {run_from, run_to}))
-_REQUESTED_WINDOW_CACHE: dict[str, tuple[int, dict[str, str | None]]]= {}
+# cache requested run window from create calls
+# shape: backtest_id -> (expires_epoch_ms, {run_from, run_to})
+_REQUESTED_WINDOW_CACHE: dict[str, tuple[int, dict[str, str | None]] ] = {}
 _REQUESTED_WINDOW_TTL_SECONDS = 6 * 3600  # 6 hours
 
 
@@ -109,7 +107,14 @@ def _extract_json_from_response(response) -> dict[str, Any]:
 
 
 def _build_backend_query_params(
-    *, limit: int, offset: int, order: str | None, symbol: str | None, strategy_id: str | None, run_from: str | None, run_to: str | None,
+    *,
+    limit: int,
+    offset: int,
+    order: str | None,
+    symbol: str | None,
+    strategy_id: str | None,
+    run_from: str | None,
+    run_to: str | None,
 ) -> dict[str, Any]:
     params: dict[str, Any] = {"limit": limit, "offset": offset}
     if symbol:
@@ -132,7 +137,7 @@ def _safe_parse_backend_json(response) -> dict:
         else:
             import json as _json
             body = response.body if hasattr(response, "body") else response.content
-            data = _json.loads(body.decode()) if isinstance(body, (bytes, bytearray)) else {}
+            data = _json.loads(body.decode()) if isinstance(body, bytes | bytearray) else {}
         return data if isinstance(data, dict) else {}
     except Exception:
         return {}
@@ -171,15 +176,15 @@ def _map_list_items(items: list[dict]) -> list[dict[str, Any]]:
         # fill run_from/run_to for non-terminal runs from cache
         try:
             s_val = str(status or "").upper()
-            TERMINAL = {"DONE", "COMPLETED", "ERROR", "FAILED"}
+            terminal_statuses = {"DONE", "COMPLETED", "ERROR", "FAILED"}
             rid = str(bt_id or "")
             cached_window = _REQUESTED_WINDOW_CACHE.get(rid)
-            if s_val not in TERMINAL and cached_window and cached_window[0] > now_ms:
+            if s_val not in terminal_statuses and cached_window and cached_window[0] > now_ms:
                 if not item_run_from:
                     item_run_from = cached_window[1].get("run_from")
                 if not item_run_to:
                     item_run_to = cached_window[1].get("run_to")
-            elif s_val in TERMINAL and rid in _REQUESTED_WINDOW_CACHE:
+            elif s_val in terminal_statuses and rid in _REQUESTED_WINDOW_CACHE:
                 _REQUESTED_WINDOW_CACHE.pop(rid, None)
         except Exception:
             pass
@@ -236,7 +241,12 @@ def _attach_metrics(new_items: list[dict[str, Any]], fetched_map: dict[str, dict
                 it["win_rate"] = wr
 
 
-async def _fetch_metric_for_id(backend_proxy, run_id: str, sem: asyncio.Semaphore, correlation_id: str):
+async def _fetch_metric_for_id(
+    backend_proxy,
+    run_id: str,
+    sem: asyncio.Semaphore,
+    correlation_id: str,
+):
     # Check in-memory cache first
     now_ms = int(time.time() * 1000)
     cached = _METRICS_CACHE.get(run_id)
@@ -256,7 +266,11 @@ async def _fetch_metric_for_id(backend_proxy, run_id: str, sem: asyncio.Semaphor
 
 
 
-async def _enrich_terminal_metrics(new_items: list[dict[str, Any]], backend_client: httpx.AsyncClient, correlation_id: str) -> int:
+async def _enrich_terminal_metrics(
+    new_items: list[dict[str, Any]],
+    backend_client: httpx.AsyncClient,
+    correlation_id: str,
+) -> int:
     term_ids = _collect_terminal_ids(new_items)
     if not term_ids:
         return 0
@@ -264,9 +278,16 @@ async def _enrich_terminal_metrics(new_items: list[dict[str, Any]], backend_clie
     sem = asyncio.Semaphore(max(4, min(6, MAX_CONCURRENT_BACKEND_REQUESTS)))
     backend_proxy = await create_backend_client(backend_client)
 
-    results = await asyncio.gather(*[_fetch_metric_for_id(backend_proxy, rid, sem, correlation_id) for rid in term_ids])
+    results = await asyncio.gather(
+        *[
+            _fetch_metric_for_id(backend_proxy, rid, sem, correlation_id)
+            for rid in term_ids
+        ]
+    )
     backend_calls = sum(calls for (_, __, calls) in results)
-    fetched_map: dict[str, dict] = {rid: payload for (rid, payload, _) in results if isinstance(payload, dict)}
+    fetched_map: dict[str, dict] = {
+        rid: payload for (rid, payload, _) in results if isinstance(payload, dict)
+    }
     _attach_metrics(new_items, fetched_map)
     return backend_calls
 
@@ -276,12 +297,7 @@ async def create_backtest_via_bff(
     request: Request,
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
 ):
-    """
-    Create a backtest via BFF domain endpoint.
-
-    Frontend sends POST /api/v1/backtests; this forwards to backend /backtests
-    while preserving headers (including Idempotency-Key) and body.
-    """
+    """Create a backtest via BFF domain endpoint."""
     try:
         backend_proxy = await create_backend_client(backend_client)
         raw_body = await request.body()
@@ -300,13 +316,11 @@ async def create_backtest_via_bff(
         # Transform backend response to canonical backtest_id-only payload
         data = _extract_json_from_response(response)
         # Log mapped payload and backend response for debugging (info level)
-        try:
+        with suppress(Exception):
             logger.info(
                 "bff.create_backtest.response",
                 extra={"mapped": mapped, "status_code": getattr(response, "status_code", None)},
             )
-        except Exception:
-            pass
         transformed = {
             # Tests and consumers expect run_id, not backtest_id
             "run_id": data.get("run_id") or data.get("backtest_id"),
@@ -344,9 +358,7 @@ async def _list_backtests_core(
     backend_client: httpx.AsyncClient,
     redis_client,
 ) -> dict[str, Any]:
-    """
-    Core implementation for listing backtests. Used by both the FastAPI route and direct tests.
-    """
+    """Core implementation for listing backtests used by the route and tests."""
     start_time = time.perf_counter()
     correlation_id = f"list_backtests_{int(time.time() * 1000)}"
 
@@ -393,7 +405,7 @@ async def _list_backtests_core(
         )
 
         # Fail-fast: propagate non-200 backend responses as-is (no fallbacks)
-        if getattr(response, "status_code", 200) != 200:
+        if getattr(response, "status_code", HTTPStatus.OK) != HTTPStatus.OK:
             return response
 
         backend_data = _safe_parse_backend_json(response)
@@ -401,7 +413,9 @@ async def _list_backtests_core(
 
         backend_calls = 1
         if new_items:
-            backend_calls += await _enrich_terminal_metrics(new_items, backend_client, correlation_id)
+            backend_calls += await _enrich_terminal_metrics(
+                new_items, backend_client, correlation_id
+            )
 
         load_time_ms = int((time.perf_counter() - start_time) * 1000)
         enhanced_response = {
@@ -445,7 +459,7 @@ async def _list_backtests_core(
             },
         )
 
-        if status_code != 500:
+        if status_code != HTTPStatus.INTERNAL_SERVER_ERROR:
             raise HTTPException(
                 status_code=status_code,
                 detail=f"Backend error: {status_code}",
@@ -474,6 +488,7 @@ async def list_backtests_route(
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
     redis_client=Depends(get_redis_client),
 ) -> dict[str, Any]:
+    """List backtests (BFF) with optional filters."""
     return await _list_backtests_core(
         request=request,
         limit=limit,
@@ -500,6 +515,7 @@ async def list_backtests(
     backend_client: httpx.AsyncClient | None = None,
     redis_client=None,
 ) -> dict[str, Any]:
+    """List backtests using provided backend client (test helper)."""
     if backend_client is None:
         raise RuntimeError(
             "backend_client must be provided when calling list_backtests() directly"
@@ -527,6 +543,7 @@ async def get_complete_backtest_data(
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
     redis_client=Depends(get_redis_client),
 ):
+    """Get complete aggregated run data (orders, equity, metrics, metadata)."""
     # Normalize local variable name for downstream logic
     run_id = backtest_id
 
@@ -640,7 +657,7 @@ async def get_complete_backtest_data(
         )
 
         # Cache the response with smarter TTLs
-        TERMINAL_STATUSES = {"DONE", "COMPLETED", "ERROR", "FAILED"}
+        terminal_statuses = {"DONE", "COMPLETED", "ERROR", "FAILED"}
         status_val = str(getattr(response.run, "status", "")).upper()
         requested_metrics = include_metrics
         requested_equity = include_equity
@@ -651,7 +668,7 @@ async def get_complete_backtest_data(
             or (requested_orders and response.orders is None)
         )
 
-        if status_val in TERMINAL_STATUSES:
+        if status_val in terminal_statuses:
             # Only long-cache when all requested components are present
             ttl = 3600 if not missing_component else 15
             await cache_service.set_backtest_data(cache_key, response, ttl, correlation_id)
@@ -722,11 +739,14 @@ async def get_complete_backtest_data(
         ) from e
 
 
+
+
 @router.get("/backtests/{backtest_id}/status")
 async def get_backtest_status(
     backtest_id: str = Path(..., description="Backtest identifier"),
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
 ):
+    """Get run status only (lightweight endpoint)."""
     run_id = backtest_id
     """
     Get run status only (lightweight endpoint).
@@ -758,14 +778,11 @@ async def get_backtest_status(
             method="GET", path=f"/backtests/{run_id}", correlation_id=correlation_id
         )
 
-        if response.status_code == 200:
+        if response.status_code == HTTPStatus.OK:
             import json
 
             # Handle both Response objects and mock objects
-            if hasattr(response, "body"):
-                response_content = response.body
-            else:
-                response_content = response.content
+            response_content = response.body if hasattr(response, "body") else response.content
 
             if isinstance(response_content, bytes):
                 response_text = response_content.decode("utf-8")
@@ -797,8 +814,11 @@ async def get_backtest_status(
 
             return status_response
 
-        elif response.status_code == 404:
-            raise HTTPException(status_code=404, detail=f"Backtest {run_id} not found")
+        elif response.status_code == HTTPStatus.NOT_FOUND:
+            raise HTTPException(
+                status_code=HTTPStatus.NOT_FOUND,
+                detail=f"Backtest {run_id} not found",
+            )
         else:
             raise HTTPException(
                 status_code=response.status_code, detail=f"Backend error: {response.status_code}"
@@ -828,10 +848,7 @@ async def get_backtest_by_id(
     request: Request = None,
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
 ):
-    """
-    Lightweight proxy for GET /backtests/{backtest_id}.
-    Passes through to backend and preserves error codes (fail-fast, no fallbacks).
-    """
+    """Lightweight proxy for GET /backtests/{backtest_id} (fail-fast, no fallbacks)."""
     correlation_id = f"get_backtest_{backtest_id}_{int(time.time() * 1000)}"
     backend_proxy = await create_backend_client(backend_client)
     return await backend_proxy.proxy_request(

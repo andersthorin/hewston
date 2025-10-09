@@ -1,6 +1,7 @@
 """Shared test utilities for backend test suites.
-Moved from top-level tests/utils.py to reduce duplication
-and keep all backend test code under backend/.
+
+Moved from top-level tests/utils.py to reduce duplication and keep all backend
+test code under backend/.
 """
 
 from pathlib import Path

@@ -1,15 +1,15 @@
 # ruff: noqa: B008
 
-"""
-Chart Data API
+"""Chart Data API.
 
-Provides unified chart data aggregation endpoint that combines multiple
-backend calls into optimized responses for frontend consumption.
+Provides unified chart data aggregation endpoint that combines multiple backend calls
+into optimized responses for frontend consumption.
 """
 
 import logging
 import time
 from datetime import date
+from http import HTTPStatus
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -46,8 +46,7 @@ async def get_chart_data(
     backend_client: httpx.AsyncClient = Depends(get_backend_client),
     redis_client=Depends(get_redis_client),
 ):
-    """
-    Get unified chart data for a symbol and timeframe.
+    """Get unified chart data for a symbol and timeframe.
 
     This endpoint aggregates data from multiple backend endpoints and provides
     optimized responses with caching and data decimation.
@@ -101,7 +100,7 @@ async def get_chart_data(
                 "timeframe": timeframe,
             },
         )
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST, detail=str(e)) from e
 
     # Initialize services
     cache_service = CacheService(redis_client)
@@ -139,9 +138,11 @@ async def get_chart_data(
         )
 
         # Server-Timing for cache hit
-        headers = {
-            "Server-Timing": f"cache;dur={cache_get_ms}, total;dur={cached_response.metadata.load_time_ms}"
-        }
+        server_timing = (
+            f"cache;dur={cache_get_ms}, "
+            f"total;dur={cached_response.metadata.load_time_ms}"
+        )
+        headers = {"Server-Timing": server_timing}
         return JSONResponse(content=cached_response.model_dump(), headers=headers)
 
     # Fetch data from backend
@@ -154,7 +155,8 @@ async def get_chart_data(
 
         if not backend_data:
             raise HTTPException(
-                status_code=404, detail=f"No data found for {symbol} in timeframe {timeframe}"
+                status_code=HTTPStatus.NOT_FOUND,
+                detail=f"No data found for {symbol} in timeframe {timeframe}",
             )
 
         t_transform_start = time.perf_counter()
@@ -230,9 +232,14 @@ async def get_chart_data(
         )
 
         # Add server timing headers for browser diagnostics
-        headers = {
-            "Server-Timing": f"backend;dur={backend_time_ms}, transform;dur={transform_time_ms}, cache_get;dur={cache_get_ms}, cache_set;dur={cache_set_ms}, total;dur={load_time_ms}",
-        }
+        server_timing = (
+            f"backend;dur={backend_time_ms}, "
+            f"transform;dur={transform_time_ms}, "
+            f"cache_get;dur={cache_get_ms}, "
+            f"cache_set;dur={cache_set_ms}, "
+            f"total;dur={load_time_ms}"
+        )
+        headers = {"Server-Timing": server_timing}
 
         return JSONResponse(content=response.model_dump(), headers=headers)
 
@@ -250,15 +257,15 @@ async def get_chart_data(
         )
 
         raise HTTPException(
-            status_code=500, detail=f"Internal error processing chart data: {str(e)}"
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR,
+            detail=f"Internal error processing chart data: {str(e)}",
         ) from e
 
 
 async def _fetch_backend_data(
     backend_client: BackendClient, request: ChartDataRequest, correlation_id: str
 ) -> tuple[dict, int]:
-    """
-    Fetch data from appropriate backend endpoint.
+    """Fetch data from appropriate backend endpoint.
 
     Args:
         backend_client: Backend HTTP client
@@ -314,14 +321,11 @@ async def _fetch_backend_data(
 
     backend_calls += 1
 
-    if response.status_code == 200:
+    if response.status_code == HTTPStatus.OK:
         import json
 
         # Handle both Response objects and mock objects
-        if hasattr(response, "body"):
-            response_content = response.body
-        else:
-            response_content = response.content
+        response_content = response.body if hasattr(response, "body") else response.content
 
         if isinstance(response_content, bytes):
             response_text = response_content.decode("utf-8")
@@ -329,7 +333,7 @@ async def _fetch_backend_data(
             response_text = str(response_content)
 
         return json.loads(response_text), backend_calls
-    elif response.status_code == 404:
+    elif response.status_code == HTTPStatus.NOT_FOUND:
         return None, backend_calls
     else:
         raise HTTPException(

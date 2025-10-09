@@ -1,3 +1,5 @@
+"""Utilities for cumulative backtest metrics (returns, drawdown, Sharpe, win rate)."""
+
 import math
 from typing import Any
 
@@ -14,7 +16,9 @@ def _annualization_factor(
 
 
 
-def _preprocess_realized_epochs(realized_series: list[tuple[str, float]]) -> list[tuple[int, float]]:
+def _preprocess_realized_epochs(
+    realized_series: list[tuple[str, float]],
+) -> list[tuple[int, float]]:
     epochs: list[tuple[int, float]] = []
     for ts_iso, val in realized_series or []:
         try:
@@ -33,7 +37,10 @@ def _advance_realized(
     wins: int,
     losses: int,
 ) -> tuple[int, float | None, int, int]:
-    while (realized_idx + 1) < len(realized_epochs) and realized_epochs[realized_idx + 1][0] <= epoch:
+    while (
+        (realized_idx + 1) < len(realized_epochs)
+        and realized_epochs[realized_idx + 1][0] <= epoch
+    ):
         next_val = realized_epochs[realized_idx + 1][1]
         delta = next_val - (last_realized_val if last_realized_val is not None else 0.0)
         if delta > 0:
@@ -48,10 +55,7 @@ def _advance_realized(
 def _calc_returns(prev_val: float | None, v_cur: float | None) -> tuple[float | None, float | None]:
     if v_cur is None:
         return None, prev_val
-    if prev_val is not None and prev_val != 0:
-        r_cur = (v_cur / prev_val) - 1.0
-    else:
-        r_cur = None
+    r_cur = (v_cur / prev_val) - 1.0 if (prev_val is not None and prev_val != 0) else None
     return r_cur, v_cur
 
 
@@ -61,7 +65,9 @@ def _calc_total_return(base_val: float | None, v_cur: float | None) -> float | N
     return (v_cur / base_val) - 1.0
 
 
-def _update_peak_drawdown(peak: float | None, v_cur: float | None) -> tuple[float | None, float | None]:
+def _update_peak_drawdown(
+    peak: float | None, v_cur: float | None
+) -> tuple[float | None, float | None]:
     if v_cur is None:
         return peak, None
     if peak is None or v_cur > peak:
@@ -75,7 +81,7 @@ def _update_sharpe_state(
     returns_sum: float,
     returns_sq_sum: float,
     n_returns: int,
-    P: float,
+    annual_factor: float,
 ) -> tuple[float, float, int, float | None]:
     sharpe: float | None = None
     if r_cur is not None:
@@ -85,8 +91,8 @@ def _update_sharpe_state(
         mean = returns_sum / n_returns
         var = max(0.0, (returns_sq_sum / n_returns) - (mean * mean))
         std = math.sqrt(var)
-        if std > 0 and P > 0 and math.isfinite(P):
-            sharpe = math.sqrt(P) * (mean / std)
+        if std > 0 and annual_factor > 0 and math.isfinite(annual_factor):
+            sharpe = math.sqrt(annual_factor) * (mean / std)
     return returns_sum, returns_sq_sum, n_returns, sharpe
 
 
@@ -130,7 +136,7 @@ def compute_cumulative_metrics(
     base_val = float(equity_rows[0]["value"]) if equity_rows and "value" in equity_rows[0] else None
     prev_val: float | None = None
 
-    P = _annualization_factor(bar_minutes, minutes_per_session, sessions_per_year)
+    annual_factor = _annualization_factor(bar_minutes, minutes_per_session, sessions_per_year)
 
     for er in equity_rows:
         # Canonical: expect ts_utc only to avoid hidden fallbacks
@@ -163,7 +169,7 @@ def compute_cumulative_metrics(
 
         # Sharpe (cumulative)
         returns_sum, returns_sq_sum, n_returns, sharpe = _update_sharpe_state(
-            r_cur, returns_sum, returns_sq_sum, n_returns, P
+            r_cur, returns_sum, returns_sq_sum, n_returns, annual_factor
         )
 
         # Win rate

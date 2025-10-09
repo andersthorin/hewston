@@ -1,2 +1,1 @@
-# BFF (Backend-for-Frontend) Service
-# Provides aggregated APIs and enhanced functionality for the Hewston trading platform frontend
+"""BFF (Backend-for-Frontend) service package for Hewston frontend APIs."""
