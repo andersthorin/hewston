@@ -29,6 +29,10 @@ router = APIRouter()
 # simple in-memory cache for metrics enrichment (backtest_id -> (expires_epoch_ms, data))
 _METRICS_CACHE: dict[str, tuple[int, dict[str, Any]]] = {}
 _METRICS_TTL_SECONDS = 120
+# cache requested run window from create calls (backtest_id -> (expires_epoch_ms, {run_from, run_to}))
+_REQUESTED_WINDOW_CACHE: dict[str, tuple[int, dict[str, str | None]]]= {}
+_REQUESTED_WINDOW_TTL_SECONDS = 6 * 3600  # 6 hours
+
 
 logger = logging.getLogger("bff.backtests_api")
 
@@ -138,6 +142,17 @@ async def create_backtest_via_bff(
             "run_id": data.get("run_id") or data.get("backtest_id"),
             "status": data.get("status"),
         }
+        # Store requested window so list can display correct from/to while RUNNING
+        try:
+            run_id = transformed.get("run_id")
+            if run_id:
+                now_ms = int(time.time() * 1000)
+                _REQUESTED_WINDOW_CACHE[str(run_id)] = (
+                    now_ms + _REQUESTED_WINDOW_TTL_SECONDS * 1000,
+                    {"run_from": mapped.get("run_from"), "run_to": mapped.get("run_to")},
+                )
+        except Exception:
+            pass
         return JSONResponse(status_code=response.status_code, content=transformed)
     except httpx.HTTPStatusError as e:
         raise HTTPException(status_code=e.response.status_code, detail=str(e)) from e
@@ -253,12 +268,28 @@ async def _list_backtests_core(
             symbol = (item.get("symbol") if isinstance(item, dict) else None) or (
                 (run_obj or {}).get("symbol") if isinstance(run_obj, dict) else None
             )
-            run_from = (item.get("run_from") if isinstance(item, dict) else None) or (
-                (run_obj or {}).get("run_from") if isinstance(run_obj, dict) else None
-            )
-            run_to = (item.get("run_to") if isinstance(item, dict) else None) or (
-                (run_obj or {}).get("run_to") if isinstance(run_obj, dict) else None
-            )
+            # Do not fallback to nested run.run_from/run.run_to to avoid cross-run contamination
+            item_run_from = item.get("run_from") if isinstance(item, dict) else None
+            item_run_to = item.get("run_to") if isinstance(item, dict) else None
+            # If item is non-terminal and we have a cached requested window from create time,
+            # use it to populate missing run_from/run_to so rows don't inherit another run's window.
+            try:
+                s_val = str(status or "").upper()
+                TERMINAL = {"DONE", "COMPLETED", "ERROR", "FAILED"}
+                rid = str(bt_id or "")
+                now_ms = int(time.time() * 1000)
+                cached_window = _REQUESTED_WINDOW_CACHE.get(rid)
+                if s_val not in TERMINAL and cached_window and cached_window[0] > now_ms:
+                    if not item_run_from:
+                        item_run_from = cached_window[1].get("run_from")
+                    if not item_run_to:
+                        item_run_to = cached_window[1].get("run_to")
+                elif s_val in TERMINAL and rid in _REQUESTED_WINDOW_CACHE:
+                    # Clean up cache once terminal
+                    _REQUESTED_WINDOW_CACHE.pop(rid, None)
+            except Exception:
+                pass
+
             duration_ms = (
                 (item.get("duration_ms") if isinstance(item, dict) else None)
                 or ((run_obj or {}).get("duration_ms") if isinstance(run_obj, dict) else None)
@@ -271,8 +302,8 @@ async def _list_backtests_core(
                     "strategy_id": strategy_id,
                     "status": status,
                     "symbol": symbol,
-                    "run_from": run_from,
-                    "run_to": run_to,
+                    "run_from": item_run_from,
+                    "run_to": item_run_to,
                     "duration_ms": duration_ms,
                     "total_return": item.get("total_return") if isinstance(item, dict) else None,
                     "sharpe_ratio": item.get("sharpe_ratio") if isinstance(item, dict) else None,
