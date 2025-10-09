@@ -198,10 +198,8 @@ def _enqueue_run_background(
     import importlib
 
     run_job_mod = importlib.import_module("backend.jobs.run_backtest")
-    run_backtest_and_persist = getattr(run_job_mod, "run_backtest_and_persist")
-
     p = multiprocessing.Process(
-        target=run_backtest_and_persist,
+        target=run_job_mod.run_backtest_and_persist,
         kwargs={
             "dataset_id": dataset_id,
             "strategy_id": strategy_id,

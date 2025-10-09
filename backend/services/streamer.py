@@ -7,7 +7,9 @@ import logging
 import math
 import time
 from collections.abc import AsyncGenerator
-from datetime import UTC, datetime as _dt
+from contextlib import suppress
+from datetime import UTC
+from datetime import datetime as _dt
 from pathlib import Path
 
 import pandas as pd
@@ -164,12 +166,10 @@ def _compute_max_drawdown_series(vals: list[float]) -> list[float | None]:
     cur_mdd = 0.0
     for i, v in enumerate(vals):
         if math.isfinite(v):
-            if v > peak:
-                peak = v
+            peak = max(v, peak)
             if peak and peak > 0.0:
                 dd = (peak - v) / peak
-                if dd > cur_mdd:
-                    cur_mdd = dd
+                cur_mdd = max(dd, cur_mdd)
                 mdd[i] = cur_mdd
             else:
                 mdd[i] = None
@@ -207,11 +207,13 @@ def _compute_running_sharpe_series(vals: list[float]) -> list[float | None]:
 
 def _precompute_metrics_from_equity(equity_rows: list[dict]) -> dict[str, list[float | None]]:
     """Compute per-index running metrics for finished runs.
+
     Returns dict of arrays aligned to equity_rows order with possible None entries.
     Metrics:
       - total_return_so_far: equity[i]/equity[0] - 1
       - max_drawdown_so_far: max_{tau<=i} (peak_to_date - equity[tau]) / peak_to_date
-      - sharpe_so_far: mean(r[1..i]) / std(r[1..i]) with r_t = equity[t]/equity[t-1]-1, r_f=0 (no annualization)
+      - sharpe_so_far: mean(r[1..i]) / std(r[1..i])
+        with r_t = equity[t]/equity[t-1] - 1 and r_f = 0 (no annualization).
     """
     n = len(equity_rows)
     if n == 0:
@@ -230,8 +232,22 @@ def _precompute_metrics_from_equity(equity_rows: list[dict]) -> dict[str, list[f
     }
 
 
+WEEKEND_CUTOFF = 4  # Monday=0..Sunday=6; 5-6 are weekend
+
+# RTH window (America/New_York)
+RTH_START_HOUR = 9
+RTH_START_MIN = 30
+RTH_END_HOUR = 16
+
+# Minimum observation sizes for calculations
+MIN_SHARPE_OBS = 2
+MIN_SERIES_LEN = 2
+TEMP_DEBUG_FRAMES = 20
+
+
 def _is_rth_epoch(epoch_sec: int, *, include_close: bool = False) -> bool:
     """Return True if epoch_sec is within RTH (America/New_York).
+
     include_close=True allows exactly 16:00:00, but excludes >16:00.
     On tz errors, conservatively return True to avoid over-filtering.
     """
@@ -240,18 +256,18 @@ def _is_rth_epoch(epoch_sec: int, *, include_close: bool = False) -> bool:
 
         dt_utc = _dt.fromtimestamp(epoch_sec, tz=UTC)
         ny = dt_utc.astimezone(ZoneInfo("America/New_York"))
-        if ny.weekday() > 4:
+        if ny.weekday() > WEEKEND_CUTOFF:
             return False
         h, m = ny.hour, ny.minute
         # Start: 09:30+
-        if h < 9 or (h == 9 and m < 30):
+        if h < RTH_START_HOUR or (h == RTH_START_HOUR and m < RTH_START_MIN):
             return False
         # End: < 16:00, or ==16:00 if include_close
-        if h < 16:
+        if h < RTH_END_HOUR:
             return True
-        if h > 16:
+        if h > RTH_END_HOUR:
             return False
-        # h == 16
+        # h == RTH_END_HOUR
         return include_close and m == 0
     except Exception:
         return True
@@ -265,6 +281,8 @@ def _ny_date_key(epoch_sec: int) -> str:
         dt_utc = _dt.fromtimestamp(epoch_sec, tz=UTC)
         return dt_utc.astimezone(ZoneInfo("America/New_York")).date().isoformat()
     except Exception:
+
+
         return _dt.fromtimestamp(epoch_sec, tz=UTC).date().isoformat()
 
 
@@ -274,6 +292,7 @@ def _hour_bucket(epoch_sec: int) -> int:
 
 def _select_hourly_indices(equity_rows: list[dict], rth_only: bool = False) -> list[int]:
     """Return indices of the last equity point within each UTC hour.
+
     Optionally filter to Regular Trading Hours (RTH) in America/New_York (09:30–16:00), Mon–Fri.
     Uses epoch seconds from normalize_timestamp(ts_utc) to bucket by hour.
     """
@@ -293,7 +312,8 @@ def _select_hourly_indices(equity_rows: list[dict], rth_only: bool = False) -> l
 
 
 def _select_daily_close_indices(equity_rows: list[dict], rth_only: bool = True) -> list[int]:
-    """Return indices of the last equity point for each trading day (America/New_York),
+    """Return indices of the last equity point for each trading day (America/New_York).
+
     using Regular Trading Hours (RTH) 09:30–16:00 if rth_only=True.
     The "daily close" is treated as the last equity observation within RTH for that local day.
     """
@@ -319,6 +339,7 @@ def _compute_daily_return_series_aligned(
     equity_rows: list[dict], daily_close_indices: list[int]
 ) -> list[float | None]:
     """Compute simple daily close-to-close returns aligned to each equity index.
+
     For indices up to a daily close, fill with that day's close-to-close return.
     Between close days, the last completed daily return is propagated.
     """
@@ -363,6 +384,7 @@ def _compute_daily_sharpe_series_aligned(
     equity_rows: list[dict], daily_close_indices: list[int]
 ) -> list[float | None]:
     """Compute daily Sharpe-so-far (annualized with sqrt(252)) and align to each equity index.
+
     For any minute index between two daily closes, we use the Sharpe computed up to the last
     completed daily close.
     """
@@ -396,7 +418,7 @@ def _compute_daily_sharpe_series_aligned(
         prev_close_val = v
 
         sharpe_rt: float | None = None
-        if count >= 2:
+        if count >= MIN_SHARPE_OBS:
             mean = sum_r / count
             var = (sum_r2 / count) - (mean * mean)
             std = math.sqrt(var) if var > 0 else 0.0
@@ -441,7 +463,7 @@ def _complete_metrics(
     metrics_arrays: dict,
     daily_sharpe_ann_by_index: list,
     daily_return_by_index: list,
-    annualization_P: float | None,
+    annualization_p: float | None,
     r_cur: float | None,
 ) -> dict:
     # Fill return only if not present (preserve precomputed None)
@@ -463,10 +485,10 @@ def _complete_metrics(
         else:
             shp_rt = metrics_arrays.get("sharpe_so_far", [None] * n_equity)[i]
             try:
-                if shp_rt is not None and annualization_P and annualization_P > 0:
+                if shp_rt is not None and annualization_p and annualization_p > 0:
                     import math as _math
 
-                    mi["sharpe"] = shp_rt * (_math.sqrt(float(annualization_P)))
+                    mi["sharpe"] = shp_rt * (_math.sqrt(float(annualization_p)))
                 else:
                     mi["sharpe"] = shp_rt
             except Exception:
@@ -478,7 +500,7 @@ def _load_metrics_artifact(
     artifacts: dict[str, str]
 ) -> tuple[list[tuple[int, dict]], float | None]:
     metrics_lookup: list[tuple[int, dict]] = []
-    annualization_P: float | None = None
+    annualization_p: float | None = None
     try:
         mpath = artifacts.get("metrics")
         if mpath and Path(mpath).exists():
@@ -487,7 +509,7 @@ def _load_metrics_artifact(
             series_items = mj.get("series") or []
             for item in series_items:
                 try:
-                    if isinstance(item, list) and len(item) >= 2:
+                    if isinstance(item, list) and len(item) >= MIN_SERIES_LEN:
                         epoch, _ = normalize_timestamp(item[0])
                         metrics_obj = item[1] if isinstance(item[1], dict) else {}
                         metrics_lookup.append((int(epoch), metrics_obj))
@@ -500,12 +522,12 @@ def _load_metrics_artifact(
             metrics_lookup.sort(key=lambda x: x[0])
             try:
                 v = mj.get("annualization_P")
-                annualization_P = float(v) if v is not None else None
+                annualization_p = float(v) if v is not None else None
             except Exception:
-                annualization_P = None
+                annualization_p = None
     except Exception:
         return [], None
-    return metrics_lookup, annualization_P
+    return metrics_lookup, annualization_p
 
 
 def _advance_metrics_cursor(
@@ -521,7 +543,10 @@ def _advance_metrics_cursor(
 
 
 def _compute_r_cur(prev_equity_val: float | None, v_cur: float) -> tuple[float | None, float]:
-    """Compute per-frame return and updated prev equity value, preserving None when not computable."""
+    """Compute per-frame return and updated prev equity value.
+
+    Preserves None when not computable.
+    """
     if prev_equity_val is None:
         return None, v_cur
     if prev_equity_val != 0.0:
@@ -536,7 +561,11 @@ def _log_backend_emit(logger, run_id: str, iso: str, last_emit: float) -> float:
         dt_ms = (now - last_emit) * 1000.0 if last_emit > 0.0 else 0.0
         logger.info(
             "diag.backend.emit",
-            extra={"run_id": run_id, "dt_ms": round(dt_ms, 2), "ts": iso},
+            extra={
+                "run_id": run_id,
+                "dt_ms": round(dt_ms, 2),
+                "ts": iso,
+            },
         )
         return now
     except Exception:
@@ -545,13 +574,12 @@ def _log_backend_emit(logger, run_id: str, iso: str, last_emit: float) -> float:
 
 def _log_temp_debug(logger, run_id: str, debug_count: int, er: dict, iso: str) -> int:
     """Log first 20 frames for local debugging; return updated debug_count."""
-    if debug_count < 20:
-        try:
+    if debug_count < TEMP_DEBUG_FRAMES:
+        with suppress(Exception):
             logger.info(
-                f"TEMP_DEBUG.backend.frame run_id={run_id} n={debug_count + 1} ts={iso} eq={float(er['value'])}"
+                f"TEMP_DEBUG.backend.frame run_id={run_id} n={debug_count + 1} ts={iso} "
+                f"eq={float(er['value'])}"
             )
-        except Exception:
-            pass
         return debug_count + 1
     return debug_count
 
@@ -568,7 +596,7 @@ def _compute_frame_metrics(
     metrics_arrays: dict,
     daily_sharpe_ann_by_index: list,
     daily_return_by_index: list,
-    annualization_P: float | None,
+    annualization_p: float | None,
 ) -> tuple[dict, int, dict | None, float | None]:
     """Return (metrics, m_idx, last_metrics, prev_equity_val) for current equity row."""
     if metrics_lookup:
@@ -593,7 +621,7 @@ def _compute_frame_metrics(
         metrics_arrays,
         daily_sharpe_ann_by_index,
         daily_return_by_index,
-        annualization_P,
+        annualization_p,
         r_cur,
     )
     if not metrics_lookup:
@@ -604,10 +632,8 @@ def _compute_frame_metrics(
 
 def _attach_total_frames(frame: StreamFrame, produced: int, total: int) -> None:
     if produced == 0:
-        try:
+        with suppress(Exception):
             frame.total_frames = total  # type: ignore[attr-defined]
-        except Exception:
-            pass
 
 
 async def produce_frames(
@@ -619,11 +645,15 @@ async def produce_frames(
     cadence: str = "1m",
     rth_only: bool = True,
 ) -> AsyncGenerator[StreamFrame, None]:
-    """
-    Async generator producing StreamFrame from run artifacts, optionally resampled to cadence, with optional RTH-only filtering, and paced to ~fps.
+    """Async generator producing StreamFrame frames.
+
+    Produces frames from run artifacts, optionally resampled to cadence and filtered to
+    RTH, paced to ~fps.
+
     - cadence: "1m" (default) emits every equity point; "1h" emits last point per UTC hour.
     - rth_only: when True, include only points within 09:30-16:00 America/New_York, Mon-Fri.
-    - If realtime=True, sleeps between frames according to fps and speed; else yields as fast as possible (test mode).
+    - If realtime=True, sleeps between frames according to fps and speed;
+      else yields as fast as possible (test mode).
     """
     # Load and validate artifacts
     artifacts, dataset_id = _resolve_artifacts(run_id)
@@ -642,7 +672,7 @@ async def produce_frames(
     metrics_arrays = _precompute_metrics_from_equity(equity_rows)
 
     # Load metrics artifact (optional) for precomputed cumulative metrics series
-    metrics_lookup, annualization_P = _load_metrics_artifact(artifacts)
+    metrics_lookup, annualization_p = _load_metrics_artifact(artifacts)
 
     # Prepare data structures
     bars_map = _load_bars_data(dataset_id)
@@ -710,7 +740,7 @@ async def produce_frames(
                 metrics_arrays=metrics_arrays,
                 daily_sharpe_ann_by_index=daily_sharpe_ann_by_index,
                 daily_return_by_index=daily_return_by_index,
-                annualization_P=annualization_P,
+                annualization_p=annualization_p,
             )
             frame = StreamFrame(
                 t="frame",
@@ -731,10 +761,12 @@ async def produce_frames(
 
             produced += 1
             if realtime:
-                await asyncio.sleep(max(0.0, (1.0 / float(fps)) / max(1.0, speed)))
+                period = (1.0 / float(fps)) / max(1.0, speed)
+                elapsed = max(0.0, time.perf_counter() - last_emit)
+                await asyncio.sleep(max(0.0, period - elapsed))
     finally:
         # Log a summary for operability (local)
-        try:
+        with suppress(Exception):
             logger.info(
                 "stream.summary",
                 extra={
@@ -745,5 +777,3 @@ async def produce_frames(
                     "frames_dropped_est": max(0, total - produced),
                 },
             )
-        except Exception:
-            pass
