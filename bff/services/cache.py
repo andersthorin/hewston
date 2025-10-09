@@ -61,7 +61,7 @@ class CacheService:
                 str(args.rth_only),
             ]
         )
-        key_hash = hashlib.md5(key_data.encode()).hexdigest()
+        key_hash = hashlib.sha256(key_data.encode()).hexdigest()
         return f"chart:{key_hash}"
 
     async def get_chart_data(
@@ -324,7 +324,7 @@ class CacheService:
                 str(include_metrics),
             ]
         )
-        key_hash = hashlib.md5(key_data.encode()).hexdigest()
+        key_hash = hashlib.sha256(key_data.encode()).hexdigest()
         return f"backtest:{key_hash}"
 
     async def get_backtest_data(
