@@ -177,7 +177,7 @@ def _enqueue_run_background(*, job_args: dict) -> None:
     run_job_mod = importlib.import_module("backend.jobs.run_backtest")
     p = multiprocessing.Process(
         target=run_job_mod.run_backtest_and_persist,
-        kwargs=job_args,
+        kwargs={"req": job_args},
         daemon=True,
     )
     p.start()
