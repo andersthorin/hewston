@@ -9,16 +9,21 @@ import logging
 from datetime import datetime as _dt
 from typing import Any
 
+import pandas as pd
 from fastapi import APIRouter, Header, Query, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import JSONResponse, StreamingResponse
-import pandas as pd
 
 from backend.api.controllers.backtests import (
     create_backtest as create_backtest_ctrl,
+)
+from backend.api.controllers.backtests import (
     get_backtest as get_backtest_ctrl,
+)
+from backend.api.controllers.backtests import (
     list_backtests as list_backtests_ctrl,
 )
 from backend.constants import DEFAULT_FPS
+
 
 def _json_default(o):
     try:

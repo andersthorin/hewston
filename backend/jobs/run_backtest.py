@@ -1,13 +1,13 @@
 """Backtest execution job: runs Nautilus and persists canonical artifacts."""
 from __future__ import annotations
 
-from contextlib import suppress
 import json
 import logging
-from pathlib import Path
 import time
-from typing import Any
 import uuid
+from contextlib import suppress
+from pathlib import Path
+from typing import Any
 
 import polars as pl
 

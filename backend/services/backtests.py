@@ -40,6 +40,20 @@ def list_backtests_service(
     offset: int = 0,
     order: str | None = None,
 ) -> dict[str, Any]:
+    """List backtests with optional filters and pagination.
+
+    Args:
+      symbol: Filter by symbol.
+      strategy_id: Filter by strategy.
+      from_date: Inclusive start ISO date.
+      to_date: Inclusive end ISO date.
+      limit: Page size (1..500).
+      offset: Offset for pagination.
+      order: Sort order, 'created_at' or '-created_at'.
+
+    Returns:
+      dict: {items, total, limit, offset}.
+    """
     # Sanitize inputs per story
     limit = max(1, min(int(limit), 500))
     offset = max(0, int(offset))
@@ -75,6 +89,7 @@ def list_backtests_service(
             mp = (run_full.get("artifacts") or {}).get("run_manifest_path") if run_full else None
             if mp and os.path.isfile(mp):
                 with open(mp) as f:
+
                     m = _json.load(f)
                 rf = m.get("run_from")
                 rt = m.get("run_to")
@@ -90,6 +105,14 @@ def list_backtests_service(
 
 
 def get_backtest_service(run_id: str) -> dict | None:
+    """Get a single backtest row enriched with run_from/run_to when available.
+
+    Args:
+      run_id: Backtest identifier.
+
+    Returns:
+      dict | None: The backtest record, or None if not found.
+    """
     catalog = get_catalog()
     try:
         run = catalog.get_backtest(run_id)
@@ -98,6 +121,7 @@ def get_backtest_service(run_id: str) -> dict | None:
     if not run:
         return None
     # Enrich with run_from/run_to from run-manifest.json when available
+
     try:
         mp = (run.get("artifacts") or {}).get("run_manifest_path") or (
             run.get("manifest") or {}
@@ -157,6 +181,7 @@ def _write_minimal_manifest(
     """Best-effort write of a minimal manifest; safe to fail silently."""
     try:
         from pathlib import Path as _Path
+
         from backend.utils.paths import ensure_dir as _ensure
         from backend.utils.paths import get_backtests_dir
 
@@ -338,6 +363,7 @@ def _persist_queued_run_and_manifest(
             params=params,
             seed=seed,
             slippage_fees=slippage_fees,
+
             speed=speed,
             run_from=None,
             run_to=None,
@@ -363,6 +389,17 @@ def _canonical_inputs_hash(payload: dict) -> str:
 
 
 def create_backtest_service(body: dict, idempotency_key: str | None) -> tuple[dict, int]:
+    """Create a backtest row, write a minimal manifest, and enqueue the runner.
+
+    Applies idempotency by header key and canonical input hash.
+
+    Args:
+      body: JSON payload from request.
+      idempotency_key: Optional idempotency header value.
+
+    Returns:
+      tuple[dict, int]: (payload, HTTP status code).
+    """
     strategy_id = body.get("strategy_id")
     params = body.get("params", {})
     seed = int(body.get("seed", 42))
@@ -414,8 +451,8 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> tuple[di
         return {"run_id": existing["run_id"], "status": "EXISTS"}, 200
 
     # Create QUEUED row + manifest
-    from uuid import uuid4
     from datetime import datetime
+    from uuid import uuid4
 
     run_id = uuid4().hex
     created_at = datetime.now(UTC).isoformat()

@@ -1,3 +1,8 @@
+"""Simple SMA crossover strategies (Nautilus-backed or placeholder).
+
+Exposes minimal artifacts (orders, fills, equity) consumed by the app.
+"""
+
 from __future__ import annotations
 
 from typing import Any
@@ -34,11 +39,22 @@ try:  # pragma: no cover - exercised in integration
             instrument_id: str,
             fast: int = 20,
             slow: int = 50,
+
             qty: int = 1,
             rth_only: bool = False,
             eod_flat: bool = False,
             **_: Any,
         ) -> None:
+            """Initialize SMA crossover strategy.
+
+            Args:
+              instrument_id: Instrument like "AAPL.XNAS".
+              fast: Short SMA period.
+              slow: Long SMA period.
+              qty: Fixed order quantity per signal.
+              rth_only: If True, ignore pre/post-market bars.
+              eod_flat: If True, flatten at end of RTH.
+            """
             super().__init__()
             if fast >= slow:
                 fast, slow = 20, 50
@@ -49,6 +65,7 @@ try:  # pragma: no cover - exercised in integration
             self.qty = int(qty)
             self.rth_only = bool(rth_only)
             self.eod_flat = bool(eod_flat)
+
 
             # Runtime state for artifact mapping (MVP, independent of engine internals)
             self._bar_type: BarType | None = None
@@ -63,10 +80,12 @@ try:  # pragma: no cover - exercised in integration
             self._oid_seq: int = 0
 
         def on_load(self) -> None:  # noqa: D401
+            """Hook called when strategy is loaded."""
             # Defer subscriptions to on_start per Nautilus guidance
             pass
 
         def on_start(self) -> None:  # noqa: D401
+            """Hook called when the strategy starts; subscribe and init indicators."""
             # Subscribe to 1m MID bars aggregated INTERNALLY from QuoteTicks
             spec = BarSpecification.from_timedelta(timedelta(minutes=1), PriceType.MID)
             self._bar_type = BarType(self.instrument_id, spec, AggregationSource.INTERNAL)
@@ -106,7 +125,11 @@ try:  # pragma: no cover - exercised in integration
                 account = portfolio.account(venue)
                 from nautilus_trader.model.currencies import USD
                 bal_money = account.balance_total(USD)
-                bal_val = float(bal_money.as_double()) if hasattr(bal_money, "as_double") else float(bal_money)
+                bal_val = (
+                    float(bal_money.as_double())
+                    if hasattr(bal_money, "as_double")
+                    else float(bal_money)
+                )
                 upnls = portfolio.unrealized_pnls(venue)
                 upnl_money = upnls.get(USD)
                 upnl_val = (
@@ -121,7 +144,9 @@ try:  # pragma: no cover - exercised in integration
                 return float(equity_val)
             except Exception as e:  # pragma: no cover
                 logger.error(
-                    f"❌ CRITICAL: Failed to obtain canonical equity (balance_total + unrealized_pnls): {type(e).__name__}: {e}"
+                    "❌ CRITICAL: Failed to obtain canonical equity "
+                    "(balance_total + unrealized_pnls): "
+                    f"{type(e).__name__}: {e}"
                 )
                 raise RuntimeError(f"Canonical equity unavailable from Nautilus: {e}") from e
 
@@ -146,6 +171,7 @@ try:  # pragma: no cover - exercised in integration
 
 
         def on_bar(self, bar) -> None:
+            """Handle an incoming bar for this instrument and update signals."""
             # Only handle our instrument/BarType
             if self._bar_type is None or bar.bar_type != self._bar_type:
                 return
@@ -172,8 +198,8 @@ try:  # pragma: no cover - exercised in integration
 
         # Generic event handler to catch ALL events for debugging
         def on_event(self, event) -> None:  # pragma: no cover
+            """Handle a generic engine event (debug logging only)."""
             import logging
-
             logger = logging.getLogger("strategy.events")
 
             event_type = type(event).__name__
@@ -187,8 +213,8 @@ try:  # pragma: no cover - exercised in integration
 
         # Keep artifacts in sync when fills occur (best-effort; details may vary by engine)
         def on_order_filled(self, event) -> None:  # pragma: no cover
+            """Handle order fill events and update local artifacts."""
             import logging
-
             logger = logging.getLogger("strategy.fills")
 
             logger.info(f"🎯 on_order_filled CALLED! Event: {event}")
@@ -235,7 +261,8 @@ try:  # pragma: no cover - exercised in integration
                 self.fills.append(fill_data)
 
                 logger.info(
-                    f"✅ FILL RECORDED: {fill_data['side']} {qty} @ ${px:.2f}, total_fills={len(self.fills)}"
+                    f"✅ FILL RECORDED: {fill_data['side']} {qty} @ ${px:.2f}, "
+                    f"total_fills={len(self.fills)}"
                 )
 
             except Exception as e:
@@ -271,6 +298,7 @@ try:  # pragma: no cover - exercised in integration
                 "type": "MKT",
                 "time_in_force": "GTC",
             }
+
             self.orders.append(order_data)
 
             logger.info(
@@ -287,10 +315,19 @@ except Exception:  # pragma: no cover - fallback placeholder when Nautilus not i
         """Placeholder which only stores parameters when Nautilus is not available."""
 
         def __init__(self, fast: int = 20, slow: int = 50, **_: Any) -> None:
+            """Initialize placeholder parameters when Nautilus is unavailable.
+
+            Args:
+              fast: Short SMA period.
+              slow: Long SMA period.
+            """
+            """Return debug representation."""
+
             if fast >= slow:
                 fast, slow = 20, 50
             self.fast = int(fast)
             self.slow = int(slow)
 
         def __repr__(self) -> str:
+            """Return debug representation."""
             return f"SMAStrategy(fast={self.fast}, slow={self.slow})"

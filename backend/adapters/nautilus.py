@@ -4,8 +4,8 @@ No stubs or fallbacks; all data and metrics come from Nautilus outputs.
 """
 from __future__ import annotations
 
-from contextlib import suppress
 import math
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 

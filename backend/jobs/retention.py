@@ -1,16 +1,17 @@
 """Retention helpers to prune old backtest artifacts and rows."""
 from __future__ import annotations
 
+import json
+import os
+import shutil
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-import json
-import os
 from pathlib import Path
-import shutil
 from typing import Any
 
 from backend.adapters.sqlite_catalog import SqliteCatalog
+
 
 @dataclass
 class Candidate:
