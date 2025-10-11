@@ -74,7 +74,7 @@ def list_backtests_service(q: BacktestListQuery) -> dict[str, Any]:
         # Remove dataset bounds from response to avoid confusion
         d.pop("from_date", None)
         d.pop("to_date", None)
-        # Read run manifest to source authoritative window
+        # Read run manifest to source authoritative window and portfolio hints
         try:
             run_full = catalog.get_backtest(i.run_id)
             mp = (run_full.get("artifacts") or {}).get("run_manifest_path") if run_full else None
@@ -87,6 +87,15 @@ def list_backtests_service(q: BacktestListQuery) -> dict[str, Any]:
                     d["run_from"] = rf
                 if rt is not None:
                     d["run_to"] = rt
+                # Portfolio surfacing: instruments/strategies counts and flag
+                try:
+                    instruments = m.get("instruments") or []
+                    per_strategy = (m.get("per_strategy_artifacts") or {})
+                    d["instruments_count"] = int(len(instruments)) if instruments else 0
+                    d["strategies_count"] = int(len(per_strategy.keys())) if per_strategy else 0
+                    d["is_portfolio"] = bool(d.get("instruments_count", 0) and d["instruments_count"] > 1)
+                except Exception:
+                    pass
         except Exception:
             # Best-effort enrichment; if missing, leave as None
             pass

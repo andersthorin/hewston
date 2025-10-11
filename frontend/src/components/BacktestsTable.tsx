@@ -11,6 +11,10 @@ export type BacktestSummaryRow = {
   max_drawdown?: number | null
   sharpe_ratio?: number | null
   win_rate?: number | null
+  // Portfolio surfacing (optional)
+  instruments_count?: number | null
+  strategies_count?: number | null
+  is_portfolio?: boolean | null
 }
 
 export type BacktestsTableProps = {
@@ -99,9 +103,18 @@ function Row({ r, onView }: { r: BacktestSummaryRow; onView?: (id: string) => vo
               Engine: Nautilus Trader
             </span>
           ) : null}
+          {((r.instruments_count ?? 0) > 1 || r?.is_portfolio) ? (
+            <span
+              className="inline-flex items-center rounded bg-indigo-100 text-indigo-700 px-2 py-0.5 text-xs"
+              title="Portfolio run"
+              aria-label="Portfolio run"
+            >
+              {`Portfolio (${Math.max(1, r.instruments_count || 0)} syms${typeof r.strategies_count === 'number' && r.strategies_count > 0 ? ", " + r.strategies_count + " strats" : ''})`}
+            </span>
+          ) : null}
         </div>
       </td>
-      <td className="px-2 py-1">{r.symbol ?? ''}</td>
+      <td className="px-2 py-1">{((r.instruments_count ?? 0) > 1 || r?.is_portfolio) ? `Portfolio (${Math.max(1, r.instruments_count || 0)} symbols)` : (r.symbol ?? '')}</td>
       <td className="px-2 py-1">{runFrom}</td>
       <td className="px-2 py-1">{runTo}</td>
       <td className="px-2 py-1">{r.duration_ms ?? ''}</td>

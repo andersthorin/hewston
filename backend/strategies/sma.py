@@ -114,6 +114,8 @@ try:  # pragma: no cover - exercised in integration
                 local = ts.astimezone(tz_ny)
                 mins = local.hour * 60 + local.minute
                 return ((mins >= 9 * 60 + 30) and (mins < 16 * 60)), mins
+            except Exception:
+                return True, None
         def _compute_qty(self, px: float) -> int:
             """Compute order size based on sizing policy.
 
@@ -145,8 +147,6 @@ try:  # pragma: no cover - exercised in integration
             # VolTarget and others -> fallback
             return max(1, int(self.qty))
 
-            except Exception:
-                return True, None
 
         def _compute_equity_snapshot(self) -> float:
             import logging

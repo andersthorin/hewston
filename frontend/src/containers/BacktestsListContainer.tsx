@@ -32,7 +32,9 @@ function CreateBacktestForm({
       if (agentic) {
         // Agentic flow: Start directly using proposed plan (or propose on-the-fly)
         const usePlan = plan ?? (await apiPost('/api/v1/agentic/propose_plan', { from_date: run_from, to_date: run_to }))
-        const resp = await apiPost<{ run_ids: string[] }>('/api/v1/agentic/start', { plan: usePlan })
+        // Force portfolio bundling for Agentic Mode per Epic 16-21
+        const planWithBundle = { ...(usePlan as any), bundle_mode: 'multi_symbol' }
+        const resp = await apiPost<{ run_ids: string[] }>('/api/v1/agentic/start', { plan: planWithBundle })
         if (!resp?.run_ids?.length) throw new Error('No runs started')
         // Stay on list; refresh happens via query invalidation outside
         return

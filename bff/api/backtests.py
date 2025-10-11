@@ -270,6 +270,10 @@ def _map_list_items(items: list[dict]) -> list[dict[str, Any]]:
                 "sharpe_ratio": item.get("sharpe_ratio") if isinstance(item, dict) else None,
                 "max_drawdown": item.get("max_drawdown") if isinstance(item, dict) else None,
                 "win_rate": item.get("win_rate") if isinstance(item, dict) else None,
+                # Portfolio surfacing (optional, best-effort)
+                "instruments_count": (item.get("instruments_count") if isinstance(item, dict) else None),
+                "strategies_count": (item.get("strategies_count") if isinstance(item, dict) else None),
+                "is_portfolio": (item.get("is_portfolio") if isinstance(item, dict) else None),
             }
         )
     return new_items

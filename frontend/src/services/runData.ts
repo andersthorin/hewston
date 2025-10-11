@@ -94,6 +94,10 @@ export const BFFBacktestListResponseSchema = z.object({
       sharpe_ratio: z.number().optional().nullable(),
       max_drawdown: z.number().optional().nullable(),
       win_rate: z.number().optional().nullable(),
+      // Portfolio surfacing (optional)
+      instruments_count: z.number().optional().nullable(),
+      strategies_count: z.number().optional().nullable(),
+      is_portfolio: z.boolean().optional().nullable(),
     }),
   ),
   total: z.number(),

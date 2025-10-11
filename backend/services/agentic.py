@@ -144,6 +144,14 @@ def propose_plan(from_date: str, to_date: str) -> dict[str, Any]:
     inputs = PlanInputs(from_date=from_date, to_date=to_date)
     included, excluded = discover_universe(inputs)
     strategies = get_strategy_set()
+
+    # Default bundling mode from env (backward compatible)
+    import os as _os
+
+    bundle_mode = _os.getenv("AGENTIC_DEFAULT_BUNDLE_MODE", "per_symbol").strip().lower()
+    if bundle_mode not in ("per_symbol", "multi_symbol"):
+        bundle_mode = "per_symbol"
+
     plan = {
         "version": 1,
         "inputs": asdict(inputs),
@@ -155,22 +163,24 @@ def propose_plan(from_date: str, to_date: str) -> dict[str, Any]:
         "guardrails": {
             "coverage_threshold": inputs.coverage_threshold,
         },
+        "bundle_mode": bundle_mode,
         "notes": [
-            "MVP plan: per-symbol, single-strategy runs (Epic 20 will enable multi-strategy)."
+            "Bundling policy: default per-symbol. Set bundle_mode=multi_symbol to create a single portfolio run with all symbols\u00d7strategies.",
         ],
     }
     return plan
 
 
 def start_agentic_run(plan: dict[str, Any]) -> dict[str, Any]:
-    """Start runs for each (symbol × strategy) in the plan; return run_ids.
+    """Start runs from plan and return run_ids.
 
-    MVP: Create one run per (symbol × first strategy). Later we can bundle.
+    Modes:
+    - per_symbol (default): one run per symbol with multi-strategy inside each
+    - multi_symbol: a single portfolio run with all symbols×strategies
     """
     from fastapi import status
     from backend.services.universe import load_universe, default_instrument_id
 
-    run_ids: list[str] = []
     uni = (plan or {}).get("universe") or {}
     strategies = (plan or {}).get("strategies") or []
     if not uni or not strategies:
@@ -188,14 +198,59 @@ def start_agentic_run(plan: dict[str, Any]) -> dict[str, Any]:
 
     u = load_universe()
 
-    # Optional budget cap: AGENTIC_PLAN_MAX_RUNS
+    # Determine bundling mode (env default for compatibility)
     import os
+
+    bundle_mode = (plan or {}).get("bundle_mode") or os.getenv("AGENTIC_DEFAULT_BUNDLE_MODE", "per_symbol")
+    bundle_mode = str(bundle_mode).strip().lower()
+    if bundle_mode not in ("per_symbol", "multi_symbol"):
+        bundle_mode = "per_symbol"
+
+    # Optional budget cap for per_symbol mode
     try:
         max_runs = int(os.getenv("AGENTIC_PLAN_MAX_RUNS", "10"))
     except Exception:
         max_runs = 10
 
-    for idx, sc in enumerate(uni.get("included") or []):
+    included = list(uni.get("included") or [])
+
+    # --- multi_symbol portfolio: create ONE run with all symbols×strategies ---
+    if bundle_mode == "multi_symbol" and included:
+        strategies_list = []
+        for sc in included:
+            symbol = sc.get("symbol")
+            if not symbol:
+                continue
+            instrument_id = default_instrument_id(symbol, venue=venue, u=u)
+            for s in strategies:
+                sid = (s or {}).get("strategy_id")
+                if not sid:
+                    continue
+                sp = dict((s or {}).get("default_params") or {})
+                sp.setdefault("instrument_id", instrument_id)
+                strategies_list.append({"strategy_id": sid, "params": sp})
+        if not strategies_list:
+            return {"error": {"code": "BAD_REQUEST", "message": "no strategies to run"}}, status.HTTP_400_BAD_REQUEST
+
+        body = {
+            "dataset_id": "XNAS-portfolio",
+            "strategy_id": strategy_id,  # compat column
+            "strategies": strategies_list,
+            # Keep a representative symbol for legacy consumers (first included)
+            "symbol": included[0].get("symbol"),
+            "run_from": from_date,
+            "run_to": to_date,
+            "agentic_plan": plan,
+            "params": {"instrument_id": default_instrument_id(included[0].get("symbol"), venue=venue, u=u) if included else None},
+        }
+        payload, code = create_backtest_service(body, idempotency_key=None)
+        if code in (200, 201, 202) and isinstance(payload, dict) and payload.get("run_id"):
+            return {"run_ids": [payload["run_id"]]}
+        return {"run_ids": []}
+
+    # --- per_symbol (default): one run per symbol ---
+    run_ids: list[str] = []
+    for idx, sc in enumerate(included):
         if idx >= max_runs:
             break
         symbol = sc.get("symbol")

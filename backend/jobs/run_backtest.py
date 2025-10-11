@@ -697,6 +697,16 @@ def run_backtest_and_persist(*, req: dict[str, Any]) -> dict:
                 # Minimal per-strategy metrics from analyzer returns are not precomputed here
                 Path(subdir / "metrics.json").write_text(json.dumps({"note": "diagnostic-only"}))
 
+            # And per-instrument diagnostics when portfolio uses multiple instruments
+            per_instr = result_multi.get("per_instrument") or {}
+            for iid, diag in per_instr.items():
+                subdir = out_dir_abs / f"instrument={iid}"
+                ensure_dir(subdir)
+                _write_parquet(list(diag.get("equity") or []), subdir / "equity.parquet")
+                _write_parquet(list(diag.get("orders") or []), subdir / "orders.parquet")
+                _write_parquet(list(diag.get("fills") or []), subdir / "fills.parquet")
+                Path(subdir / "metrics.json").write_text(json.dumps({"note": "diagnostic-only"}))
+
             # Build metrics_artifact using portfolio equity + realized series (from Nautilus analyzer if present)
             try:
                 bar_interval_minutes = int(result_multi.get("bar_interval_minutes") or 1)
@@ -755,9 +765,10 @@ def run_backtest_and_persist(*, req: dict[str, Any]) -> dict:
                 duration_ms=int((time.perf_counter() - t0) * 1000),
             )
 
-            # Enrich manifest with per-strategy artifact mapping for diagnostics
+            # Enrich manifest with per-strategy and per-instrument artifact mappings for diagnostics
             try:
                 base = json.loads(manifest_path.read_text() or "{}") if manifest_path.is_file() else {}
+                # Per-strategy artifacts
                 per_strategy_artifacts = {
                     str(sid): {
                         "equity_path": str((out_dir_abs / f"strategy={sid}" / "equity.parquet").resolve()),
@@ -768,6 +779,24 @@ def run_backtest_and_persist(*, req: dict[str, Any]) -> dict:
                     for sid in per_map.keys()
                 }
                 base["per_strategy_artifacts"] = per_strategy_artifacts
+
+                # Per-instrument artifacts, when present
+                per_instr = result_multi.get("per_instrument") or {}
+                if per_instr:
+                    per_instrument_artifacts = {
+                        str(iid): {
+                            "equity_path": str((out_dir_abs / f"instrument={iid}" / "equity.parquet").resolve()),
+                            "orders_path": str((out_dir_abs / f"instrument={iid}" / "orders.parquet").resolve()),
+                            "fills_path": str((out_dir_abs / f"instrument={iid}" / "fills.parquet").resolve()),
+                            "metrics_path": str((out_dir_abs / f"instrument={iid}" / "metrics.json").resolve()),
+                        }
+                        for iid in per_instr.keys()
+                    }
+                    base["per_instrument_artifacts"] = per_instrument_artifacts
+                    instruments = list(result_multi.get("instruments") or [])
+                    if instruments:
+                        base["instruments"] = instruments
+
                 manifest_path.write_text(json.dumps(base, indent=2))
             except Exception:
                 pass
