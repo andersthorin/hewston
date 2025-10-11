@@ -31,8 +31,8 @@ function CreateBacktestForm({
 
       if (agentic) {
         // Agentic flow: Start directly using proposed plan (or propose on-the-fly)
-        const usePlan = plan ?? (await apiPost('/agentic/propose_plan', { from_date: run_from, to_date: run_to }))
-        const resp = await apiPost<{ run_ids: string[] }>('/agentic/start', { plan: usePlan })
+        const usePlan = plan ?? (await apiPost('/api/v1/agentic/propose_plan', { from_date: run_from, to_date: run_to }))
+        const resp = await apiPost<{ run_ids: string[] }>('/api/v1/agentic/start', { plan: usePlan })
         if (!resp?.run_ids?.length) throw new Error('No runs started')
         // Stay on list; refresh happens via query invalidation outside
         return
@@ -72,7 +72,7 @@ function CreateBacktestForm({
       const fd = new FormData(form)
       const run_from = String(fd.get('run_from') || '')
       const run_to = String(fd.get('run_to') || '')
-      const p = await apiPost('/agentic/propose_plan', { from_date: run_from, to_date: run_to })
+      const p = await apiPost('/api/v1/agentic/propose_plan', { from_date: run_from, to_date: run_to })
       setPlan(p)
     } catch (e: any) {
       setError(e?.message || 'Failed to propose plan')

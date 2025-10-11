@@ -9,7 +9,7 @@ Guardrails (MVP): coverage >= threshold (default 0.9)
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Any
 
@@ -54,15 +54,22 @@ def _list_dates_for_symbol_dir(sym_dir: Path) -> list[str]:
 
 
 def _daterange_list(from_date: str, to_date: str) -> list[str]:
+    """Return list of trading days for coverage checks.
+
+    MVP: use pandas BusinessDay frequency (Mon–Fri). This excludes weekends so
+    multi-week/month ranges don't penalize symbols for market-closed days.
+    Note: U.S. market holidays are not excluded in this MVP.
+    """
     try:
         import pandas as pd  # type: ignore
 
         return (
-            pd.date_range(pd.to_datetime(from_date), pd.to_datetime(to_date), freq="1D")
+            pd.bdate_range(pd.to_datetime(from_date), pd.to_datetime(to_date))
             .strftime("%Y-%m-%d")
             .tolist()
         )
     except Exception:
+        # Fail-safe: single from_date only; callers handle low coverage accordingly
         return [from_date]
 
 
@@ -139,10 +146,10 @@ def propose_plan(from_date: str, to_date: str) -> dict[str, Any]:
     strategies = get_strategy_set()
     plan = {
         "version": 1,
-        "inputs": inputs.__dict__,
+        "inputs": asdict(inputs),
         "universe": {
-            "included": [sc.__dict__ for sc in included],
-            "excluded": [sc.__dict__ for sc in excluded],
+            "included": [asdict(sc) for sc in included],
+            "excluded": [asdict(sc) for sc in excluded],
         },
         "strategies": strategies,
         "guardrails": {

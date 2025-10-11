@@ -17,6 +17,8 @@ from bff.api.chart_data import router as chart_data_router
 from bff.api.health import router as health_router
 from bff.api.proxy import router as proxy_router
 from bff.api.websocket import router as websocket_router
+from bff.api.agentic import router as agentic_router
+
 from bff.app.config import (
     BFF_API_DESCRIPTION,
     BFF_API_TITLE,
@@ -108,6 +110,8 @@ def create_app() -> FastAPI:
     # Include API routes
     app.include_router(health_router, prefix="/api/v1")
     # Order matters: register enriched domain-specific routes before generic proxy
+    app.include_router(agentic_router, prefix="/api/v1")
+
     app.include_router(backtests_router, prefix="/api/v1")
     app.include_router(chart_data_router, prefix="/api/v1")
     app.include_router(proxy_router, prefix="/api/v1")
