@@ -1,0 +1,15 @@
+epic: E18
+title: Equities Universe Management (UniverseV1 + coverage)
+decision: PASS
+rationale: UniverseV1 loader, validation, and coverage-based selection integrated into propose_plan. Default instrument_id mapping provided.
+evidence:
+  - code:
+      - backend/services/universe.py
+      - backend/services/agentic.py
+  - docs:
+      - docs/architecture/ADR-011-equities-universe-management.md
+      - docs/prd/epic-18-equities-universe-management.md
+notes:
+  - When UniverseV1 absent, warehouse scan fallback used
+  - Symbols below threshold marked COVERAGE_LOW in plan
+

@@ -86,3 +86,27 @@ export type CreateBacktestRequest = {
   seed?: number
 }
 export type CreateBacktestResponse = { backtest_id: string; status: string }
+
+
+// --- Direct backend artifact endpoints (optional, supports multi-strategy) ---
+import { apiGet } from '../utils/api'
+
+export async function getBacktestMetrics(runId: string, strategy?: string): Promise<any> {
+  const qs = strategy ? `?strategy=${encodeURIComponent(strategy)}` : ''
+  return await apiGet<any>(`/backtests/${encodeURIComponent(runId)}/metrics${qs}`)
+}
+
+export async function getBacktestEquity(
+  runId: string,
+  strategy?: string,
+): Promise<{ equity: Array<{ timestamp: string; equity: number; drawdown?: number }> }> {
+  const qs = strategy ? `?strategy=${encodeURIComponent(strategy)}` : ''
+  return await apiGet<{ equity: Array<{ timestamp: string; equity: number; drawdown?: number }> }>(
+    `/backtests/${encodeURIComponent(runId)}/equity${qs}`,
+  )
+}
+
+export async function getBacktestOrders(runId: string, strategy?: string): Promise<{ orders: any[] }> {
+  const qs = strategy ? `?strategy=${encodeURIComponent(strategy)}` : ''
+  return await apiGet<{ orders: any[] }>(`/backtests/${encodeURIComponent(runId)}/orders${qs}`)
+}

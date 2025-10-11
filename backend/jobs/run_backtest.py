@@ -149,6 +149,176 @@ def _execute_and_persist_backtest(*, args: dict[str, Any]) -> dict:
     )
 
 
+# --- Multi-strategy helpers (Epic 20) ---
+
+def _run_single_strategy_to_paths(*, args: dict[str, Any]) -> dict:
+    """Run a single strategy and write artifacts to provided paths, returning metrics_artifact.
+    Expects same args keys as _execute_and_persist_backtest but does NOT finalize DB status.
+    """
+    dataset_id = args.get("dataset_id")
+    strategy_id = args["strategy_id"]
+    params = args["params"]
+    seed = args["seed"]
+    from_date = args.get("from_date")
+    to_date = args.get("to_date")
+    equity_path = args["equity_path"]
+    orders_path = args["orders_path"]
+    fills_path = args["fills_path"]
+    logger: logging.Logger = args["logger"]
+
+    t0 = time.perf_counter()
+    runner = NautilusBacktestRunner()
+    result = runner.run(
+        spec=RunSpec(
+            dataset_id=dataset_id,
+            strategy_id=strategy_id,
+            params=params,
+            seed=seed,
+            from_date=from_date,
+            to_date=to_date,
+        )
+    )
+    duration_ms = int((time.perf_counter() - t0) * 1000)
+
+    equity_records = list(result.get("equity") or [])
+    if not equity_records:
+        raise RuntimeError("Canonical equity series missing from strategy; cannot persist equity (fail-fast)")
+
+    _validate_equity_against_total_return(
+        equity_records,
+        result.get("metrics") or {},
+        start_balance=10000.0,
+    )
+
+    _write_parquet(equity_records, equity_path)
+    _write_parquet(result.get("orders", []), orders_path)
+    _write_parquet(result.get("fills", []), fills_path)
+
+    try:
+        bar_interval_minutes = int(result.get("bar_interval_minutes") or params.get("bar_interval_minutes") or 1)
+    except Exception:
+        bar_interval_minutes = 1
+
+    realized = _derive_realized_series_from_result(result)
+    metrics_series = compute_cumulative_metrics(equity_records, realized, bar_minutes=bar_interval_minutes)
+    compact_series = _compact_metrics_series(metrics_series)
+    end_pos_qty_fills = _compute_end_pos_qty_fills(result.get("fills", []) or [])
+    annualization_p = _compute_annualization_p(bar_interval_minutes)
+    nautilus_stats, sr_val = _extract_nautilus_stats_and_sharpe(result)
+
+    metrics_artifact = {
+        "stats": {"raw": nautilus_stats},
+        "series": compact_series,
+        "bar_interval_minutes": bar_interval_minutes,
+        "annualization_P": annualization_p,
+        "end_pos_qty_fills": float(end_pos_qty_fills),
+    }
+    if sr_val is not None:
+        metrics_artifact["sharpe_ratio"] = sr_val
+    _surface_nautilus_metrics(metrics_artifact, result.get("metrics") or {})
+    return {"metrics": metrics_artifact, "duration_ms": duration_ms}
+
+
+def _finalize_multi_run(*, args: dict[str, Any], per_strategy: dict[str, dict]) -> dict:
+    """Finalize a multi-strategy run: write combined metrics and manifest, update DB once."""
+    out_dir: Path = args["out_dir"]
+    metrics_path: Path = args["metrics_path"]  # will write combined here
+    logger: logging.Logger = args["logger"]
+    run_id: str = args["run_id"]
+    dataset_id = args.get("dataset_id")
+    seed: int = args["seed"]
+    slippage_fees: dict[str, Any] = args["slippage_fees"]
+    speed: int = args["speed"]
+    from_date = args.get("from_date")
+    to_date = args.get("to_date")
+    code_hash: str = args["code_hash"]
+    created_at_iso: str = args["created_at_iso"]
+    cat = args["cat"]
+    manifest_path: Path = args["manifest_path"]
+
+    ensure_dir(out_dir)
+
+    # Build combined metrics summary (simple aggregation)
+    summary = {}
+    try:
+        # pick best by total_return if available
+        best = None
+        for sid, arts in per_strategy.items():
+            m = (arts.get("metrics") or {})
+            tr = m.get("total_return")
+            if tr is not None:
+                if best is None or float(tr) > float(best[1]):
+                    best = (sid, float(tr))
+        if best:
+            summary["best_total_return_strategy"] = best[0]
+            summary["best_total_return"] = best[1]
+    except Exception:
+        pass
+
+    combined = {"per_strategy": {k: {"metrics": v.get("metrics")} for k, v in per_strategy.items()}, "summary": summary}
+    metrics_path.write_text(json.dumps(combined, separators=(",", ":")))
+    logger.info(f"Wrote combined metrics for multi-strategy run: {metrics_path}")
+
+    # Merge with minimal manifest and include strategies list if present in args
+    base = {}
+    try:
+        if manifest_path.is_file():
+            base = json.loads(manifest_path.read_text() or "{}")
+    except Exception:
+        base = {}
+
+    # Persist per-strategy artifact paths in manifest to aid API lookups
+    per_strategy_artifacts = {
+        sid: {
+            "equity_path": str((out_dir / f"strategy={sid}" / "equity.parquet").resolve()),
+            "orders_path": str((out_dir / f"strategy={sid}" / "orders.parquet").resolve()),
+            "fills_path": str((out_dir / f"strategy={sid}" / "fills.parquet").resolve()),
+            "metrics_path": str((out_dir / f"strategy={sid}" / "metrics.json").resolve()),
+        }
+        for sid in per_strategy.keys()
+    }
+
+    manifest = {
+        **(base or {}),
+        "run_id": run_id,
+        "dataset_id": dataset_id,
+        # Keep compatibility fields if base has them; do not overwrite strategy_id/params for multi
+        "seed": seed,
+        "slippage_fees": slippage_fees,
+        "speed": speed,
+        "run_from": from_date,
+        "run_to": to_date,
+        "code_hash": code_hash,
+        "env_lock": base.get("env_lock") if isinstance(base, dict) else None,
+        "calendar_version": base.get("calendar_version") if isinstance(base, dict) else "NAZDAQ-v1",
+        "tz": base.get("tz") if isinstance(base, dict) else "America/New_York",
+        "created_at": base.get("created_at") or created_at_iso,
+        "status": "DONE",
+        "per_strategy_artifacts": per_strategy_artifacts,
+    }
+    manifest_path.write_text(json.dumps(manifest, indent=2))
+
+    # Set DB status and store combined metrics path under metrics_path for compatibility
+    cat.set_backtest_status(
+        run_id,
+        status="DONE",
+        duration_ms=sum((v.get("duration_ms") or 0) for v in per_strategy.values()),
+        artifacts={
+            "metrics_path": str(metrics_path),
+            "run_manifest_path": str(manifest_path),
+        },
+    )
+
+    return {
+        "run_id": run_id,
+        "status": "DONE",
+        "paths": {
+            "combined_metrics": str(metrics_path),
+            "manifest": str(manifest_path),
+        },
+    }
+
+
 def _compact_metrics_series(metrics_series: list[tuple[str, dict]]) -> list:
     """Store only points where realized_pnl or win_rate changes, plus final point."""
     compact_series: list = []
@@ -235,7 +405,16 @@ def _persist_artifacts_and_finalize(
     metrics_path.write_text(json.dumps(metrics_artifact, separators=(",", ":")))
     logger.info(f"Artifacts written to {out_dir}")
 
+    # Merge with any existing minimal manifest (to preserve agentic_plan, etc.)
+    base = {}
+    try:
+        if manifest_path.is_file():
+            base = json.loads(manifest_path.read_text() or "{}")
+    except Exception:
+        base = {}
+
     manifest = {
+        **(base or {}),
         "run_id": run_id,
         "dataset_id": dataset_id,
         "strategy_id": strategy_id,
@@ -246,11 +425,11 @@ def _persist_artifacts_and_finalize(
         "run_from": from_date,
         "run_to": to_date,
         "code_hash": code_hash,
-        "env_lock": None,
-        "calendar_version": "NAZDAQ-v1",
-        "tz": "America/New_York",
+        "env_lock": base.get("env_lock") if isinstance(base, dict) else None,
+        "calendar_version": base.get("calendar_version") if isinstance(base, dict) else "NAZDAQ-v1",
+        "tz": base.get("tz") if isinstance(base, dict) else "America/New_York",
         "bar_interval_minutes": bar_interval_minutes,
-        "created_at": created_at_iso,
+        "created_at": base.get("created_at") or created_at_iso,
         "status": "DONE",
     }
     manifest_path.write_text(json.dumps(manifest, indent=2))
@@ -484,30 +663,142 @@ def run_backtest_and_persist(*, req: dict[str, Any]) -> dict:
 
     t0 = time.perf_counter()
     try:
-        return _execute_and_persist_backtest(
-            args={
-                "dataset_id": dataset_id,
-                "strategy_id": strategy_id,
-                "params": params,
-                "seed": seed,
-                "from_date": from_date,
-                "to_date": to_date,
-                "speed": speed,
-                "slippage_fees": slippage_fees,
-                "cat": cat,
-                "out_dir": out_dir,
-                "out_dir_abs": out_dir_abs,
-                "equity_path": equity_path,
-                "orders_path": orders_path,
-                "fills_path": fills_path,
-                "metrics_path": metrics_path,
-                "manifest_path": manifest_path,
-                "run_id": run_id,
-                "code_hash": code_hash,
-                "created_at_iso": created_at_iso,
-                "logger": logger,
-            },
-        )
+        strategies = req.get("strategies") or []
+        if isinstance(strategies, list) and strategies:
+            # Multi-strategy: run all strategies in a single engine/portfolio (Option A)
+            runner = NautilusBacktestRunner()
+            specs = [
+                RunSpec(
+                    dataset_id=dataset_id,
+                    strategy_id=(s or {}).get("strategy_id"),
+                    params=(s or {}).get("params") or {},
+                    seed=seed,
+                    from_date=from_date,
+                    to_date=to_date,
+                )
+                for s in strategies
+                if (s or {}).get("strategy_id")
+            ]
+            result_multi = runner.run_multi(specs=specs)
+
+            # Write portfolio-level artifacts at run root
+            _write_parquet(list(result_multi.get("equity") or []), equity_path)
+            _write_parquet(list(result_multi.get("orders") or []), orders_path)
+            _write_parquet(list(result_multi.get("fills") or []), fills_path)
+
+            # Also write per-strategy diagnostics into subdirectories
+            per_map = result_multi.get("per_strategy") or {}
+            for sid, diag in per_map.items():
+                subdir = out_dir_abs / f"strategy={sid}"
+                ensure_dir(subdir)
+                _write_parquet(list(diag.get("equity") or []), subdir / "equity.parquet")
+                _write_parquet(list(diag.get("orders") or []), subdir / "orders.parquet")
+                _write_parquet(list(diag.get("fills") or []), subdir / "fills.parquet")
+                # Minimal per-strategy metrics from analyzer returns are not precomputed here
+                Path(subdir / "metrics.json").write_text(json.dumps({"note": "diagnostic-only"}))
+
+            # Build metrics_artifact using portfolio equity + realized series (from Nautilus analyzer if present)
+            try:
+                bar_interval_minutes = int(result_multi.get("bar_interval_minutes") or 1)
+            except Exception:
+                bar_interval_minutes = 1
+            equity_records = list(result_multi.get("equity") or [])
+            realized_pairs = (((result_multi.get("nautilus") or {}).get("series") or {}).get("realized_pnl") or [])
+            realized_series = []
+            try:
+                for pair in realized_pairs:
+                    ts, val = pair[0], float(pair[1])
+                    realized_series.append((str(ts), float(val)))
+            except Exception:
+                realized_series = []
+
+            metrics_series = compute_cumulative_metrics(equity_records, realized_series, bar_minutes=bar_interval_minutes)
+            compact_series = _compact_metrics_series(metrics_series)
+            end_pos_qty_fills = _compute_end_pos_qty_fills(list(result_multi.get("fills") or []))
+            annualization_p = _compute_annualization_p(bar_interval_minutes)
+            nautilus_stats = ((result_multi.get("nautilus") or {}).get("stats") or {})
+            metrics_artifact = {
+                "stats": {"raw": nautilus_stats},
+                "series": compact_series,
+                "bar_interval_minutes": bar_interval_minutes,
+                "annualization_P": annualization_p,
+                "end_pos_qty_fills": float(end_pos_qty_fills),
+            }
+            _surface_nautilus_metrics(metrics_artifact, dict(result_multi.get("metrics") or {}))
+
+            # Persist portfolio artifacts and update DB
+            summary = _persist_artifacts_and_finalize(
+                args={
+                    "dataset_id": dataset_id,
+                    "strategy_id": strategy_id,
+                    "params": params,
+                    "seed": seed,
+                    "from_date": from_date,
+                    "to_date": to_date,
+                    "speed": speed,
+                    "slippage_fees": slippage_fees,
+                    "cat": cat,
+                    "out_dir": out_dir,
+                    "out_dir_abs": out_dir_abs,
+                    "equity_path": equity_path,
+                    "orders_path": orders_path,
+                    "fills_path": fills_path,
+                    "metrics_path": metrics_path,
+                    "manifest_path": manifest_path,
+                    "run_id": run_id,
+                    "code_hash": code_hash,
+                    "created_at_iso": created_at_iso,
+                    "logger": logger,
+                },
+                metrics_artifact=metrics_artifact,
+                bar_interval_minutes=bar_interval_minutes,
+                duration_ms=int((time.perf_counter() - t0) * 1000),
+            )
+
+            # Enrich manifest with per-strategy artifact mapping for diagnostics
+            try:
+                base = json.loads(manifest_path.read_text() or "{}") if manifest_path.is_file() else {}
+                per_strategy_artifacts = {
+                    str(sid): {
+                        "equity_path": str((out_dir_abs / f"strategy={sid}" / "equity.parquet").resolve()),
+                        "orders_path": str((out_dir_abs / f"strategy={sid}" / "orders.parquet").resolve()),
+                        "fills_path": str((out_dir_abs / f"strategy={sid}" / "fills.parquet").resolve()),
+                        "metrics_path": str((out_dir_abs / f"strategy={sid}" / "metrics.json").resolve()),
+                    }
+                    for sid in per_map.keys()
+                }
+                base["per_strategy_artifacts"] = per_strategy_artifacts
+                manifest_path.write_text(json.dumps(base, indent=2))
+            except Exception:
+                pass
+
+            return summary
+        else:
+            # Single-strategy path (existing behavior)
+            return _execute_and_persist_backtest(
+                args={
+                    "dataset_id": dataset_id,
+                    "strategy_id": strategy_id,
+                    "params": params,
+                    "seed": seed,
+                    "from_date": from_date,
+                    "to_date": to_date,
+                    "speed": speed,
+                    "slippage_fees": slippage_fees,
+                    "cat": cat,
+                    "out_dir": out_dir,
+                    "out_dir_abs": out_dir_abs,
+                    "equity_path": equity_path,
+                    "orders_path": orders_path,
+                    "fills_path": fills_path,
+                    "metrics_path": metrics_path,
+                    "manifest_path": manifest_path,
+                    "run_id": run_id,
+                    "code_hash": code_hash,
+                    "created_at_iso": created_at_iso,
+                    "logger": logger,
+                },
+            )
     except BaseException as e:
         # Fail hard: mark as ERROR, write manifest with error, do not write artifacts
         duration_ms = int((time.perf_counter() - t0) * 1000)

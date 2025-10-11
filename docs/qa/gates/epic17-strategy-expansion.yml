@@ -1,0 +1,19 @@
+epic: E17
+title: Strategy expansion and registry (momentum_v1, rsi_mean_reversion_v1, donchian_breakout_v1)
+decision: PASS
+rationale: Registry entries and strategy classes exist with canonical artifacts and sizing support.
+evidence:
+  - code:
+      - backend/strategies/strategy_factory.py
+      - backend/strategies/momentum.py
+      - backend/strategies/rsi_mr.py
+      - backend/strategies/donchian.py
+  - tests:
+      - backend/tests/test_strategy_registry_epic17.py
+  - docs:
+      - docs/architecture/ADR-010-strategy-registry-and-expansion.md
+      - docs/prd/epic-17-strategy-expansion-and-registry.md
+notes:
+  - Placeholders tolerate missing Nautilus by providing fallbacks
+  - Artifacts surfaces align with SMA (orders, fills, equity)
+

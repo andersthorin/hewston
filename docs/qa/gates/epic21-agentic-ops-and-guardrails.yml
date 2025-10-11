@@ -1,0 +1,15 @@
+epic: E21
+title: Agentic Ops and Guardrails (kill-switch, quotas, logs)
+decision: PASS
+rationale: Endpoints gated by feature flag; per-user per-minute quota limiter; structured logs for propose/start/denied.
+evidence:
+  - code:
+      - backend/api/routes/agentic.py
+      - backend/services/agentic.py
+  - docs:
+      - docs/architecture/ADR-014-agentic-ops-and-guardrails.md
+      - docs/prd/epic-21-agentic-ops-and-guardrails.md
+notes:
+  - Quotas are in-memory MVP; can be replaced by shared store later
+  - Logs include client key (user or IP) and key inputs, aiding audits
+

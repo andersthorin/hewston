@@ -1,0 +1,20 @@
+epic: E16
+title: Agentic Backtest Orchestrator — API, manifest, consent, idempotency
+decision: PASS
+rationale: Endpoints implemented with kill-switch, consent capture, plan passthrough to manifests, and idempotency.
+evidence:
+  - code:
+      - backend/api/routes/agentic.py
+      - backend/services/agentic.py
+      - backend/services/backtests.py
+      - backend/jobs/run_backtest.py
+  - docs:
+      - docs/architecture/ADR-009-agentic-mode-api-and-manifest.md
+      - docs/prd/epic-16-agentic-backtest-orchestrator.md
+  - tests:
+      - backend/tests/test_backtests_rest.py (idempotency path)
+notes:
+  - Structured JSON logs emitted for propose/start/denied
+  - Minimal manifest enriched with agentic_plan + plan_hash + consent
+  - Feature flag AGENTIC_MODE_ENABLED enforced
+

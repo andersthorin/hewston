@@ -20,7 +20,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Health'
-  
+
   /backtests:
     post:
       summary: Create a backtest run (async)
@@ -128,7 +128,7 @@ paths:
                   total: { type: integer }
                   limit: { type: integer }
                   offset: { type: integer }
-  
+
   /backtests/{id}:
     get:
       summary: Get run metadata and artifact references
@@ -144,6 +144,113 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Run'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+
+  /backtests/{id}/metrics:
+    get:
+      summary: Get metrics JSON (supports multi-strategy)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: strategy
+          required: false
+          schema: { type: string }
+          description: Strategy id for per-strategy diagnostics. If omitted, returns portfolio-level or combined metrics.
+      responses:
+        '200':
+          description: Metrics JSON
+          content:
+            application/json:
+              schema:
+                type: object
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /backtests/{id}/equity:
+    get:
+      summary: Get portfolio-level equity curve (multi-strategy supported)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: strategy
+          required: false
+          schema: { type: string }
+          description: Strategy id for per-strategy diagnostics. If omitted, returns portfolio-level equity.
+      responses:
+        '200':
+          description: Equity series
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  equity:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        timestamp: { type: string, format: date-time }
+                        equity: { type: number }
+                        drawdown: { type: number, nullable: true }
+        '400':
+          description: Bad request (strategy required for multi-strategy)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /backtests/{id}/orders:
+    get:
+      summary: Get orders (supports multi-strategy)
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: strategy
+          required: false
+          schema: { type: string }
+          description: Strategy id for per-strategy diagnostics. If omitted, returns portfolio-level orders.
+      responses:
+        '200':
+          description: Orders list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  orders:
+                    type: array
+                    items: { type: object }
+        '400':
+          description: Bad request (strategy required for multi-strategy)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
         '404':
           description: Not found
           content:

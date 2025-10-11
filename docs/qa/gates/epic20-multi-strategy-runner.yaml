@@ -1,0 +1,22 @@
+title: Epic 20 – Multi-Strategy Runner
+status: draft
+owner: platform
+scenarios:
+  - name: accepts-single-and-multi
+    steps:
+      - call: POST /backtests with {strategy_id, params} returns 202
+      - call: POST /backtests with {strategies:[{strategy_id,params}...], strategy_id:first.strategy} returns 202
+  - name: writes-per-strategy-artifacts
+    steps:
+      - wait: run completes
+      - assert: run-manifest.json exists and contains strategies
+      - assert: per-strategy subdirs exist with equity.parquet, orders.parquet, fills.parquet, metrics.json
+      - assert: combined metrics exists at metrics.json
+  - name: backwards-compat-manifest
+    steps:
+      - assert: top-level strategy_id/params preserved for compatibility
+      - assert: strategies array present when provided
+notes:
+  - runner writes combined metrics summary and preserves minimal manifest fields
+  - DB artifacts map includes per_strategy and combined_metrics_path
+

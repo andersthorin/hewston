@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from backend.api.routes.backtests import router as backtests_router
 from backend.api.routes.bars import router as bars_router
 from backend.api.routes.health import router as health_router
+from backend.api.routes.agentic import router as agentic_router
 from backend.app.logging_setup import configure_logging
 from backend.constants import API_TITLE, API_VERSION, CORS_ORIGINS
 
@@ -55,6 +56,7 @@ def create_app() -> FastAPI:
     app.include_router(health_router, prefix="/api/v1")
     app.include_router(backtests_router, prefix="/api/v1")
     app.include_router(bars_router, prefix="/api/v1")
+    app.include_router(agentic_router, prefix="/api/v1")
 
     return app
 

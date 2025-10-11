@@ -1,0 +1,18 @@
+epic: E19
+title: Risk, Sizing, and Evaluation (MVP sizing policies)
+decision: PASS
+rationale: FixedQty and PercentOfEquity sizing available across SMA and new strategies; metrics surfaced via runner.
+evidence:
+  - code:
+      - backend/strategies/sma.py
+      - backend/strategies/momentum.py
+      - backend/strategies/rsi_mr.py
+      - backend/strategies/donchian.py
+      - backend/jobs/run_backtest.py
+  - docs:
+      - docs/architecture/ADR-012-risk-sizing-and-evaluation.md
+      - docs/prd/epic-19-risk-sizing-and-evaluation.md
+notes:
+  - VolTarget placeholder currently falls back to FixedQty (MVP)
+  - Equity snapshots used for POE sizing when portfolio API limited
+

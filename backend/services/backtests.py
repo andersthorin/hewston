@@ -184,12 +184,14 @@ def _enqueue_run_background(*, job_args: dict) -> None:
 
 
 def _validate_strategy_and_dates(
-    strategy_id: str | None, run_from: str | None, run_to: str | None
+    strategy_id: str | None, run_from: str | None, run_to: str | None, *, strategies: list[dict] | None = None
 ) -> tuple[dict | None, int | None]:
+    # Accept either a single strategy_id or a non-empty strategies list (Epic 20)
     if not strategy_id:
-        return {
-            "error": {"code": "BAD_REQUEST", "message": "Missing required parameter: strategy_id"}
-        }, 400
+        if not (isinstance(strategies, list) and len(strategies) > 0 and all(isinstance(s, dict) for s in strategies)):
+            return {
+                "error": {"code": "BAD_REQUEST", "message": "Missing required parameter: strategy_id or strategies[]"}
+            }, 400
     if run_from and not _parse_iso8601(run_from):
         return {
             "error": {
@@ -271,19 +273,24 @@ def _persist_queued_run_and_manifest(
     *,
     creation: dict,
 ) -> tuple[str, bool]:
-    try:
-        run_id = creation["run_id"]
-        dataset_id = creation["dataset_id"]
-        strategy_id = creation["strategy_id"]
-        params = creation["params"]
-        seed = creation["seed"]
-        slippage_fees = creation["slippage_fees"]
-        speed = creation["speed"]
-        created_at = creation["created_at"]
-        manifest_path = creation["manifest_path"]
-        input_hash = creation["input_hash"]
-        idempotency_key = creation.get("idempotency_key")
+    run_id = creation["run_id"]
+    dataset_id = creation["dataset_id"]
+    strategy_id = creation["strategy_id"]
+    params = creation["params"]
+    seed = creation["seed"]
+    slippage_fees = creation["slippage_fees"]
+    speed = creation["speed"]
+    created_at = creation["created_at"]
+    manifest_path = creation["manifest_path"]
+    input_hash = creation["input_hash"]
+    idempotency_key = creation.get("idempotency_key")
+    agentic_plan = creation.get("agentic_plan")
+    agentic_plan_hash = creation.get("agentic_plan_hash")
+    agentic_consent = creation.get("agentic_consent")
+    strategies = creation.get("strategies") if isinstance(creation.get("strategies"), list) else None
 
+    # Insert row; if it already exists, treat as EXISTS
+    try:
         catalog.create_backtest(
             row={
                 "run_id": run_id,
@@ -301,6 +308,14 @@ def _persist_queued_run_and_manifest(
                 "idempotency_key": idempotency_key,
             }
         )
+    except Exception:
+        existing = catalog.find_backtest_by_input_hash(creation["input_hash"])  # type: ignore[index]
+        if existing:
+            return existing["run_id"], True
+        raise
+
+    # Best-effort manifest write (must not flip existed=True)
+    try:
         minimal_manifest = {
             "run_id": run_id,
             "dataset_id": dataset_id,
@@ -315,13 +330,39 @@ def _persist_queued_run_and_manifest(
             "created_at": created_at,
             "tz": "America/New_York",
         }
+        # Persist multi-strategy set for runner to pick up (compat: keep top-level too)
+        if strategies:
+            minimal_manifest["strategies"] = [
+                {"strategy_id": s.get("strategy_id"), "params": s.get("params") or {}}
+                for s in strategies
+                if isinstance(s, dict)
+            ]
+        if agentic_plan is not None:
+            minimal_manifest["agentic_plan"] = agentic_plan
+            if not agentic_plan_hash:
+                try:
+                    agentic_plan_hash = _canonical_inputs_hash(agentic_plan)
+                except Exception:
+                    agentic_plan_hash = None
+            if agentic_plan_hash:
+                minimal_manifest["agentic_plan_hash"] = agentic_plan_hash
+        if agentic_consent is not None:
+            minimal_manifest["agentic_consent"] = agentic_consent
+        # Persist multi-strategy set for runner to pick up (compat: keep top-level too)
+        if strategies:
+            try:
+                minimal_manifest["strategies"] = [
+                    {"strategy_id": s.get("strategy_id"), "params": s.get("params") or {}}
+                    for s in strategies
+                    if isinstance(s, dict)
+                ]
+            except Exception:
+                pass
         _write_minimal_manifest(manifest_path=manifest_path, manifest=minimal_manifest)
-        return run_id, False
     except Exception:
-        existing = catalog.find_backtest_by_input_hash(creation["input_hash"])  # type: ignore[index]
-        if existing:
-            return existing["run_id"], True
-        raise
+        pass
+
+    return run_id, False
 
 
 def _update_idemp_cache(mem_key: str, mem_idemp_key: str | None, run_id: str) -> None:
@@ -355,10 +396,12 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> tuple[di
     run_from = body.get("run_from")
     run_to = body.get("run_to")
 
-    # Validate required and date fields
-    err, code = _validate_strategy_and_dates(strategy_id, run_from, run_to)
+    # Validate required and date fields (single or multi-strategy)
+    strategies = body.get("strategies") if isinstance(body.get("strategies"), list) else None
+    err, code = _validate_strategy_and_dates(strategy_id, run_from, run_to, strategies=strategies)
     if err:
         return err, code  # type: ignore[return-value]
+
 
     # Resolve dataset and symbol with warehouse defaulting
     dataset_id, symbol, derr, dcode = _resolve_dataset_id_and_symbol(body)
@@ -381,7 +424,22 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> tuple[di
         "run_from": run_from,
         "run_to": run_to,
     }
+    # Include multi-strategy set in canonical hash if provided
+    if strategies:
+        try:
+            inputs_for_hash["strategies"] = [
+                {"strategy_id": s.get("strategy_id"), "params": s.get("params") or {}}
+                for s in strategies
+                if isinstance(s, dict)
+            ]
+        except Exception:
+            pass
     input_hash = _canonical_inputs_hash(inputs_for_hash)
+
+    # Optional: agentic plan passthrough for manifest enrichment
+    agentic_plan = body.get("agentic_plan") or body.get("plan")
+    agentic_plan_hash = (_canonical_inputs_hash(agentic_plan) if isinstance(agentic_plan, dict) else None)
+    agentic_consent = body.get("consent") if isinstance(body.get("consent"), dict) else None
 
     # Fast in-process idempotency
     mem_key = f"ih:{input_hash}"
@@ -424,7 +482,19 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> tuple[di
             "manifest_path": manifest_path,
             "input_hash": input_hash,
             "idempotency_key": idempotency_key,
+            "agentic_plan": agentic_plan,
+            "agentic_plan_hash": agentic_plan_hash,
+            "agentic_consent": agentic_consent,
         }
+        if strategies:
+            try:
+                creation["strategies"] = [
+                    {"strategy_id": s.get("strategy_id"), "params": s.get("params") or {}}
+                    for s in strategies
+                    if isinstance(s, dict)
+                ]
+            except Exception:
+                pass
         new_run_id, existed = _persist_queued_run_and_manifest(catalog, creation=creation)
         if existed:
             _update_idemp_cache(mem_key, mem_idemp_key, new_run_id)
@@ -445,6 +515,17 @@ def create_backtest_service(body: dict, idempotency_key: str | None) -> tuple[di
                 "from_date": run_from,
                 "to_date": run_to,
             }
+            if strategies:
+                job_args["strategies"] = [
+                    {"strategy_id": s.get("strategy_id"), "params": s.get("params") or {}}
+                    for s in strategies
+                    if isinstance(s, dict)
+                ]
+                # Also persist strategies into creation for manifest write
+                try:
+                    creation["strategies"] = job_args["strategies"]
+                except Exception:
+                    pass
             _enqueue_run_background(job_args=job_args)
             payload = {"run_id": new_run_id, "status": "QUEUED"}
             status_code = 202

@@ -83,6 +83,24 @@ WHERE b.backtest_id = ?;
 
 ---
 
+---
+
+### 1.1 Multi‑Strategy Artifact Access
+
+When a backtest was run with multiple strategies, artifacts are organized per strategy. The following endpoints support a `strategy` query parameter:
+
+- GET /backtests/{id}/metrics?strategy={strategy_id}
+  - If omitted, returns combined metrics when available
+- GET /backtests/{id}/equity?strategy={strategy_id}
+  - If omitted, returns portfolio-level equity for the run
+- GET /backtests/{id}/orders?strategy={strategy_id}
+  - If omitted, returns portfolio-level orders for the run
+
+Notes:
+- Combined metrics are also set as the default `artifacts.metrics_path` for compatibility
+- Per‑strategy artifact paths are available in the run manifest under `per_strategy_artifacts`
+
+
 ## 2. Error Codes & Handling
 
 **Purpose**: Canonical error codes for consistent REST and WebSocket error handling.

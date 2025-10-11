@@ -145,10 +145,11 @@ async def get_backtest(run_id: str):
 
 
 @router.get("/backtests/{run_id}/metrics")
-async def get_backtest_metrics(run_id: str):
-    """Return metrics.json for a run.
+async def get_backtest_metrics(run_id: str, strategy: str | None = None):
+    """Return metrics for a run.
 
-    Shape: a flat JSON object with numeric fields (arbitrary keys allowed).
+    - Single-strategy: returns metrics.json at artifacts.metrics_path
+    - Multi-strategy: if strategy is provided and per-strategy artifacts exist in manifest, returns that; otherwise returns combined metrics at root metrics_path
     """
     run = get_backtest_ctrl(run_id)
     if not run:
@@ -156,7 +157,21 @@ async def get_backtest_metrics(run_id: str):
             status_code=status.HTTP_404_NOT_FOUND,
             content={"error": {"code": "RUN_NOT_FOUND", "message": f"Run {run_id} not found"}},
         )
-    metrics_path = (run.get("artifacts") or {}).get("metrics_path")
+    artifacts = (run.get("artifacts") or {})
+    metrics_path = artifacts.get("metrics_path")
+
+    # Try per-strategy when requested
+    if strategy:
+        try:
+            mp = artifacts.get("run_manifest_path") or ((run.get("manifest") or {}).get("path"))
+            if mp:
+                with open(mp) as f:
+                    m = json.load(f)
+                per = (m.get("per_strategy_artifacts") or {}).get(strategy)
+                if per and per.get("metrics_path"):
+                    metrics_path = per.get("metrics_path")
+        except Exception:
+            pass
     try:
         import os
 
@@ -196,9 +211,11 @@ async def get_backtest_metrics(run_id: str):
 
 
 @router.get("/backtests/{run_id}/equity")
-async def get_backtest_equity(run_id: str):
+async def get_backtest_equity(run_id: str, strategy: str | None = None):
     """Return equity curve under { equity: [{timestamp, equity, drawdown?}] }.
 
+    - Single-strategy: from artifacts.equity_path
+    - Multi-strategy: requires strategy; if omitted and exactly one per-strategy, pick it; else 400
     Parquet schema expected: columns ['ts_utc', 'value'] where ts_utc is datetime-like.
     """
     run = get_backtest_ctrl(run_id)
@@ -207,7 +224,29 @@ async def get_backtest_equity(run_id: str):
             status_code=status.HTTP_404_NOT_FOUND,
             content={"error": {"code": "RUN_NOT_FOUND", "message": f"Run {run_id} not found"}},
         )
-    eq_path = (run.get("artifacts") or {}).get("equity_path")
+    artifacts = (run.get("artifacts") or {})
+    eq_path = artifacts.get("equity_path")
+    # For multi-strategy, resolve from manifest
+    if not eq_path:
+        try:
+            mp = artifacts.get("run_manifest_path") or ((run.get("manifest") or {}).get("path"))
+            if mp:
+                with open(mp) as f:
+                    m = json.load(f)
+                per = m.get("per_strategy_artifacts") or {}
+                if strategy:
+                    eq_path = (per.get(strategy) or {}).get("equity_path")
+                else:
+                    if len(per) == 1:
+                        only_sid = next(iter(per))
+                        eq_path = per[only_sid].get("equity_path")
+                    elif len(per) > 1:
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={"error": {"code": "BAD_REQUEST", "message": "strategy query parameter required for multi-strategy run"}},
+                        )
+        except Exception:
+            pass
     try:
         import os
 
@@ -265,8 +304,11 @@ async def get_backtest_equity(run_id: str):
 
 
 @router.get("/backtests/{run_id}/orders")
-async def get_backtest_orders(run_id: str):
+async def get_backtest_orders(run_id: str, strategy: str | None = None):
     """Return orders as list under { orders: [...] }.
+
+    - Single-strategy: from artifacts.orders_path
+    - Multi-strategy: requires strategy; if omitted and exactly one per-strategy, pick it; else 400
 
     Parquet schema suggested in docs: ts_utc, side, qty, price, order_id,
     type, time_in_force, symbol? Response maps to aggregator-friendly shape.
@@ -277,7 +319,28 @@ async def get_backtest_orders(run_id: str):
             status_code=status.HTTP_404_NOT_FOUND,
             content={"error": {"code": "RUN_NOT_FOUND", "message": f"Run {run_id} not found"}},
         )
-    path = (run.get("artifacts") or {}).get("orders_path")
+    artifacts = (run.get("artifacts") or {})
+    path = artifacts.get("orders_path")
+    if not path:
+        try:
+            mp = artifacts.get("run_manifest_path") or ((run.get("manifest") or {}).get("path"))
+            if mp:
+                with open(mp) as f:
+                    m = json.load(f)
+                per = m.get("per_strategy_artifacts") or {}
+                if strategy:
+                    path = (per.get(strategy) or {}).get("orders_path")
+                else:
+                    if len(per) == 1:
+                        only_sid = next(iter(per))
+                        path = per[only_sid].get("orders_path")
+                    elif len(per) > 1:
+                        return JSONResponse(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            content={"error": {"code": "BAD_REQUEST", "message": "strategy query parameter required for multi-strategy run"}},
+                        )
+        except Exception:
+            pass
     try:
         import os
 

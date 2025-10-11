@@ -13,6 +13,14 @@ class StrategyRegistry:
         self._registry: dict[str, str] = {}
         # Built-ins (MVP)
         self.register("sma_crossover", "backend.strategies.sma:SMAStrategy")
+        # Epic 17: versioned ids (temporarily map to SMA until concrete classes land)
+        self.register("momentum_v1", "backend.strategies.momentum:MomentumStrategy")
+        self.register("rsi_mean_reversion_v1", "backend.strategies.rsi_mr:RSIMeanReversionStrategy")
+        self.register("donchian_breakout_v1", "backend.strategies.donchian:DonchianBreakoutStrategy")
+        # Legacy aliases
+        self.register("momentum", "backend.strategies.momentum:MomentumStrategy")
+        self.register("rsi_mr", "backend.strategies.rsi_mr:RSIMeanReversionStrategy")
+        self.register("breakout", "backend.strategies.donchian:DonchianBreakoutStrategy")
 
     def register(self, strategy_id: str, dotted_path: str) -> None:
         """Register a strategy path.

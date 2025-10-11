@@ -4,6 +4,7 @@ import type { BacktestListQuery, CreateBacktestRequest } from '../services/api'
 import BacktestsTable from '../components/BacktestsTable'
 import FiltersBar, { type Filters } from '../components/FiltersBar'
 import { useNavigate } from 'react-router-dom'
+import { apiPost } from '../utils/api'
 
 function CreateBacktestForm({
   onCreated,
@@ -15,16 +16,31 @@ function CreateBacktestForm({
   setCreating: (v: boolean) => void
 }) {
   const createBacktest = useCreateBacktest()
+  const [agentic, setAgentic] = useState(false)
+  const [plan, setPlan] = useState<any | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault()
+    setError(null)
     try {
       setCreating(true)
       const form = new FormData(e.currentTarget)
-      const strategy_id = String(form.get('strategy_id') || 'sma_crossover')
-      const symbol = String(form.get('symbol') || 'AAPL')
       const run_from = String(form.get('run_from') || '')
       const run_to = String(form.get('run_to') || '')
+
+      if (agentic) {
+        // Agentic flow: Start directly using proposed plan (or propose on-the-fly)
+        const usePlan = plan ?? (await apiPost('/agentic/propose_plan', { from_date: run_from, to_date: run_to }))
+        const resp = await apiPost<{ run_ids: string[] }>('/agentic/start', { plan: usePlan })
+        if (!resp?.run_ids?.length) throw new Error('No runs started')
+        // Stay on list; refresh happens via query invalidation outside
+        return
+      }
+
+      // Manual flow
+      const strategy_id = String(form.get('strategy_id') || 'sma_crossover')
+      const symbol = String(form.get('symbol') || 'AAPL')
       const request: CreateBacktestRequest = { strategy_id, symbol }
       if (run_from) request.run_from = run_from
       if (run_to) request.run_to = run_to
@@ -39,6 +55,27 @@ function CreateBacktestForm({
         throw new Error('Failed to create backtest: no id returned')
       }
       onCreated(id)
+    } catch (e: any) {
+      setError(e?.message || 'Failed to submit')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  async function onPreview(e: FormEvent<HTMLButtonElement>) {
+    e.preventDefault()
+    setError(null)
+    try {
+      setCreating(true)
+      const form = (e.currentTarget as HTMLButtonElement).form
+      if (!form) return
+      const fd = new FormData(form)
+      const run_from = String(fd.get('run_from') || '')
+      const run_to = String(fd.get('run_to') || '')
+      const p = await apiPost('/agentic/propose_plan', { from_date: run_from, to_date: run_to })
+      setPlan(p)
+    } catch (e: any) {
+      setError(e?.message || 'Failed to propose plan')
     } finally {
       setCreating(false)
     }
@@ -46,11 +83,9 @@ function CreateBacktestForm({
 
   return (
     <form className="mt-3 flex flex-wrap items-end gap-2" onSubmit={onSubmit}>
-      <label className="flex flex-col">
-        <span className="text-xs text-slate-500">Strategy</span>
-        <select name="strategy_id" defaultValue="sma_crossover" className="input">
-          <option value="sma_crossover">sma_crossover</option>
-        </select>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={agentic} onChange={(e) => setAgentic(e.target.checked)} />
+        <span>Agentic Mode</span>
       </label>
       <label className="flex flex-col">
         <span className="text-xs text-slate-500">From Date</span>
@@ -60,13 +95,51 @@ function CreateBacktestForm({
         <span className="text-xs text-slate-500">To Date</span>
         <input name="run_to" type="date" defaultValue="2024-10-31" className="input" />
       </label>
-      <label className="flex flex-col">
-        <span className="text-xs text-slate-500">Symbol</span>
-        <input name="symbol" defaultValue="AAPL" className="input" />
-      </label>
-      <button type="submit" disabled={creating} className="btn">
-        {creating ? 'Starting…' : 'Start Backtest'}
-      </button>
+
+      {!agentic && (
+        <>
+          <label className="flex flex-col">
+            <span className="text-xs text-slate-500">Strategy</span>
+            <select name="strategy_id" defaultValue="sma_crossover" className="input">
+              <option value="sma_crossover">sma_crossover</option>
+            </select>
+          </label>
+          <label className="flex flex-col">
+            <span className="text-xs text-slate-500">Symbol</span>
+            <input name="symbol" defaultValue="AAPL" className="input" />
+          </label>
+        </>
+      )}
+
+      {agentic ? (
+        <div className="flex items-end gap-2">
+          <button onClick={onPreview} disabled={creating} className="btn" type="button">
+            {creating ? 'Proposing…' : 'Preview Plan'}
+          </button>
+          <button type="submit" disabled={creating} className="btn-primary">
+            {creating ? 'Starting…' : 'Start Agentic Run'}
+          </button>
+        </div>
+      ) : (
+        <button type="submit" disabled={creating} className="btn">
+          {creating ? 'Starting…' : 'Start Backtest'}
+        </button>
+      )}
+
+      {agentic && plan && (
+        <div className="basis-full mt-2 p-2 rounded bg-slate-50 text-xs">
+          <div className="font-semibold mb-1">Plan Preview</div>
+          <div>Symbols: {(plan.universe?.included || []).map((s: any) => s.symbol).join(', ') || 'None'}</div>
+          <div>Strategies: {(plan.strategies || []).map((s: any) => s.strategy_id).join(', ') || 'None'}</div>
+          <div className="text-slate-500">Coverage threshold: {String(plan.guardrails?.coverage_threshold ?? 0.9)}</div>
+        </div>
+      )}
+
+      {error && (
+        <div className="basis-full text-red-600 text-sm mt-1" role="alert">
+          {error}
+        </div>
+      )}
     </form>
   )
 }

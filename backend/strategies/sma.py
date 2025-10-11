@@ -63,6 +63,9 @@ try:  # pragma: no cover - exercised in integration
             self.qty = int(kwargs.get("qty", 1))
             self.rth_only = bool(kwargs.get("rth_only", False))
             self.eod_flat = bool(kwargs.get("eod_flat", False))
+            # Sizing policy (Epic 19 MVP)
+            self.sizing_policy = str(kwargs.get("sizing_policy", "FixedQty"))
+            self.sizing_params = dict(kwargs.get("sizing_params", {}))
 
             # Runtime state for artifact mapping (MVP, independent of engine internals)
             self._bar_type: BarType | None = None
@@ -111,6 +114,37 @@ try:  # pragma: no cover - exercised in integration
                 local = ts.astimezone(tz_ny)
                 mins = local.hour * 60 + local.minute
                 return ((mins >= 9 * 60 + 30) and (mins < 16 * 60)), mins
+        def _compute_qty(self, px: float) -> int:
+            """Compute order size based on sizing policy.
+
+            Policies (MVP):
+              - FixedQty: use self.qty
+              - PercentOfEquity: qty = floor((pct * equity) / px), pct in [0,1]
+              - VolTarget: fallback to FixedQty (placeholder)
+            """
+            try:
+                pol = (self.sizing_policy or "FixedQty").lower()
+            except Exception:
+                pol = "fixedqty"
+            if pol in ("fixedqty", "fixed_qty"):
+                return max(1, int(self.qty))
+            if pol in ("percentofequity", "poe", "percent_equity"):
+                try:
+                    pct = float(self.sizing_params.get("pct", 0.01))
+                except Exception:
+                    pct = 0.01
+                try:
+                    eq = float((self.equity[-1] or {}).get("value", 0.0)) if self.equity else float(self._compute_equity_snapshot())
+                except Exception:
+                    eq = float(10000.0)
+                try:
+                    q = int(max(1, (pct * eq) / max(0.01, float(px))))
+                except Exception:
+                    q = int(max(1, self.qty))
+                return q
+            # VolTarget and others -> fallback
+            return max(1, int(self.qty))
+
             except Exception:
                 return True, None
 
@@ -280,7 +314,7 @@ try:  # pragma: no cover - exercised in integration
 
             from nautilus_trader.model.objects import Quantity
 
-            qty_int = int(self.qty)
+            qty_int = int(self._compute_qty(px))
             qty = Quantity.from_int(qty_int)
             # Changed from IOC to GTC - IOC orders may not trigger on_order_filled in backtest
             order = self.order_factory.market(
