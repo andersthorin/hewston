@@ -1,0 +1,281 @@
+{
+  "timestamp": "2025-10-12T18:34:41.590869Z",
+  "cv_summary_path": "data/agent_progress/portfolio-cv-5sym-20251012-182154.json",
+  "symbols": [
+    "AAPL.XNAS",
+    "MSFT.XNAS",
+    "GOOGL.XNAS",
+    "NVDA.XNAS",
+    "TSLA.XNAS"
+  ],
+  "date_range": [
+    "2024-09-23",
+    "2024-10-18"
+  ],
+  "runs": [
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "tod": {
+        "start": 585,
+        "end": 950,
+        "label": "09:45-15:50"
+      },
+      "portfolio_avg": {
+        "total_return": 0.000462400000000016,
+        "sharpe_ratio": NaN,
+        "max_drawdown": -0.14458127115554723
+      },
+      "per_symbol": {
+        "AAPL.XNAS": {
+          "metrics": {
+            "total_return": -0.0006479999999999563,
+            "sharpe_ratio": -3.838296441192391,
+            "max_drawdown": -0.1425540000000001,
+            "win_rate": 0.25,
+            "fills_count": null
+          }
+        },
+        "MSFT.XNAS": {
+          "metrics": {
+            "total_return": 0.0008770000000000437,
+            "sharpe_ratio": 1.9449829832041436,
+            "max_drawdown": -0.13052100000000008,
+            "win_rate": 0.41379310344827586,
+            "fills_count": null
+          }
+        },
+        "GOOGL.XNAS": {
+          "metrics": {
+            "total_return": 0.00042299999999995634,
+            "sharpe_ratio": NaN,
+            "max_drawdown": -0.14900400000000008,
+            "win_rate": 1.0,
+            "fills_count": null
+          }
+        },
+        "NVDA.XNAS": {
+          "metrics": {
+            "total_return": 0.0021100000000000363,
+            "sharpe_ratio": 1.622262494804793,
+            "max_drawdown": -0.1498146097844615,
+            "win_rate": 0.3,
+            "fills_count": null
+          }
+        },
+        "TSLA.XNAS": {
+          "metrics": {
+            "total_return": -0.00045,
+            "sharpe_ratio": -0.206466980514875,
+            "max_drawdown": -0.15101274599327427,
+            "win_rate": 0.3114754098360656,
+            "fills_count": null
+          }
+        }
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "tod": {
+        "start": 600,
+        "end": 930,
+        "label": "10:00-15:30"
+      },
+      "portfolio_avg": {
+        "total_return": 0.0006674000000000524,
+        "sharpe_ratio": NaN,
+        "max_drawdown": -0.11390059165007402
+      },
+      "per_symbol": {
+        "AAPL.XNAS": {
+          "metrics": {
+            "total_return": -0.0007799999999999272,
+            "sharpe_ratio": -13.720410780817975,
+            "max_drawdown": -0.13804799999999995,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "MSFT.XNAS": {
+          "metrics": {
+            "total_return": -2.2999999999956344e-05,
+            "sharpe_ratio": -0.08297232268923718,
+            "max_drawdown": -0.13052100000000008,
+            "win_rate": 0.3076923076923077,
+            "fills_count": null
+          }
+        },
+        "GOOGL.XNAS": {
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "NVDA.XNAS": {
+          "metrics": {
+            "total_return": 0.0024360000000000583,
+            "sharpe_ratio": 2.0194153447216383,
+            "max_drawdown": -0.15009895825037023,
+            "win_rate": 0.25,
+            "fills_count": null
+          }
+        },
+        "TSLA.XNAS": {
+          "metrics": {
+            "total_return": 0.0017040000000000874,
+            "sharpe_ratio": 1.694657079368433,
+            "max_drawdown": -0.15083499999999986,
+            "win_rate": 0.34615384615384615,
+            "fills_count": null
+          }
+        }
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "tod": {
+        "start": 585,
+        "end": 950,
+        "label": "09:45-15:50"
+      },
+      "portfolio_avg": {
+        "total_return": 0.000462400000000016,
+        "sharpe_ratio": NaN,
+        "max_drawdown": -0.14458127115554723
+      },
+      "per_symbol": {
+        "AAPL.XNAS": {
+          "metrics": {
+            "total_return": -0.0006479999999999563,
+            "sharpe_ratio": -3.838296441192391,
+            "max_drawdown": -0.1425540000000001,
+            "win_rate": 0.25,
+            "fills_count": null
+          }
+        },
+        "MSFT.XNAS": {
+          "metrics": {
+            "total_return": 0.0008770000000000437,
+            "sharpe_ratio": 1.9449829832041436,
+            "max_drawdown": -0.13052100000000008,
+            "win_rate": 0.41379310344827586,
+            "fills_count": null
+          }
+        },
+        "GOOGL.XNAS": {
+          "metrics": {
+            "total_return": 0.00042299999999995634,
+            "sharpe_ratio": NaN,
+            "max_drawdown": -0.14900400000000008,
+            "win_rate": 1.0,
+            "fills_count": null
+          }
+        },
+        "NVDA.XNAS": {
+          "metrics": {
+            "total_return": 0.0021100000000000363,
+            "sharpe_ratio": 1.622262494804793,
+            "max_drawdown": -0.1498146097844615,
+            "win_rate": 0.3,
+            "fills_count": null
+          }
+        },
+        "TSLA.XNAS": {
+          "metrics": {
+            "total_return": -0.00045,
+            "sharpe_ratio": -0.206466980514875,
+            "max_drawdown": -0.15101274599327427,
+            "win_rate": 0.3114754098360656,
+            "fills_count": null
+          }
+        }
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "tod": {
+        "start": 600,
+        "end": 930,
+        "label": "10:00-15:30"
+      },
+      "portfolio_avg": {
+        "total_return": 0.0006674000000000524,
+        "sharpe_ratio": NaN,
+        "max_drawdown": -0.11390059165007402
+      },
+      "per_symbol": {
+        "AAPL.XNAS": {
+          "metrics": {
+            "total_return": -0.0007799999999999272,
+            "sharpe_ratio": -13.720410780817975,
+            "max_drawdown": -0.13804799999999995,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "MSFT.XNAS": {
+          "metrics": {
+            "total_return": -2.2999999999956344e-05,
+            "sharpe_ratio": -0.08297232268923718,
+            "max_drawdown": -0.13052100000000008,
+            "win_rate": 0.3076923076923077,
+            "fills_count": null
+          }
+        },
+        "GOOGL.XNAS": {
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "NVDA.XNAS": {
+          "metrics": {
+            "total_return": 0.0024360000000000583,
+            "sharpe_ratio": 2.0194153447216383,
+            "max_drawdown": -0.15009895825037023,
+            "win_rate": 0.25,
+            "fills_count": null
+          }
+        },
+        "TSLA.XNAS": {
+          "metrics": {
+            "total_return": 0.0017040000000000874,
+            "sharpe_ratio": 1.694657079368433,
+            "max_drawdown": -0.15083499999999986,
+            "win_rate": 0.34615384615384615,
+            "fills_count": null
+          }
+        }
+      }
+    }
+  ]
+}

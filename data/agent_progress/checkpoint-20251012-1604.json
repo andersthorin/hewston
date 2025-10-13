@@ -1,0 +1,57 @@
+{
+  "timestamp": "2025-10-12T16:04:00Z",
+  "agent": "Augment Agent",
+  "strategy": "momentum",
+  "summary": {
+    "status": "paused",
+    "note": "Time-of-day entry filter bug fixed; NVDA trades confirmed with entry window. Prior AAPL grid and 5-symbol eval summaries saved earlier."
+  },
+  "artifacts": {
+    "grid_aapl": "data/agent_progress/grid-aapl-20251012-134513.json",
+    "portfolio_eval_no_tod": "data/agent_progress/portfolio-eval-20251012-134626.json",
+    "portfolio_eval_tod_bug": "data/agent_progress/portfolio-eval-tod-20251012-135130.json"
+  },
+  "code_changes": [
+    {
+      "path": "backend/strategies/momentum.py",
+      "description": "Fix time-of-day entry filter: compute mins_local in NY timezone from ts; use mins_local for entry gating and EOD flatten; add temporary debug log sampling for allowed/blocked decisions.",
+      "highlights": [
+        "Compute mins_local from ts -> tz_ny (handles epoch ns, pandas ts, datetime)",
+        "Use mins_local instead of mins from RTH helper for entry window",
+        "Pass mins_local to _maybe_eod_flat",
+        "Debug: logs '[TOD] allowed/blocked ...' up to 5 samples each"
+      ]
+    }
+  ],
+  "last_runs": [
+    {
+      "label": "NVDA no ToD (baseline positive)",
+      "run_id": "47056a3ba1c347d2ace1405723c6d4b1",
+      "params": {"band_k": 0.10, "di_gap_min": 0.10, "atr_stop_mult": 1.5},
+      "metrics": {"total_return": 0.003172, "sharpe_ratio": 2.27956, "max_drawdown": -0.14962, "win_rate": 0.44, "fills_count": 54}
+    },
+    {
+      "label": "NVDA ToD 09:45–15:50 NY (after fix)",
+      "run_id": "d1d2da4c3e7b4cd994e8d38a5b9ea150",
+      "params": {"band_k": 0.10, "di_gap_min": 0.10, "atr_stop_mult": 1.5, "entry_start_min": 585, "entry_end_min": 950},
+      "metrics": {"total_return": 0.00211, "sharpe_ratio": 1.62226, "max_drawdown": -0.14981, "win_rate": 0.30, "fills_count": 20},
+      "notes": "[TOD] debug logs show correct mins_local and gating."
+    },
+    {
+      "label": "NVDA ToD 10:00–15:30 NY (pre-fix bug repro)",
+      "run_id": "3e61d212b2314164897e3f761a93b62e",
+      "params": {"band_k": 0.10, "di_gap_min": 0.00, "atr_stop_mult": 1.5, "entry_start_min": 600, "entry_end_min": 930},
+      "metrics": {"total_return": 0.0, "fills_count": 0},
+      "notes": "Bug: mins_local was None so all entries blocked."
+    }
+  ],
+  "next_steps": [
+    "Run 5-symbol portfolio (AAPL, MSFT, GOOGL, AMZN, NVDA) with ToD 09:45–15:50 NY using params: window=20, band_k=0.10, di_gap_min=0.10, atr_stop_mult=1.5, cooldown_bars=5, RiskATR 0.2%, eod_flat=true; save summary to data/agent_progress/portfolio-eval-tod-fixed-<ts>.json.",
+    "If portfolio avg still near-flat, grid band_k in {0.10, 0.12, 0.15} and di_gap_min in {0.10, 0.20} with atr_stop_mult in {1.5, 2.0}; start with AAPL, then apply best to basket.",
+    "Remove or lower the temporary [TOD] debug logs once timing verified across symbols (keep at most 1 sample per session)."
+  ],
+  "resume_howto": {
+    "python_snippet": "from backend.jobs.run_backtest import run_backtest_and_persist; base=dict(dataset_id='XNAS-portfolio',seed=42,speed=60,slippage_fees={},from_date='2024-09-23',to_date='2024-10-18'); common=dict(atr_period=14,sizing_policy='RiskATR',risk_pct=0.002,dm_period=14,max_notional_pct=0.15,cooldown_bars=5,trailing_stop=True,eod_flat=True,window=20,band_k=0.10,di_gap_min=0.10,atr_stop_mult=1.5,entry_start_min=585,entry_end_min=950); symbols=['AAPL.XNAS','MSFT.XNAS','GOOGL.XNAS','AMZN.XNAS','NVDA.XNAS']; runs=[run_backtest_and_persist(req={**base,'strategy_id':'momentum','params':{**common,'instrument_id':sym}}) for sym in symbols]"
+  }
+}
+

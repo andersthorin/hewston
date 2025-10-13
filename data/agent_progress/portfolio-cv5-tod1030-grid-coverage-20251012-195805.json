@@ -1,0 +1,196 @@
+{
+  "timestamp": "2025-10-12T19:58:05.028594Z",
+  "symbols": [
+    "AAPL.XNAS",
+    "MSFT.XNAS",
+    "GOOGL.XNAS",
+    "NVDA.XNAS",
+    "TSLA.XNAS"
+  ],
+  "tod": {
+    "start": 600,
+    "end": 930
+  },
+  "date_halves": {
+    "A": [
+      "2024-09-23",
+      "2024-10-04"
+    ],
+    "B": [
+      "2024-10-07",
+      "2024-10-18"
+    ]
+  },
+  "grid": [
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": 0.0,
+        "coverage": 0,
+        "eligible": false
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": 0.0,
+        "coverage": 0,
+        "eligible": false
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.25,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": 0.0,
+        "coverage": 0,
+        "eligible": false
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.25,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": 0.0,
+        "coverage": 0,
+        "eligible": false
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": 0.0,
+        "coverage": 0,
+        "eligible": false
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": 0.0,
+        "coverage": 0,
+        "eligible": false
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.25,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": 0.0,
+        "coverage": 0,
+        "eligible": false
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.25,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": 0.0,
+        "coverage": 0,
+        "eligible": false
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.15,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": -1.2580390442176639,
+        "coverage": 0,
+        "eligible": false
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.15,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": -1.2580390442176639,
+        "coverage": 0,
+        "eligible": false
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.15,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": -1.3662136015963082,
+        "coverage": 0,
+        "eligible": false
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.15,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": -1.3662136015963082,
+        "coverage": 0,
+        "eligible": false
+      }
+    }
+  ],
+  "leaders": [],
+  "winner": null
+}

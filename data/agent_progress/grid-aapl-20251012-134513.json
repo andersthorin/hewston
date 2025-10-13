@@ -1,0 +1,172 @@
+{
+  "aapl_grid_results": [
+    {
+      "run_id": "ebe6c8b25ae842fbbaa1588ed5c61b50",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5
+      },
+      "metrics": {
+        "total_return": -0.000794000000000051,
+        "sharpe_ratio": -1.807056343514894,
+        "max_drawdown": -0.14234600000000008,
+        "win_rate": 0.3
+      }
+    },
+    {
+      "run_id": "cad30546fbc64bea87850216f436c0fe",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 2.0
+      },
+      "metrics": {
+        "total_return": -0.0009079999999999927,
+        "sharpe_ratio": -2.018298284070644,
+        "max_drawdown": -0.1424,
+        "win_rate": 0.35
+      }
+    },
+    {
+      "run_id": "50a7140a1c234bf8ac9778da3007708b",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5
+      },
+      "metrics": {
+        "total_return": -0.001381999999999971,
+        "sharpe_ratio": -8.303641358102857,
+        "max_drawdown": -0.14187199999999994,
+        "win_rate": 0.0
+      }
+    },
+    {
+      "run_id": "c82fd05e78054868962267c67263a73a",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 2.0
+      },
+      "metrics": {
+        "total_return": -0.0011,
+        "sharpe_ratio": -5.675359017344888,
+        "max_drawdown": -0.14169728783902008,
+        "win_rate": 0.14285714285714285
+      }
+    },
+    {
+      "run_id": "9d9614eb982844d78077cb5843760496",
+      "params": {
+        "band_k": 0.12,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5
+      },
+      "metrics": {
+        "total_return": -0.000794000000000051,
+        "sharpe_ratio": -1.807056343514894,
+        "max_drawdown": -0.14234600000000008,
+        "win_rate": 0.3
+      }
+    },
+    {
+      "run_id": "58980760767345fc8ee5992e6a612c57",
+      "params": {
+        "band_k": 0.12,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 2.0
+      },
+      "metrics": {
+        "total_return": -0.0009079999999999927,
+        "sharpe_ratio": -2.018298284070644,
+        "max_drawdown": -0.1424,
+        "win_rate": 0.35
+      }
+    },
+    {
+      "run_id": "0466be3c47514b1fb5e3ffb6fa942874",
+      "params": {
+        "band_k": 0.12,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5
+      },
+      "metrics": {
+        "total_return": -0.001381999999999971,
+        "sharpe_ratio": -8.303641358102857,
+        "max_drawdown": -0.14187199999999994,
+        "win_rate": 0.0
+      }
+    },
+    {
+      "run_id": "58dda4b1dea542c481e7a926ccfc5663",
+      "params": {
+        "band_k": 0.12,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 2.0
+      },
+      "metrics": {
+        "total_return": -0.0011,
+        "sharpe_ratio": -5.675359017344888,
+        "max_drawdown": -0.14169728783902008,
+        "win_rate": 0.14285714285714285
+      }
+    },
+    {
+      "run_id": "d0b1fc1a3f074911bdb47aa3e0ab8325",
+      "params": {
+        "band_k": 0.15,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5
+      },
+      "metrics": {
+        "total_return": -0.000794000000000051,
+        "sharpe_ratio": -1.807056343514894,
+        "max_drawdown": -0.14234600000000008,
+        "win_rate": 0.3
+      }
+    },
+    {
+      "run_id": "2b2b448fa6da464781297e12dee22cd0",
+      "params": {
+        "band_k": 0.15,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 2.0
+      },
+      "metrics": {
+        "total_return": -0.0009079999999999927,
+        "sharpe_ratio": -2.018298284070644,
+        "max_drawdown": -0.1424,
+        "win_rate": 0.35
+      }
+    },
+    {
+      "run_id": "be5e533c3e734a7c86fdb33dc5ea60fb",
+      "params": {
+        "band_k": 0.15,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5
+      },
+      "metrics": {
+        "total_return": -0.001381999999999971,
+        "sharpe_ratio": -8.303641358102857,
+        "max_drawdown": -0.14187199999999994,
+        "win_rate": 0.0
+      }
+    },
+    {
+      "run_id": "a3dc795d249f47a9ac05240b0934c611",
+      "params": {
+        "band_k": 0.15,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 2.0
+      },
+      "metrics": {
+        "total_return": -0.0011,
+        "sharpe_ratio": -5.675359017344888,
+        "max_drawdown": -0.14169728783902008,
+        "win_rate": 0.14285714285714285
+      }
+    }
+  ]
+}

@@ -1,0 +1,531 @@
+{
+  "timestamp": "2025-10-12T17:58:44.401739Z",
+  "symbols": [
+    "AAPL.XNAS",
+    "MSFT.XNAS",
+    "GOOGL.XNAS",
+    "NVDA.XNAS"
+  ],
+  "date_halves": {
+    "A": [
+      "2024-09-23",
+      "2024-10-04"
+    ],
+    "B": [
+      "2024-10-07",
+      "2024-10-18"
+    ]
+  },
+  "grid": [
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": 0.0
+      },
+      "halfB": {
+        "score": 0.0
+      },
+      "score_avg": 0.0
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": 0.0
+      },
+      "halfB": {
+        "score": 0.0
+      },
+      "score_avg": 0.0
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": 0.0
+      },
+      "halfB": {
+        "score": 0.0
+      },
+      "score_avg": 0.0
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": 0.0
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": -1.0211790457322354
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": -1.0211790457322354
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": -1.0211790457322354
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": -1.0211790457322354
+      }
+    }
+  ],
+  "leaders": [
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": 0.0,
+        "per_symbol": {
+          "AAPL.XNAS": {
+            "run_id": "1b54752c20ec4be9b6cca90aaa9dd0d1",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT.XNAS": {
+            "run_id": "7316e12133ad4220bfa707232d4c02e9",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "GOOGL.XNAS": {
+            "run_id": "b29bc53ecd304d768e57cde6a66fe989",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA.XNAS": {
+            "run_id": "caa9f2ce18c246bdbda6e3e285b399cb",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "halfB": {
+        "score": 0.0,
+        "per_symbol": {
+          "AAPL.XNAS": {
+            "run_id": "fc546c83a47948b5a2eafd4683164542",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT.XNAS": {
+            "run_id": "7a4f19fb98574b7b911388dd9c4abbc8",
+            "metrics": {
+              "total_return": -0.00023999999999996363,
+              "sharpe_ratio": NaN,
+              "max_drawdown": -0.12442799999999989,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "GOOGL.XNAS": {
+            "run_id": "db2bb11d5b21426fb85a6caca979b2e6",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA.XNAS": {
+            "run_id": "fda174e20f28438e82513ede6e231773",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "score_avg": 0.0
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": 0.0,
+        "per_symbol": {
+          "AAPL.XNAS": {
+            "run_id": "82e3f160819e44fda1ddd10da5b33850",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT.XNAS": {
+            "run_id": "0b033b2c149f480db2784669c097a462",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "GOOGL.XNAS": {
+            "run_id": "bda9a30b39bb41b8bd67c91567f9d9e3",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA.XNAS": {
+            "run_id": "77b76732fae14f8e820cbfb893a62f52",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "halfB": {
+        "score": 0.0,
+        "per_symbol": {
+          "AAPL.XNAS": {
+            "run_id": "ef9446f617df47cbbdde6ad4d710e076",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT.XNAS": {
+            "run_id": "937e975f66464ebd8c133f207ac59686",
+            "metrics": {
+              "total_return": -0.00023999999999996363,
+              "sharpe_ratio": NaN,
+              "max_drawdown": -0.12442799999999989,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "GOOGL.XNAS": {
+            "run_id": "91554b14c1c4456cbd7a8d94e9e1e539",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA.XNAS": {
+            "run_id": "420c7e801e0445a4b8c518d9c56ffffc",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "score_avg": 0.0
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": 0.0,
+        "per_symbol": {
+          "AAPL.XNAS": {
+            "run_id": "90f7c15419454a3cbeee8b5911cff745",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT.XNAS": {
+            "run_id": "ac545e6d0c8a41478c7dc071dff8ab78",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "GOOGL.XNAS": {
+            "run_id": "64586381df074062aff3f5005b45b08f",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA.XNAS": {
+            "run_id": "1e82f65af16742c5a861ea8412ebd09c",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "halfB": {
+        "score": 0.0,
+        "per_symbol": {
+          "AAPL.XNAS": {
+            "run_id": "22f4289839a94e23b8983839a310c121",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT.XNAS": {
+            "run_id": "720aa19cb2714b65a6d08626e20f02cd",
+            "metrics": {
+              "total_return": -0.00023999999999996363,
+              "sharpe_ratio": NaN,
+              "max_drawdown": -0.12442799999999989,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "GOOGL.XNAS": {
+            "run_id": "7b2cfc5ec1c945b3b8751dd5a33ff9c0",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA.XNAS": {
+            "run_id": "165dab0bd9b5427995c83f24e05ddc22",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "score_avg": 0.0
+    }
+  ],
+  "winner": {
+    "cfg": {
+      "window": 20,
+      "band_k": 0.1,
+      "di_gap_min": 0.2,
+      "atr_stop_mult": 1.5,
+      "cooldown_bars": 5
+    },
+    "halfA": {
+      "per_symbol": {
+        "AAPL.XNAS": {
+          "run_id": "1b54752c20ec4be9b6cca90aaa9dd0d1",
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "MSFT.XNAS": {
+          "run_id": "7316e12133ad4220bfa707232d4c02e9",
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "GOOGL.XNAS": {
+          "run_id": "b29bc53ecd304d768e57cde6a66fe989",
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "NVDA.XNAS": {
+          "run_id": "caa9f2ce18c246bdbda6e3e285b399cb",
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        }
+      },
+      "score": 0.0
+    },
+    "halfB": {
+      "per_symbol": {
+        "AAPL.XNAS": {
+          "run_id": "fc546c83a47948b5a2eafd4683164542",
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "MSFT.XNAS": {
+          "run_id": "7a4f19fb98574b7b911388dd9c4abbc8",
+          "metrics": {
+            "total_return": -0.00023999999999996363,
+            "sharpe_ratio": NaN,
+            "max_drawdown": -0.12442799999999989,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "GOOGL.XNAS": {
+          "run_id": "db2bb11d5b21426fb85a6caca979b2e6",
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "NVDA.XNAS": {
+          "run_id": "fda174e20f28438e82513ede6e231773",
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        }
+      },
+      "score": 0.0
+    },
+    "score_avg": 0.0
+  }
+}

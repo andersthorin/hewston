@@ -1,0 +1,600 @@
+{
+  "timestamp": "2025-10-12T18:21:54.518418Z",
+  "symbols": [
+    "AAPL.XNAS",
+    "MSFT.XNAS",
+    "GOOGL.XNAS",
+    "NVDA.XNAS",
+    "TSLA.XNAS"
+  ],
+  "date_halves": {
+    "A": [
+      "2024-09-23",
+      "2024-10-04"
+    ],
+    "B": [
+      "2024-10-07",
+      "2024-10-18"
+    ]
+  },
+  "grid": [
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": -0.9804199143084142
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": -0.9804199143084142
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": -1.0635385917229514
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": -1.0635385917229514
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": -1.3878346735639648
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": -1.3878346735639648
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": -1.3878346735639648
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": -1.3878346735639648
+      }
+    }
+  ],
+  "leaders": [
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": -0.9804199143084142,
+        "per_symbol": {
+          "AAPL.XNAS": {
+            "run_id": "70b83305a7c84f4486728b0b8b8a7492",
+            "metrics": {
+              "total_return": -0.0007799999999999272,
+              "sharpe_ratio": -13.720410780817975,
+              "max_drawdown": -0.13804799999999995,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT.XNAS": {
+            "run_id": "06821180a0dd4a60b5346bdbb3e9038e",
+            "metrics": {
+              "total_return": 0.0011040000000000873,
+              "sharpe_ratio": 4.135822175557596,
+              "max_drawdown": -0.13052100000000008,
+              "win_rate": 0.47058823529411764,
+              "fills_count": null
+            }
+          },
+          "GOOGL.XNAS": {
+            "run_id": "af29db32d076456b8b0bd317e6eace4c",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA.XNAS": {
+            "run_id": "73f820a9c59c406b88eb1febd1b7e65a",
+            "metrics": {
+              "total_return": 0.004368000000000029,
+              "sharpe_ratio": 5.499872422331437,
+              "max_drawdown": -0.14756312834469656,
+              "win_rate": 0.75,
+              "fills_count": null
+            }
+          },
+          "TSLA.XNAS": {
+            "run_id": "a0e15fbbb12a41408accfd3324338411",
+            "metrics": {
+              "total_return": -0.0006959999999999127,
+              "sharpe_ratio": -0.8173833886131295,
+              "max_drawdown": -0.15101274599327427,
+              "win_rate": 0.3170731707317073,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "halfB": {
+        "score": -2.682761950100063,
+        "per_symbol": {
+          "AAPL.XNAS": {
+            "run_id": "4f7e8847f6b649b29df26d202f339fa4",
+            "metrics": {
+              "total_return": 0.0001319999999999709,
+              "sharpe_ratio": NaN,
+              "max_drawdown": -0.14177399999999998,
+              "win_rate": 1.0,
+              "fills_count": null
+            }
+          },
+          "MSFT.XNAS": {
+            "run_id": "ba46767a40fe4e098294bc51606244d5",
+            "metrics": {
+              "total_return": -0.00022700000000004365,
+              "sharpe_ratio": -1.5357639666202103,
+              "max_drawdown": -0.1269182451536044,
+              "win_rate": 0.3333333333333333,
+              "fills_count": null
+            }
+          },
+          "GOOGL.XNAS": {
+            "run_id": "ef02d6b8e9c94fa48dda2ec799a1197f",
+            "metrics": {
+              "total_return": 0.00042299999999995634,
+              "sharpe_ratio": NaN,
+              "max_drawdown": -0.14900400000000008,
+              "win_rate": 1.0,
+              "fills_count": null
+            }
+          },
+          "NVDA.XNAS": {
+            "run_id": "1f051c8b972549e180e55458d853665d",
+            "metrics": {
+              "total_return": -0.0022579999999999927,
+              "sharpe_ratio": -12.26116283262848,
+              "max_drawdown": -0.15046900000000005,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "TSLA.XNAS": {
+            "run_id": "0ef215d1eb0e4d0f8be23e03d79c54d3",
+            "metrics": {
+              "total_return": 0.0002459999999999127,
+              "sharpe_ratio": 0.3831170487483773,
+              "max_drawdown": -0.14839799999999995,
+              "win_rate": 0.3,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "score_avg": -1.8315909322042385
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": -0.9804199143084142,
+        "per_symbol": {
+          "AAPL.XNAS": {
+            "run_id": "390fd1a014124539ac0657ba4b9b912c",
+            "metrics": {
+              "total_return": -0.0007799999999999272,
+              "sharpe_ratio": -13.720410780817975,
+              "max_drawdown": -0.13804799999999995,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT.XNAS": {
+            "run_id": "235d7776fd0d475699729c5994226656",
+            "metrics": {
+              "total_return": 0.0011040000000000873,
+              "sharpe_ratio": 4.135822175557596,
+              "max_drawdown": -0.13052100000000008,
+              "win_rate": 0.47058823529411764,
+              "fills_count": null
+            }
+          },
+          "GOOGL.XNAS": {
+            "run_id": "bfd01b3f06434ffb8707b38c2bd4212c",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA.XNAS": {
+            "run_id": "8a5e37b759894a90bb7e59899d7b36b4",
+            "metrics": {
+              "total_return": 0.004368000000000029,
+              "sharpe_ratio": 5.499872422331437,
+              "max_drawdown": -0.14756312834469656,
+              "win_rate": 0.75,
+              "fills_count": null
+            }
+          },
+          "TSLA.XNAS": {
+            "run_id": "0e61ebf32f8c4957be4c9683fb10ceb0",
+            "metrics": {
+              "total_return": -0.0006959999999999127,
+              "sharpe_ratio": -0.8173833886131295,
+              "max_drawdown": -0.15101274599327427,
+              "win_rate": 0.3170731707317073,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "halfB": {
+        "score": -2.682761950100063,
+        "per_symbol": {
+          "AAPL.XNAS": {
+            "run_id": "5be039375edb46e7bc746c9965f16c5e",
+            "metrics": {
+              "total_return": 0.0001319999999999709,
+              "sharpe_ratio": NaN,
+              "max_drawdown": -0.14177399999999998,
+              "win_rate": 1.0,
+              "fills_count": null
+            }
+          },
+          "MSFT.XNAS": {
+            "run_id": "941cec7fe9cf4c6485862128d4db5ca5",
+            "metrics": {
+              "total_return": -0.00022700000000004365,
+              "sharpe_ratio": -1.5357639666202103,
+              "max_drawdown": -0.1269182451536044,
+              "win_rate": 0.3333333333333333,
+              "fills_count": null
+            }
+          },
+          "GOOGL.XNAS": {
+            "run_id": "3d6236cacbcd4378a2d8043b818adca4",
+            "metrics": {
+              "total_return": 0.00042299999999995634,
+              "sharpe_ratio": NaN,
+              "max_drawdown": -0.14900400000000008,
+              "win_rate": 1.0,
+              "fills_count": null
+            }
+          },
+          "NVDA.XNAS": {
+            "run_id": "4e6379eca9d6411e8fada7013099c036",
+            "metrics": {
+              "total_return": -0.0022579999999999927,
+              "sharpe_ratio": -12.26116283262848,
+              "max_drawdown": -0.15046900000000005,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "TSLA.XNAS": {
+            "run_id": "0277ef39dade42c3b9abe8e420cf8a90",
+            "metrics": {
+              "total_return": 0.0002459999999999127,
+              "sharpe_ratio": 0.3831170487483773,
+              "max_drawdown": -0.14839799999999995,
+              "win_rate": 0.3,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "score_avg": -1.8315909322042385
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": -1.0635385917229514,
+        "per_symbol": {
+          "AAPL.XNAS": {
+            "run_id": "410ae8d265da487eb95b724d0bad965e",
+            "metrics": {
+              "total_return": -0.0007799999999999272,
+              "sharpe_ratio": -13.720410780817975,
+              "max_drawdown": -0.13804799999999995,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT.XNAS": {
+            "run_id": "26707f04f456467ea19c96802f16a6c1",
+            "metrics": {
+              "total_return": 0.0011040000000000873,
+              "sharpe_ratio": 4.135822175557596,
+              "max_drawdown": -0.13052100000000008,
+              "win_rate": 0.47058823529411764,
+              "fills_count": null
+            }
+          },
+          "GOOGL.XNAS": {
+            "run_id": "55b2f97257b64dfea5c9674cfa98d105",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA.XNAS": {
+            "run_id": "3763320f776d4ae09fe51e56144443ce",
+            "metrics": {
+              "total_return": 0.004368000000000029,
+              "sharpe_ratio": 5.499872422331437,
+              "max_drawdown": -0.14756312834469656,
+              "win_rate": 0.75,
+              "fills_count": null
+            }
+          },
+          "TSLA.XNAS": {
+            "run_id": "e930308f425f4c0eba0eb68c4a0c71f2",
+            "metrics": {
+              "total_return": -0.0009059999999999491,
+              "sharpe_ratio": -1.2329767756858154,
+              "max_drawdown": -0.1510444354732335,
+              "win_rate": 0.3170731707317073,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "halfB": {
+        "score": -2.7034232723162583,
+        "per_symbol": {
+          "AAPL.XNAS": {
+            "run_id": "ff98f638fe874aed8dc04c914461d37d",
+            "metrics": {
+              "total_return": 0.0001319999999999709,
+              "sharpe_ratio": NaN,
+              "max_drawdown": -0.14177399999999998,
+              "win_rate": 1.0,
+              "fills_count": null
+            }
+          },
+          "MSFT.XNAS": {
+            "run_id": "c04d1ecfad314deaaf135c0e419c0844",
+            "metrics": {
+              "total_return": -0.00022700000000004365,
+              "sharpe_ratio": -1.5357639666202103,
+              "max_drawdown": -0.1269182451536044,
+              "win_rate": 0.3333333333333333,
+              "fills_count": null
+            }
+          },
+          "GOOGL.XNAS": {
+            "run_id": "e0d51efc072c4c8f90eb63fdae2f8a97",
+            "metrics": {
+              "total_return": 0.00042299999999995634,
+              "sharpe_ratio": NaN,
+              "max_drawdown": -0.14900400000000008,
+              "win_rate": 1.0,
+              "fills_count": null
+            }
+          },
+          "NVDA.XNAS": {
+            "run_id": "c696057f4ce84d87b4a71eab72b69cc5",
+            "metrics": {
+              "total_return": -0.0022579999999999927,
+              "sharpe_ratio": -12.26116283262848,
+              "max_drawdown": -0.15046900000000005,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "TSLA.XNAS": {
+            "run_id": "3ad89a4ed68d44fbb8c3fe387789f448",
+            "metrics": {
+              "total_return": 0.00017399999999997818,
+              "sharpe_ratio": 0.27981043766739977,
+              "max_drawdown": -0.14839799999999995,
+              "win_rate": 0.3,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "score_avg": -1.8834809320196049
+    }
+  ],
+  "winner": {
+    "cfg": {
+      "window": 20,
+      "band_k": 0.1,
+      "di_gap_min": 0.1,
+      "atr_stop_mult": 1.5,
+      "cooldown_bars": 5
+    },
+    "halfA": {
+      "per_symbol": {
+        "AAPL.XNAS": {
+          "run_id": "70b83305a7c84f4486728b0b8b8a7492",
+          "metrics": {
+            "total_return": -0.0007799999999999272,
+            "sharpe_ratio": -13.720410780817975,
+            "max_drawdown": -0.13804799999999995,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "MSFT.XNAS": {
+          "run_id": "06821180a0dd4a60b5346bdbb3e9038e",
+          "metrics": {
+            "total_return": 0.0011040000000000873,
+            "sharpe_ratio": 4.135822175557596,
+            "max_drawdown": -0.13052100000000008,
+            "win_rate": 0.47058823529411764,
+            "fills_count": null
+          }
+        },
+        "GOOGL.XNAS": {
+          "run_id": "af29db32d076456b8b0bd317e6eace4c",
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "NVDA.XNAS": {
+          "run_id": "73f820a9c59c406b88eb1febd1b7e65a",
+          "metrics": {
+            "total_return": 0.004368000000000029,
+            "sharpe_ratio": 5.499872422331437,
+            "max_drawdown": -0.14756312834469656,
+            "win_rate": 0.75,
+            "fills_count": null
+          }
+        },
+        "TSLA.XNAS": {
+          "run_id": "a0e15fbbb12a41408accfd3324338411",
+          "metrics": {
+            "total_return": -0.0006959999999999127,
+            "sharpe_ratio": -0.8173833886131295,
+            "max_drawdown": -0.15101274599327427,
+            "win_rate": 0.3170731707317073,
+            "fills_count": null
+          }
+        }
+      },
+      "score": -0.9804199143084142
+    },
+    "halfB": {
+      "per_symbol": {
+        "AAPL.XNAS": {
+          "run_id": "4f7e8847f6b649b29df26d202f339fa4",
+          "metrics": {
+            "total_return": 0.0001319999999999709,
+            "sharpe_ratio": NaN,
+            "max_drawdown": -0.14177399999999998,
+            "win_rate": 1.0,
+            "fills_count": null
+          }
+        },
+        "MSFT.XNAS": {
+          "run_id": "ba46767a40fe4e098294bc51606244d5",
+          "metrics": {
+            "total_return": -0.00022700000000004365,
+            "sharpe_ratio": -1.5357639666202103,
+            "max_drawdown": -0.1269182451536044,
+            "win_rate": 0.3333333333333333,
+            "fills_count": null
+          }
+        },
+        "GOOGL.XNAS": {
+          "run_id": "ef02d6b8e9c94fa48dda2ec799a1197f",
+          "metrics": {
+            "total_return": 0.00042299999999995634,
+            "sharpe_ratio": NaN,
+            "max_drawdown": -0.14900400000000008,
+            "win_rate": 1.0,
+            "fills_count": null
+          }
+        },
+        "NVDA.XNAS": {
+          "run_id": "1f051c8b972549e180e55458d853665d",
+          "metrics": {
+            "total_return": -0.0022579999999999927,
+            "sharpe_ratio": -12.26116283262848,
+            "max_drawdown": -0.15046900000000005,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "TSLA.XNAS": {
+          "run_id": "0ef215d1eb0e4d0f8be23e03d79c54d3",
+          "metrics": {
+            "total_return": 0.0002459999999999127,
+            "sharpe_ratio": 0.3831170487483773,
+            "max_drawdown": -0.14839799999999995,
+            "win_rate": 0.3,
+            "fills_count": null
+          }
+        }
+      },
+      "score": -2.682761950100063
+    },
+    "score_avg": -1.8315909322042385
+  }
+}

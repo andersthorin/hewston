@@ -1,0 +1,103 @@
+{
+  "portfolio_eval": {
+    "winner": {
+      "run_id": "ebe6c8b25ae842fbbaa1588ed5c61b50",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5
+      },
+      "metrics": {
+        "total_return": -0.000794000000000051,
+        "sharpe_ratio": -1.807056343514894,
+        "max_drawdown": -0.14234600000000008,
+        "win_rate": 0.3
+      }
+    },
+    "avg_total_return": -0.0015037500000000365,
+    "symbols": [
+      "AAPL",
+      "MSFT",
+      "GOOGL",
+      "AMZN",
+      "NVDA"
+    ]
+  },
+  "per_symbol": [
+    {
+      "symbol": "AAPL",
+      "run_id": "d2923f8dc8cd48e589448214eaed3fb2",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5
+      },
+      "metrics": {
+        "total_return": -0.000794000000000051,
+        "sharpe_ratio": -1.807056343514894,
+        "max_drawdown": -0.14234600000000008,
+        "win_rate": 0.3
+      }
+    },
+    {
+      "symbol": "MSFT",
+      "run_id": "d67cc61a9ab3438da904ca8055aa2ddd",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5
+      },
+      "metrics": {
+        "total_return": -0.006022999999999956,
+        "sharpe_ratio": -7.819520806421243,
+        "max_drawdown": -0.1323635840207278,
+        "win_rate": 0.20270270270270271
+      }
+    },
+    {
+      "symbol": "GOOGL",
+      "run_id": "cd7320dc646149da8b90f2e72877d625",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5
+      },
+      "metrics": {
+        "total_return": -0.0023700000000000726,
+        "sharpe_ratio": -5.801065860680243,
+        "max_drawdown": -0.15201399999999995,
+        "win_rate": 0.2727272727272727
+      }
+    },
+    {
+      "symbol": "AMZN",
+      "run_id": "12377cedeb7047f3a08f090cb4bf4157",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5
+      },
+      "metrics": {
+        "total_return": null,
+        "sharpe_ratio": null,
+        "max_drawdown": null,
+        "win_rate": null
+      }
+    },
+    {
+      "symbol": "NVDA",
+      "run_id": "e2adb2d222444d618faece15f0b0db41",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5
+      },
+      "metrics": {
+        "total_return": 0.0031719999999999344,
+        "sharpe_ratio": 2.2795623115906545,
+        "max_drawdown": -0.1496194884006377,
+        "win_rate": 0.44
+      }
+    }
+  ]
+}

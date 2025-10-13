@@ -1,0 +1,270 @@
+{
+  "timestamp": "2025-10-12T17:39:47.114783Z",
+  "symbol": "AAPL.XNAS",
+  "grid": [
+    {
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5
+      },
+      "run_id": "f4e87d2c520c430c8af8ce7dad196579",
+      "metrics": {
+        "total_return": -0.0006479999999999563,
+        "sharpe_ratio": -3.838296441192391,
+        "max_drawdown": -0.1425540000000001,
+        "win_rate": 0.25,
+        "fills_count": null
+      },
+      "paths": {
+        "metrics": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/f4e87d2c520c430c8af8ce7dad196579/metrics.json",
+        "equity": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/f4e87d2c520c430c8af8ce7dad196579/equity.parquet",
+        "orders": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/f4e87d2c520c430c8af8ce7dad196579/orders.parquet",
+        "fills": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/f4e87d2c520c430c8af8ce7dad196579/fills.parquet",
+        "manifest": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/f4e87d2c520c430c8af8ce7dad196579/run-manifest.json"
+      }
+    },
+    {
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 2.0
+      },
+      "run_id": "d2e7e6f3277d40a585dd36cd9a580704",
+      "metrics": {
+        "total_return": -0.0007559999999999491,
+        "sharpe_ratio": -3.9125509341744538,
+        "max_drawdown": -0.14266200000000007,
+        "win_rate": 0.25,
+        "fills_count": null
+      },
+      "paths": {
+        "metrics": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d2e7e6f3277d40a585dd36cd9a580704/metrics.json",
+        "equity": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d2e7e6f3277d40a585dd36cd9a580704/equity.parquet",
+        "orders": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d2e7e6f3277d40a585dd36cd9a580704/orders.parquet",
+        "fills": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d2e7e6f3277d40a585dd36cd9a580704/fills.parquet",
+        "manifest": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d2e7e6f3277d40a585dd36cd9a580704/run-manifest.json"
+      }
+    },
+    {
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5
+      },
+      "run_id": "8fcecd585c91418cad65a8203be96541",
+      "metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": NaN,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0,
+        "fills_count": null
+      },
+      "paths": {
+        "metrics": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/8fcecd585c91418cad65a8203be96541/metrics.json",
+        "equity": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/8fcecd585c91418cad65a8203be96541/equity.parquet",
+        "orders": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/8fcecd585c91418cad65a8203be96541/orders.parquet",
+        "fills": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/8fcecd585c91418cad65a8203be96541/fills.parquet",
+        "manifest": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/8fcecd585c91418cad65a8203be96541/run-manifest.json"
+      }
+    },
+    {
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 2.0
+      },
+      "run_id": "65cd6e3c634c46d9a2d9043b363862dd",
+      "metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": NaN,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0,
+        "fills_count": null
+      },
+      "paths": {
+        "metrics": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/65cd6e3c634c46d9a2d9043b363862dd/metrics.json",
+        "equity": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/65cd6e3c634c46d9a2d9043b363862dd/equity.parquet",
+        "orders": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/65cd6e3c634c46d9a2d9043b363862dd/orders.parquet",
+        "fills": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/65cd6e3c634c46d9a2d9043b363862dd/fills.parquet",
+        "manifest": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/65cd6e3c634c46d9a2d9043b363862dd/run-manifest.json"
+      }
+    },
+    {
+      "params": {
+        "band_k": 0.12,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5
+      },
+      "run_id": "b4c40814288e47b2904efb194408f815",
+      "metrics": {
+        "total_return": -0.0006479999999999563,
+        "sharpe_ratio": -3.838296441192391,
+        "max_drawdown": -0.1425540000000001,
+        "win_rate": 0.25,
+        "fills_count": null
+      },
+      "paths": {
+        "metrics": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/b4c40814288e47b2904efb194408f815/metrics.json",
+        "equity": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/b4c40814288e47b2904efb194408f815/equity.parquet",
+        "orders": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/b4c40814288e47b2904efb194408f815/orders.parquet",
+        "fills": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/b4c40814288e47b2904efb194408f815/fills.parquet",
+        "manifest": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/b4c40814288e47b2904efb194408f815/run-manifest.json"
+      }
+    },
+    {
+      "params": {
+        "band_k": 0.12,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 2.0
+      },
+      "run_id": "ca9064651ea148dfb36f4300dd1a237d",
+      "metrics": {
+        "total_return": -0.0007559999999999491,
+        "sharpe_ratio": -3.9125509341744538,
+        "max_drawdown": -0.14266200000000007,
+        "win_rate": 0.25,
+        "fills_count": null
+      },
+      "paths": {
+        "metrics": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/ca9064651ea148dfb36f4300dd1a237d/metrics.json",
+        "equity": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/ca9064651ea148dfb36f4300dd1a237d/equity.parquet",
+        "orders": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/ca9064651ea148dfb36f4300dd1a237d/orders.parquet",
+        "fills": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/ca9064651ea148dfb36f4300dd1a237d/fills.parquet",
+        "manifest": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/ca9064651ea148dfb36f4300dd1a237d/run-manifest.json"
+      }
+    },
+    {
+      "params": {
+        "band_k": 0.12,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5
+      },
+      "run_id": "a52b4b18f7f2490c8f41cc48e36f5233",
+      "metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": NaN,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0,
+        "fills_count": null
+      },
+      "paths": {
+        "metrics": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/a52b4b18f7f2490c8f41cc48e36f5233/metrics.json",
+        "equity": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/a52b4b18f7f2490c8f41cc48e36f5233/equity.parquet",
+        "orders": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/a52b4b18f7f2490c8f41cc48e36f5233/orders.parquet",
+        "fills": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/a52b4b18f7f2490c8f41cc48e36f5233/fills.parquet",
+        "manifest": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/a52b4b18f7f2490c8f41cc48e36f5233/run-manifest.json"
+      }
+    },
+    {
+      "params": {
+        "band_k": 0.12,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 2.0
+      },
+      "run_id": "11f381b8e88841988fb3e05af110c1fd",
+      "metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": NaN,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0,
+        "fills_count": null
+      },
+      "paths": {
+        "metrics": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/11f381b8e88841988fb3e05af110c1fd/metrics.json",
+        "equity": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/11f381b8e88841988fb3e05af110c1fd/equity.parquet",
+        "orders": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/11f381b8e88841988fb3e05af110c1fd/orders.parquet",
+        "fills": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/11f381b8e88841988fb3e05af110c1fd/fills.parquet",
+        "manifest": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/11f381b8e88841988fb3e05af110c1fd/run-manifest.json"
+      }
+    },
+    {
+      "params": {
+        "band_k": 0.15,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5
+      },
+      "run_id": "a6810b6f1d13481cbaa9928465ba5d80",
+      "metrics": {
+        "total_return": -0.0006479999999999563,
+        "sharpe_ratio": -3.838296441192391,
+        "max_drawdown": -0.1425540000000001,
+        "win_rate": 0.25,
+        "fills_count": null
+      },
+      "paths": {
+        "metrics": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/a6810b6f1d13481cbaa9928465ba5d80/metrics.json",
+        "equity": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/a6810b6f1d13481cbaa9928465ba5d80/equity.parquet",
+        "orders": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/a6810b6f1d13481cbaa9928465ba5d80/orders.parquet",
+        "fills": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/a6810b6f1d13481cbaa9928465ba5d80/fills.parquet",
+        "manifest": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/a6810b6f1d13481cbaa9928465ba5d80/run-manifest.json"
+      }
+    },
+    {
+      "params": {
+        "band_k": 0.15,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 2.0
+      },
+      "run_id": "d74f5d4405d64efda44dbfdab2281869",
+      "metrics": {
+        "total_return": -0.0007559999999999491,
+        "sharpe_ratio": -3.9125509341744538,
+        "max_drawdown": -0.14266200000000007,
+        "win_rate": 0.25,
+        "fills_count": null
+      },
+      "paths": {
+        "metrics": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d74f5d4405d64efda44dbfdab2281869/metrics.json",
+        "equity": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d74f5d4405d64efda44dbfdab2281869/equity.parquet",
+        "orders": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d74f5d4405d64efda44dbfdab2281869/orders.parquet",
+        "fills": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d74f5d4405d64efda44dbfdab2281869/fills.parquet",
+        "manifest": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d74f5d4405d64efda44dbfdab2281869/run-manifest.json"
+      }
+    },
+    {
+      "params": {
+        "band_k": 0.15,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5
+      },
+      "run_id": "d12eac90e6fe4f2688aecf1c746e887c",
+      "metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": NaN,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0,
+        "fills_count": null
+      },
+      "paths": {
+        "metrics": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d12eac90e6fe4f2688aecf1c746e887c/metrics.json",
+        "equity": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d12eac90e6fe4f2688aecf1c746e887c/equity.parquet",
+        "orders": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d12eac90e6fe4f2688aecf1c746e887c/orders.parquet",
+        "fills": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d12eac90e6fe4f2688aecf1c746e887c/fills.parquet",
+        "manifest": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/d12eac90e6fe4f2688aecf1c746e887c/run-manifest.json"
+      }
+    },
+    {
+      "params": {
+        "band_k": 0.15,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 2.0
+      },
+      "run_id": "f29855bb0a6247d4b10118eef4ac87a7",
+      "metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": NaN,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0,
+        "fills_count": null
+      },
+      "paths": {
+        "metrics": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/f29855bb0a6247d4b10118eef4ac87a7/metrics.json",
+        "equity": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/f29855bb0a6247d4b10118eef4ac87a7/equity.parquet",
+        "orders": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/f29855bb0a6247d4b10118eef4ac87a7/orders.parquet",
+        "fills": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/f29855bb0a6247d4b10118eef4ac87a7/fills.parquet",
+        "manifest": "/Users/andersthorin/Projects/hewston-app/version-03/data/backtests/f29855bb0a6247d4b10118eef4ac87a7/run-manifest.json"
+      }
+    }
+  ]
+}

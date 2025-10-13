@@ -1,0 +1,78 @@
+{
+  "timestamp": "2025-10-12T18:25:14.366646Z",
+  "symbols": [
+    "AAPL.XNAS",
+    "MSFT.XNAS",
+    "GOOGL.XNAS",
+    "NVDA.XNAS",
+    "TSLA.XNAS"
+  ],
+  "date_range": [
+    "2024-09-23",
+    "2024-10-18"
+  ],
+  "winning_cfg": {
+    "window": 20,
+    "band_k": 0.1,
+    "di_gap_min": 0.1,
+    "atr_stop_mult": 1.5,
+    "cooldown_bars": 5
+  },
+  "portfolio_avg": {
+    "total_return": 0.000462400000000016,
+    "sharpe_ratio": NaN,
+    "max_drawdown": -0.14458127115554723
+  },
+  "per_symbol": {
+    "AAPL.XNAS": {
+      "run_id": "f2a9f0a8f69f46b3a18fb0de89ce5a2b",
+      "metrics": {
+        "total_return": -0.0006479999999999563,
+        "sharpe_ratio": -3.838296441192391,
+        "max_drawdown": -0.1425540000000001,
+        "win_rate": 0.25,
+        "fills_count": null
+      }
+    },
+    "MSFT.XNAS": {
+      "run_id": "cf81c43468e24998b14a2905ad2c180e",
+      "metrics": {
+        "total_return": 0.0008770000000000437,
+        "sharpe_ratio": 1.9449829832041436,
+        "max_drawdown": -0.13052100000000008,
+        "win_rate": 0.41379310344827586,
+        "fills_count": null
+      }
+    },
+    "GOOGL.XNAS": {
+      "run_id": "b13a85f2c1e24bed90388d3db3ac725d",
+      "metrics": {
+        "total_return": 0.00042299999999995634,
+        "sharpe_ratio": NaN,
+        "max_drawdown": -0.14900400000000008,
+        "win_rate": 1.0,
+        "fills_count": null
+      }
+    },
+    "NVDA.XNAS": {
+      "run_id": "55efe6df192b4903b681d027ef014b34",
+      "metrics": {
+        "total_return": 0.0021100000000000363,
+        "sharpe_ratio": 1.622262494804793,
+        "max_drawdown": -0.1498146097844615,
+        "win_rate": 0.3,
+        "fills_count": null
+      }
+    },
+    "TSLA.XNAS": {
+      "run_id": "5dccc59f62084ba5b98f75b1aa007992",
+      "metrics": {
+        "total_return": -0.00045,
+        "sharpe_ratio": -0.206466980514875,
+        "max_drawdown": -0.15101274599327427,
+        "win_rate": 0.3114754098360656,
+        "fills_count": null
+      }
+    }
+  }
+}

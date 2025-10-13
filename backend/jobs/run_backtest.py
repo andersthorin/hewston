@@ -736,6 +736,23 @@ def run_backtest_and_persist(*, req: dict[str, Any]) -> dict:
             }
             _surface_nautilus_metrics(metrics_artifact, dict(result_multi.get("metrics") or {}))
 
+            # Validate consistency between portfolio equity and Nautilus total_return
+            try:
+                backend_total_return = float((result_multi.get("metrics") or {}).get("total_return"))
+            except Exception:
+                backend_total_return = None
+            if backend_total_return is not None and equity_records:
+                start_balance = 10000.0
+                last_val = float(
+                    (equity_records[-1].get("value") or equity_records[-1].get("equity") or 0.0)
+                )
+                expected_final = start_balance * (1.0 + backend_total_return)
+                tol = max(1.0, 0.002 * expected_final)
+                if abs(last_val - expected_final) > tol:
+                    raise RuntimeError(
+                        f"Canonical equity failed validation (multi-run): last={last_val} expected={expected_final}"
+                    )
+
             # Persist portfolio artifacts and update DB
             summary = _persist_artifacts_and_finalize(
                 args={

@@ -1,0 +1,82 @@
+{
+  "timestamp": "2025-10-12T19:39:37.683372Z",
+  "symbols": [
+    "AAPL.XNAS",
+    "MSFT.XNAS",
+    "GOOGL.XNAS",
+    "NVDA.XNAS",
+    "TSLA.XNAS"
+  ],
+  "date_range": [
+    "2024-09-23",
+    "2024-10-18"
+  ],
+  "tod": {
+    "start": 600,
+    "end": 930
+  },
+  "winning_cfg": {
+    "window": 20,
+    "band_k": 0.1,
+    "di_gap_min": 0.2,
+    "atr_stop_mult": 1.5,
+    "cooldown_bars": 5
+  },
+  "portfolio_avg": {
+    "total_return": 0.0002088000000000102,
+    "sharpe_ratio": NaN,
+    "max_drawdown": -0.02895119999999999
+  },
+  "per_symbol": {
+    "AAPL.XNAS": {
+      "run_id": "89b310e0a19441d8b8818ffd59db5e61",
+      "metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": NaN,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0,
+        "fills_count": null
+      }
+    },
+    "MSFT.XNAS": {
+      "run_id": "9e8cd77f6723435c9a61560a73183204",
+      "metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": NaN,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0,
+        "fills_count": null
+      }
+    },
+    "GOOGL.XNAS": {
+      "run_id": "6e57ece8568544a9966abcec0c3ed67e",
+      "metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": NaN,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0,
+        "fills_count": null
+      }
+    },
+    "NVDA.XNAS": {
+      "run_id": "4f23f0485ba7459b8d391d33b009bd53",
+      "metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": NaN,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0,
+        "fills_count": null
+      }
+    },
+    "TSLA.XNAS": {
+      "run_id": "704986cfedd34e7c975e598836289c14",
+      "metrics": {
+        "total_return": 0.001044000000000051,
+        "sharpe_ratio": 9.368985582941425,
+        "max_drawdown": -0.14475599999999994,
+        "win_rate": 1.0,
+        "fills_count": null
+      }
+    }
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "summary": {
+    "avg_total_return": 0.0,
+    "params": {
+      "band_k": 0.1,
+      "di_gap_min": 0.1,
+      "atr_stop_mult": 1.5,
+      "entry_start_min": 600,
+      "entry_end_min": 930
+    },
+    "symbols": [
+      "AAPL",
+      "MSFT",
+      "GOOGL",
+      "AMZN",
+      "NVDA"
+    ]
+  },
+  "per_symbol": [
+    {
+      "symbol": "AAPL",
+      "run_id": "8707841ee944466394f0161cac3f7059",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "entry_start_min": 600,
+        "entry_end_min": 930
+      },
+      "metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": NaN,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0
+      }
+    },
+    {
+      "symbol": "MSFT",
+      "run_id": "07a2fe9d7fb6498ba0c5f330c2a7a6be",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "entry_start_min": 600,
+        "entry_end_min": 930
+      },
+      "metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": NaN,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0
+      }
+    },
+    {
+      "symbol": "GOOGL",
+      "run_id": "6b7c4f7787ae41fdbd79bd80f63a0604",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "entry_start_min": 600,
+        "entry_end_min": 930
+      },
+      "metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": NaN,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0
+      }
+    },
+    {
+      "symbol": "AMZN",
+      "run_id": "75a228a49fa940e898c214dd07617b5b",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "entry_start_min": 600,
+        "entry_end_min": 930
+      },
+      "metrics": {
+        "total_return": null,
+        "sharpe_ratio": null,
+        "max_drawdown": null,
+        "win_rate": null
+      }
+    },
+    {
+      "symbol": "NVDA",
+      "run_id": "ea7d69e72ec94e238e50ba59879c513b",
+      "params": {
+        "band_k": 0.1,
+        "di_gap_min": 0.1,
+        "atr_stop_mult": 1.5,
+        "entry_start_min": 600,
+        "entry_end_min": 930
+      },
+      "metrics": {
+        "total_return": 0.0,
+        "sharpe_ratio": NaN,
+        "max_drawdown": 0.0,
+        "win_rate": 0.0
+      }
+    }
+  ]
+}

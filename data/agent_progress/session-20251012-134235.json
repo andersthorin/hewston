@@ -1,0 +1,10 @@
+{
+  "started_at_utc": "2025-10-12T13:42:35.684018",
+  "plan": "AAPL compact grid -> select best -> 5-symbol 4w portfolio check",
+  "dataset": "XNAS-portfolio",
+  "slice": {
+    "from": "2024-09-23",
+    "to": "2024-10-18"
+  },
+  "strategy": "momentum"
+}

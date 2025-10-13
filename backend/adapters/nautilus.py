@@ -167,6 +167,131 @@ def _get_returns_series(analyzer) -> list:
     return []
 
 
+
+def _get_equity_series(analyzer) -> list:
+    """Fetch the canonical equity/NAV series from Nautilus analyzer (no fallbacks).
+
+    Returns list[[ts_iso_utc, value], ...]. If not found, logs analyzer attributes
+    which include the term 'equity' to aid diagnosis and returns [].
+    """
+    import pandas as pd  # type: ignore
+    import logging
+
+    logger = logging.getLogger("nautilus.analyzer")
+
+    # Checked in priority order based on Nautilus Trader 1.219 APIs and conventions
+    attr_candidates = [
+        # Explicit series accessors first
+        "get_equity_series",
+        "equity_series",
+        # Common attribute/property names seen across releases
+        "equity",
+        "equity_curve",
+        "nav",
+        "portfolio_value",
+        "account_equity",
+    ]
+
+    def _normalize_series(obj):
+        if obj is None:
+            return None
+        if isinstance(obj, pd.Series):
+            return [[_to_utc_iso(k), float(v)] for k, v in obj.items()]
+        if isinstance(obj, pd.DataFrame):
+            # Prefer common column names
+            for col in ("equity", "nav", "value"):
+                if col in obj.columns:
+                    return [[_to_utc_iso(idx), float(val)] for idx, val in obj[col].items()]
+            # Otherwise first numeric-looking column
+            for col in obj.columns:
+                try:
+                    return [[_to_utc_iso(idx), float(val)] for idx, val in obj[col].items()]
+                except Exception:
+                    continue
+        return None
+
+    # Try attributes/methods in order
+    for name in attr_candidates:
+        try:
+            s = getattr(analyzer, name, None)
+            if s is None:
+                continue
+            if callable(s):
+                try:
+                    s = s()
+                except TypeError:
+                    # Some getters might require params – skip since we don't guess
+                    continue
+            result = _normalize_series(s)
+            if result:
+                return result
+        except Exception:
+            continue
+
+    # Nothing found – log analyzer type and equity-like attributes for diagnosis
+    try:
+        equity_like = [n for n in dir(analyzer) if "equity" in n.lower()]
+    except Exception:
+        equity_like = []
+    logger.error(
+        "Nautilus analyzer equity series not found. analyzer_type=%s, equity_like_attrs=%s",
+        type(analyzer).__name__, equity_like,
+    )
+    return []
+
+
+def _get_equity_series_from_report(engine: Any) -> list:
+    """Use Nautilus Trader account report as the canonical equity series.
+
+    Relies solely on Nautilus' own reporting (no client-side reconstruction).
+    Returns list[[ts_iso_utc, total_balance_float], ...].
+    """
+    try:
+        # Determine venue from instruments registered on engine
+        instruments = engine.cache.instruments()
+        if not instruments:
+            return []
+        venue_id = list(instruments)[0].id.venue  # type: ignore[attr-defined]
+        # Generate account report via Trader helper (expects a Venue object)
+        from nautilus_trader.model.identifiers import Venue  # type: ignore
+        try:
+            venue_obj = venue_id if isinstance(venue_id, Venue) else Venue(getattr(venue_id, "value", str(venue_id)))
+        except Exception:
+            venue_obj = Venue(str(venue_id))
+        report = engine.trader.generate_account_report(venue_obj)  # pd.DataFrame
+        import pandas as pd  # type: ignore
+        if isinstance(report, pd.DataFrame) and not report.empty:
+            # Expect: DatetimeIndex and a 'total' (Money/float) column.
+            def _val(x):
+                try:
+                    return float(x.as_double()) if hasattr(x, "as_double") else float(x)
+                except Exception:
+                    return None
+            rows = []
+            if isinstance(report.index, pd.DatetimeIndex):
+                totals = report.get("total")
+                if totals is None:
+                    totals = report.get("balance_total")
+                if totals is not None:
+                    for ts, val in totals.items():
+                        v = _val(val)
+                        if v is not None:
+                            rows.append([_to_utc_iso(ts), float(v)])
+                    return rows
+            # Fallback within report-only semantics: row-wise with ts columns
+            for idx, row in report.iterrows():
+                ts = row.get("ts_event") or row.get("ts") or idx
+                val_col = "total" if "total" in row else ("balance_total" if "balance_total" in row else None)
+                val = _val(row.get(val_col)) if val_col else None
+                if ts is not None and val is not None:
+                    rows.append([_to_utc_iso(ts), float(val)])
+            return rows
+    except Exception:
+        pass
+    return []
+
+
+
 def _get_realized_pnl_series(analyzer) -> list:
     try:
         from nautilus_trader.model.currencies import USD  # type: ignore
@@ -183,7 +308,7 @@ def _get_realized_pnl_series(analyzer) -> list:
 
 def _collect_analyzer_data(engine: Any) -> tuple[dict[str, Any], dict[str, list]]:
     nautilus_stats: dict[str, Any] = {"pnls": {}, "returns": {}, "general": {}}
-    nautilus_series: dict[str, list] = {"returns": [], "realized_pnl": []}
+    nautilus_series: dict[str, list] = {"returns": [], "realized_pnl": [], "equity": []}
     try:
         analyzer = engine.portfolio.analyzer  # type: ignore[attr-defined]
     except Exception:
@@ -192,6 +317,8 @@ def _collect_analyzer_data(engine: Any) -> tuple[dict[str, Any], dict[str, list]
     nautilus_stats.update(_get_performance_stats(analyzer))
     nautilus_series["returns"] = _get_returns_series(analyzer)
     nautilus_series["realized_pnl"] = _get_realized_pnl_series(analyzer)
+    # Canonical equity from Nautilus account report (no reconstruction)
+    nautilus_series["equity"] = _get_equity_series_from_report(engine)
     return nautilus_stats, nautilus_series
 
 
@@ -237,6 +364,7 @@ def _collect_strategy_artifacts(
 
 
 class NautilusBacktestRunner:
+
 
     def run_multi(self, *, specs: list[RunSpec]) -> dict[str, Any]:
         """Execute multiple strategies in a single engine/portfolio.
@@ -346,22 +474,17 @@ class NautilusBacktestRunner:
             bucket["equity"].extend(s_equity)
             all_orders.extend(s_orders)
             all_fills.extend(s_fills)
-
-        # Portfolio equity via analyzer returns series → reconstruct cumulative equity
+        # Strict: use canonical equity/NAV series from Nautilus analyzer only (no fallbacks)
         nautilus_stats, nautilus_series = _collect_analyzer_data(engine)
-        returns_series = nautilus_series.get("returns") or []
-        equity: list[dict[str, Any]] = []
-        starting_balance = 10000.0
-        eq = starting_balance
-        try:
-            for pair in returns_series:
-                ts, r = pair[0], float(pair[1])
-                eq = eq * (1.0 + r)
-                equity.append({"ts_utc": ts, "value": float(eq)})
-        except Exception:
-            bal, upnl, ending_equity = self._get_account_values(engine)
-            equity = ([{"ts_utc": returns_series[-1][0], "value": float(ending_equity)}]
-                      if returns_series else [{"ts_utc": None, "value": float(ending_equity)}])
+        equity_series = nautilus_series.get("equity") or []
+        if not equity_series:
+            raise RuntimeError("Nautilus analyzer equity series not available; per policy, no fallbacks")
+        equity: list[dict[str, Any]] = [
+            {"ts_utc": pair[0], "value": float(pair[1])}
+            for pair in equity_series
+            if isinstance(pair, (list, tuple)) and len(pair) >= 2
+        ]
+
 
         metrics = self._extract_metrics_from_engine(engine, equity, all_fills)
 

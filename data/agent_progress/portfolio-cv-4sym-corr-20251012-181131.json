@@ -1,0 +1,539 @@
+{
+  "timestamp": "2025-10-12T18:11:31.890254Z",
+  "symbols": [
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "NVDA"
+  ],
+  "date_halves": {
+    "A": [
+      "2024-09-23",
+      "2024-10-04"
+    ],
+    "B": [
+      "2024-10-07",
+      "2024-10-18"
+    ]
+  },
+  "grid_top": [
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": 0.0,
+        "per_symbol": {
+          "AAPL": {
+            "run_id": "4993665c00a64f0a8bbafedf94f8f095",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT": {
+            "run_id": "846d09ab7034482e836e06834c074861",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "GOOGL": {
+            "run_id": "0c96341fc8814cc0b33e2bc61d4d3ad3",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA": {
+            "run_id": "edf1fa73daa84eabb978be08da73f7fd",
+            "metrics": {
+              "total_return": null,
+              "sharpe_ratio": null,
+              "max_drawdown": null,
+              "win_rate": null,
+              "fills_count": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": 0.0,
+        "per_symbol": {
+          "AAPL": {
+            "run_id": "2a98f0acd58a480f891fb376a06eddd8",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT": {
+            "run_id": "8136d83bbd9c4b7294234129da0987d4",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "GOOGL": {
+            "run_id": "96afb53cd8d34ce0a560c94b71113576",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA": {
+            "run_id": "1ce1a8499daf417b9e2f59eeb5ca1e30",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": 0.0,
+        "per_symbol": {
+          "AAPL": {
+            "run_id": "10e103c0a5714426a5188d76206e5479",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT": {
+            "run_id": "afdbad9fba024a538c63739408fc2868",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "GOOGL": {
+            "run_id": "bee3dec60d7349fb856c3c0e6a44095e",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA": {
+            "run_id": "3f06ea4621bf45d38f719d5b44edf153",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          }
+        }
+      }
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.12,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": 0.0,
+        "per_symbol": {
+          "AAPL": {
+            "run_id": "c08a286d7f584a5b96b125382adae647",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT": {
+            "run_id": "7d9b132575af4699955ac00156af43bb",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "GOOGL": {
+            "run_id": "22768c31b9574ccfa6390338388be2ce",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA": {
+            "run_id": "efc235b8feb74f7f8a5052f3f613e4a9",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          }
+        }
+      }
+    }
+  ],
+  "leaders": [
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 5
+      },
+      "halfA": {
+        "score": 0.0,
+        "per_symbol": {
+          "AAPL": {
+            "run_id": "4993665c00a64f0a8bbafedf94f8f095",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT": {
+            "run_id": "846d09ab7034482e836e06834c074861",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "GOOGL": {
+            "run_id": "0c96341fc8814cc0b33e2bc61d4d3ad3",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA": {
+            "run_id": "edf1fa73daa84eabb978be08da73f7fd",
+            "metrics": {
+              "total_return": null,
+              "sharpe_ratio": null,
+              "max_drawdown": null,
+              "win_rate": null,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "halfB": {
+        "score": 0.0,
+        "per_symbol": {
+          "AAPL": {
+            "run_id": "97a8ba39df444157a8fd253b59db226c",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT": {
+            "run_id": "3ca208a4682b4bf596a3686b29318098",
+            "metrics": {
+              "total_return": -0.00023999999999996363,
+              "sharpe_ratio": NaN,
+              "max_drawdown": -0.12442799999999989,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "GOOGL": {
+            "run_id": "f7855344c9d346d8a6101aee4cd5ea89",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA": {
+            "run_id": "b8eea393ccc74d6a979218a54d1bcd63",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "score_avg": 0.0
+    },
+    {
+      "cfg": {
+        "window": 20,
+        "band_k": 0.1,
+        "di_gap_min": 0.2,
+        "atr_stop_mult": 1.5,
+        "cooldown_bars": 8
+      },
+      "halfA": {
+        "score": 0.0,
+        "per_symbol": {
+          "AAPL": {
+            "run_id": "2a98f0acd58a480f891fb376a06eddd8",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT": {
+            "run_id": "8136d83bbd9c4b7294234129da0987d4",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "GOOGL": {
+            "run_id": "96afb53cd8d34ce0a560c94b71113576",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA": {
+            "run_id": "1ce1a8499daf417b9e2f59eeb5ca1e30",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "halfB": {
+        "score": 0.0,
+        "per_symbol": {
+          "AAPL": {
+            "run_id": "04f99206f1574e2790f06a9041086bb2",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "MSFT": {
+            "run_id": "7a3eeb5607b742fb913fab3302b325db",
+            "metrics": {
+              "total_return": -0.00023999999999996363,
+              "sharpe_ratio": NaN,
+              "max_drawdown": -0.12442799999999989,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "GOOGL": {
+            "run_id": "8209d6081a784272958722a375ff8860",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          },
+          "NVDA": {
+            "run_id": "cb0f2ce05f844cceb3454bda13f7ed57",
+            "metrics": {
+              "total_return": 0.0,
+              "sharpe_ratio": NaN,
+              "max_drawdown": 0.0,
+              "win_rate": 0.0,
+              "fills_count": null
+            }
+          }
+        }
+      },
+      "score_avg": 0.0
+    }
+  ],
+  "winner": {
+    "cfg": {
+      "window": 20,
+      "band_k": 0.1,
+      "di_gap_min": 0.2,
+      "atr_stop_mult": 1.5,
+      "cooldown_bars": 5
+    },
+    "halfA": {
+      "per_symbol": {
+        "AAPL": {
+          "run_id": "4993665c00a64f0a8bbafedf94f8f095",
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "MSFT": {
+          "run_id": "846d09ab7034482e836e06834c074861",
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "GOOGL": {
+          "run_id": "0c96341fc8814cc0b33e2bc61d4d3ad3",
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "NVDA": {
+          "run_id": "edf1fa73daa84eabb978be08da73f7fd",
+          "metrics": {
+            "total_return": null,
+            "sharpe_ratio": null,
+            "max_drawdown": null,
+            "win_rate": null,
+            "fills_count": null
+          }
+        }
+      },
+      "score": 0.0
+    },
+    "halfB": {
+      "per_symbol": {
+        "AAPL": {
+          "run_id": "97a8ba39df444157a8fd253b59db226c",
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "MSFT": {
+          "run_id": "3ca208a4682b4bf596a3686b29318098",
+          "metrics": {
+            "total_return": -0.00023999999999996363,
+            "sharpe_ratio": NaN,
+            "max_drawdown": -0.12442799999999989,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "GOOGL": {
+          "run_id": "f7855344c9d346d8a6101aee4cd5ea89",
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        },
+        "NVDA": {
+          "run_id": "b8eea393ccc74d6a979218a54d1bcd63",
+          "metrics": {
+            "total_return": 0.0,
+            "sharpe_ratio": NaN,
+            "max_drawdown": 0.0,
+            "win_rate": 0.0,
+            "fills_count": null
+          }
+        }
+      },
+      "score": 0.0
+    },
+    "score_avg": 0.0
+  }
+}
